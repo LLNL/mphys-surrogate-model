@@ -200,3 +200,19 @@ class MicroAutoEncoder(torch.nn.Module):
         reconstruction = self.decoder(latent) 
 
         return reconstruction
+
+def get_latent_var(model, dataloader, device, n_latent):
+    dataset = dataloader.dataset
+    latents = np.zeros((len(dataset), n_latent))
+
+    jj=0
+    for data in dataloader:
+        bin0 = data
+        bin0 = bin0.to(device)
+        latent = model.encoder(bin0.float())
+        bs = latent.shape[0]
+
+        latents[jj:jj+bs,:]=latent.detach().cpu().numpy().reshape(bs, n_latent)
+        jj+=bs
+    
+    return latents
