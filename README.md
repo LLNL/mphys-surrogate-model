@@ -30,6 +30,9 @@ available via `conda` or `pip`
 The ML model setup and training in `pysdm_pytorch.ipynb` or in `train_vae.py` with module `models.py` has additional dependence on 
 - `pytorch`
 
+Dynamical equation learning in `*_pysindy.ipynb` notebooks depends on
+- `pysindy`
+
 ## Future plans:
 [] Test equation-learning capability with either `SINDY` or `LaSDI`
 [] Use output data from ERF and/or a more realistic 3D simulation
