@@ -4,7 +4,18 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.nn import Conv1d, ConvTranspose1d
 from torch.nn import Linear as Lin, ReLU, Sigmoid, ConstantPad1d
+import pysindy as ps
 
+class BinDataset2(Dataset):
+    def __init__(self, data):
+        self.bin0 = data
+
+    def __len__(self):
+        return int(self.bin0.shape[0])
+
+    def __getitem__(self, idx):
+        return self.bin0[idx, :]
+    
 class BinDataset(Dataset):
     def __init__(self, data):
         self.bin0 = data
@@ -141,16 +152,16 @@ class CNNEncoderVAE(torch.nn.Module):
     def __init__(self,n_channels=2,n_bins=35,n_latent=10):
         super(CNNEncoderVAE, self).__init__()
         self.n_bins = n_bins
-        self.conv1 = Conv1d(in_channels=2,out_channels=4,kernel_size=4,stride=2,padding=1)
+        self.conv1 = Conv1d(in_channels=n_channels,out_channels=n_channels*2,kernel_size=4,stride=2,padding=1)
         self.activation1 = ReLU()
-        self.conv2 = Conv1d(in_channels=4,out_channels=8,kernel_size=4,stride=2,padding=1)
+        self.conv2 = Conv1d(in_channels=n_channels*2,out_channels=n_channels*4,kernel_size=4,stride=2,padding=1)
         self.activation2 = ReLU()
-        self.conv3 = Conv1d(in_channels=8,out_channels=4,kernel_size=4,stride=2,padding=1)
+        self.conv3 = Conv1d(in_channels=n_channels*4,out_channels=n_channels*2,kernel_size=4,stride=2,padding=1)
         self.activation3 = ReLU()
+        self.lin1 = Lin(48,n_latent)
 
-        
-        self.fc_mu = Lin(48,n_latent)
-        self.fc_var = Lin(48,n_latent)
+        self.layer_id = ["conv1", "conv2", "conv3", "lin1"]
+        self.layers = [self.conv1, self.conv2, self.conv3, self.lin1]
         
         torch.nn.init.kaiming_normal_(self.conv1.weight)
         torch.nn.init.kaiming_normal_(self.conv2.weight)
@@ -165,9 +176,23 @@ class CNNEncoderVAE(torch.nn.Module):
         x = self.conv3(x)
         x = self.activation3(x)
         x = x.view(-1,48)
-        x = self.fc_mu(x)
+        x = self.lin1(x)
         
         return x
+    
+    def get_weights(self):
+        weights = {}
+        biases = {}
+        for (i, layer) in enumerate(self.layers):
+            weights[self.layer_id[i]] = layer.weight
+            biases[self.layer_id[i]] = layer.bias
+
+        return (weights, biases)
+    
+    def set_weights(self, weights, biases):
+        for (i, layer) in enumerate(self.layers):
+            layer.weight.data = weights[self.layer_id[i]]
+            layer.bias.data = biases[self.layer_id[i]]
 
 class CNNDecoder(torch.nn.Module):
     def __init__(self,n_channels=2,n_bins=100,n_latent=10,n_hidden=50):
@@ -187,6 +212,9 @@ class CNNDecoder(torch.nn.Module):
         self.activation3 = ReLU()
         self.lin2 = Lin(n_bins,n_bins)
         self.activation4 = Sigmoid()
+
+        self.layer_id = ["lin", "conv1", "conv2", "conv3", "lin2"]
+        self.layers = [self.lin, self.conv1, self.conv2, self.conv3, self.lin2]
         
         torch.nn.init.kaiming_normal_(self.conv1.weight)
         torch.nn.init.kaiming_normal_(self.conv2.weight)
@@ -207,6 +235,20 @@ class CNNDecoder(torch.nn.Module):
         x = self.activation4(x) 
 
         return x
+    
+    def get_weights(self):
+        weights = {}
+        biases = {}
+        for (i, layer) in enumerate(self.layers):
+            weights[self.layer_id[i]] = layer.weight
+            biases[self.layer_id[i]] = layer.bias
+
+        return (weights, biases)
+    
+    def set_weights(self, weights, biases):
+        for (i, layer) in enumerate(self.layers):
+            layer.weight.data = weights[self.layer_id[i]]
+            layer.bias.data = biases[self.layer_id[i]]
 
 class MicroAutoEncoder(torch.nn.Module):
     def __init__(self,n_channels=2,n_bins=100,n_latent=10):
@@ -240,3 +282,5 @@ def get_latent_var(model, dataloader, device, n_latent):
         jj+=bs
     
     return latents
+
+
