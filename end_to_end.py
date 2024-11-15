@@ -5,18 +5,18 @@ import numpy as np
 import pysindy as ps
 
 def train_network(training_data, params, val_data=None, device="cpu"):
-    # set up network
+    # set up the device
     device = torch.device(device)
+    print(f"Using {device} device")
+
+
     autoencoder_network = MicroAutoEncoder(n_bins=params["input_dim"], n_latent=params["latent_dim"])
     (encoder_weights, encoder_biases) = autoencoder_network.encoder.get_weights()
     (decoder_weights, decoder_biases) = autoencoder_network.decoder.get_weights()
     autoencoder_network.to(device)
 
-    sindy_model = ps.SINDy(
-        feature_library = custom_library
-    )
-    sindy_model.fit(training_data["z"], training_data["t"])
-    sindy_coeffs_tensor = torch.Tensor(sindy_model.coefficients())
+    sindy_coeffs_tensor = torch.empty((params["latent_dim"], params["library_size"]), requires_grad=True)
+    torch.nn.init.uniform_(sindy_coeffs_tensor)
     training_data["sindy_library"] = torch.empty((params["n_runs"], params["n_time"], params["library_size"]))
 
     loss, losses = loss_fn(training_data, params, 
@@ -24,115 +24,46 @@ def train_network(training_data, params, val_data=None, device="cpu"):
                            decoder_weights, decoder_biases,
                            sindy_coeffs_tensor,
                            autoencoder_network,
-                           sindy_model,
-                           device)
+                           device
+                           )
     
     optimizer = torch.optim.Adam([sindy_coeffs_tensor, 
                                   *encoder_weights, *encoder_biases,
                                   *decoder_weights, *decoder_biases
-                                  ]
+                                  ],
+                                  lr = params["learning_rate"]
                                   )
-    for i in range(params['max_epochs']):
+    train_loss = []
+    train_losses = {}
+    for key in losses.keys():
+        train_losses[key] = []
+    for epoch in range(params['max_epochs']):
         # just do it on all of the data for now
         optimizer.zero_grad()
-        loss, _ = loss_fn(
+        loss, losses = loss_fn(
             training_data, 
             params,
             encoder_weights, encoder_biases,
             decoder_weights, decoder_biases,
             sindy_coeffs_tensor, 
             autoencoder_network, 
-            sindy_model, 
-            device)
+            device
+            )
+        
+        train_loss.append(loss.detach().numpy().item())
+        for key in losses.keys():
+            train_losses[key].append(losses[key].detach().numpy().item())
+
         loss.backward(retain_graph=True)
         optimizer.step()
 
-    return autoencoder_network, sindy_coeffs_tensor, loss, losses
+        if epoch%1 == 0:
+            print(f'Epoch: {epoch:03d}, Train MSE: {loss.detach().numpy().item():.8f}')
+            print([(key, losses[key].detach().numpy().item()) for key in losses.keys()])
 
 
-def loss_fn0(data, 
-            params,
-            encoder_weights, encoder_biases,
-            decoder_weights, decoder_biases,
-            sindy_coeffs_tensor, 
-            autoencoder_network, 
-            sindy_model, 
-            device,
-            batch_size=None
-            ):
-    if batch_size is None:
-        batch_size = data["x"].shape[0] * data["x"].shape[1]
+    return autoencoder_network, sindy_coeffs_tensor, train_loss, train_losses
 
-    # first update the weights & coefficients
-    autoencoder_network.encoder.set_weights(encoder_weights, encoder_biases)
-    autoencoder_network.decoder.set_weights(decoder_weights, decoder_biases)
-    sindy_coeffs = sindy_coeffs_tensor.detach().numpy()
-    sindy_model.optimizer.coef_ = sindy_coeffs
-
-    # set up the loss function
-    losses = {}
-
-    # precompute stuff
-    x = torch.Tensor(data["x"]) #x = data["x"]
-    dx = torch.Tensor(data["dx"]) #dx = data["dx"]
-    z = np.zeros((params["n_runs"], params["n_time"], params["latent_dim"]))
-    dz = np.zeros_like(z)
-    x_recon = np.zeros_like(x)
-    dx_decode = np.zeros_like(x)
-
-    for i in range(params["n_runs"]):  # probably a way to clean this up later...
-        for j in range(params["n_time"]):
-            x_in = np.reshape(x[i, j, :], (1, params["input_dim"]))
-            dx_in = np.reshape(dx[i, j, :], (1, params["input_dim"]))
-            x_tensor = torch.tensor(x_in, dtype=torch.float32, requires_grad=True)
-            dx_tensor = torch.tensor(dx_in, dtype=torch.float32)
-
-            x_recon_tensor = autoencoder_network(x_tensor)
-            x_recon[i, j, :] = x_recon_tensor.detach().numpy()
-        
-            z_tensor = autoencoder_network.encoder(x_tensor)
-            grad_x = torch.empty((params["latent_dim"], params["input_dim"]), dtype=torch.float32)
-            for il in range(params["latent_dim"]):
-                zl = z_tensor[0][il]
-                zl.backward(retain_graph = True)
-                grad_x[il, :] = x_tensor.grad
-            dz_tensor = torch.matmul(grad_x, dx_tensor[0])
-            z[i, j, :] = z_tensor.detach().numpy()
-            dz[i, j, :] = dz_tensor.detach().numpy()
-
-            grad_z = torch.empty((params["input_dim"], params["latent_dim"]), dtype=torch.float32)
-            z_vae = torch.tensor(z_tensor, dtype=torch.float32, requires_grad=True)
-            x_recon_tensor = autoencoder_network.decoder(z_vae)
-            for ib in range(params["input_dim"]):
-                xb = x_recon_tensor[0][ib]
-                xb.backward(retain_graph = True)
-                grad_z[ib, :] = z_vae.grad
-            dz_sindy = torch.tensor(sindy_model.predict(z_vae.detach().numpy()), dtype=torch.float32)
-            dx_sindy = torch.matmul(grad_z, dz_sindy[0])
-            dx_decode[i, j, :] = dx_sindy.detach().numpy()
-    
-    # reconstruction
-    data["x_recon"] = x_recon
-    losses["recon"] = np.linalg.norm(data["x"] - data["x_recon"])
-
-    # sindy dz
-    data["z"] = z
-    data["dz"] = dz
-    data["dz_sindy"] = sindy_model.predict(z)
-    losses["sindy_z"] = np.linalg.norm(dz - data["dz_sindy"])
-
-    # sindy dx
-    data["dx_decode"] = dx_decode
-    losses["sindy_x"] = np.linalg.norm(dx - data["dx_decode"])
-
-    # sindy regularization loss
-    losses["sindy_reg"] = np.mean(np.abs(sindy_model.coefficients()))
-    
-    loss = 0.0
-    for i, key in enumerate(losses.keys()):
-        loss += losses[key] * params["loss_weight_" + key]
-
-    return loss, losses
 
 def loss_fn(data, 
             params,
@@ -140,21 +71,17 @@ def loss_fn(data,
             decoder_weights, decoder_biases,
             sindy_coeffs, 
             autoencoder_network, 
-            sindy_model,
-            device,
-            batch_size=None
+            device="cpu"
             ):
-    if batch_size is None:
-        batch_size = data["x"].shape[0] * data["x"].shape[1]
-
+    
     # first update the weights & coefficients
     autoencoder_network.encoder.set_weights(encoder_weights, encoder_biases)
     autoencoder_network.decoder.set_weights(decoder_weights, decoder_biases)
 
     # set up the loss function
     losses = {}
-    x = data["x"]
-    dx = data["dx"]
+    x = data["x"].to(device)
+    dx = data["dx"].to(device)
 
     # reconstruction loss
     x_recon = autoencoder_network(x)
@@ -197,20 +124,6 @@ def loss_fn(data,
         loss += losses[key] * params["loss_weight_" + key]
 
     return loss, losses
-
-
-# SINDY functions
-library_functions = [
-    lambda: 1,
-    lambda x: x,
-]
-library_function_names = [
-    lambda: "1",
-    lambda x: x,
-]
-custom_library = ps.CustomLibrary(
-    library_functions=library_functions, function_names=library_function_names
-)
 
 
 # Autoencoder
@@ -302,12 +215,20 @@ class MicroAutoEncoder(torch.nn.Module):
         self.encoder = CNNEncoderVAE(n_bins=n_bins,n_latent=n_latent)
         self.decoder = CNNDecoder(n_bins=n_bins,n_latent=n_latent)
 
+        self.initialize_weights()
+
     def forward(self,x):
         
         latent = self.encoder(x)
         reconstruction = self.decoder(latent) 
 
         return reconstruction
+    
+    def initialize_weights(self):
+        for network in (self.encoder, self.decoder):
+            for layer in network.layers:
+                torch.nn.init.kaiming_uniform_(layer.weight, nonlinearity='relu')
+                torch.nn.init.uniform_(layer.bias)
     
 
 def sindy_library_tensor(z, latent_dim, current_library):
@@ -328,6 +249,7 @@ def recon_loss(recon_x, x):
     return mseloss(recon_x, x)
 
 def l1_loss(x):
-    tmp = torch.zeros_like(x)
+    tmp = torch.zeros_like(x, requires_grad=True)
     l1 = torch.nn.L1Loss()
-    return l1(x, tmp)
+    loss = l1(x, tmp)
+    return loss
