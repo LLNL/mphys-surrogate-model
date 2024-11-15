@@ -1,8 +1,5 @@
 import torch
-from torch.utils.data import DataLoader
 from torch.nn import Linear, ReLU, Sigmoid
-import numpy as np
-import pysindy as ps
 
 def train_network(training_data, params, val_data=None, device="cpu"):
     # set up the device

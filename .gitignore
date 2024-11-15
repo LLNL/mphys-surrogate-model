@@ -1,4 +1,5 @@
 *.npz
 *.pth
 *.pyc
-*.nc
+*.pkl
+box_data/*.nc
