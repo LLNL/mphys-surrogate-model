@@ -87,13 +87,16 @@ def loss_fn(data,
 
     # sindy_dz
     z = autoencoder_network.encoder(x)
-    gradient_x = torch.empty((params["n_runs"], params["n_time"],params["latent_dim"], params["input_dim"]))
-    for il in range(params["latent_dim"]):
-        unit_vec = torch.zeros_like(z)
-        unit_vec[:, :, il] = 1.0
-        z.backward(unit_vec, retain_graph=True)
-        gradient_x[:, :, il, :] = x.grad
-    dz = torch.einsum('abcd, abd->abc', gradient_x, data["dx"])
+    # gradient_x = torch.empty((params["n_runs"], params["n_time"],params["latent_dim"], params["input_dim"]))
+    # for il in range(params["latent_dim"]):
+    #     unit_vec = torch.zeros_like(z)
+    #     unit_vec[:, :, il] = 1.0
+    #     z.backward(unit_vec, retain_graph=True)
+    #     gradient_x[:, :, il, :] = x.grad
+    # dz = torch.einsum('abcd, abd->abc', gradient_x, data["dx"])
+    # print("gradient: ", dz)
+    dz = feed_derivative(x, dx, autoencoder_network.encoder, encoder_weights)
+    # print("feed dz: ", dz)
     data["z"] = z
     data["dz"] = dz
     data["sindy_library"] = sindy_library_tensor(z, params["latent_dim"], data["sindy_library"])
@@ -101,15 +104,18 @@ def loss_fn(data,
     losses["sindy_z"] = recon_loss(dz, data["dz_sindy"])
 
     # sindy_dx
-    gradient_z = torch.empty(((params["n_runs"], params["n_time"],params["input_dim"], params["latent_dim"])))
-    z = z.clone().detach().requires_grad_()
-    x_recon = autoencoder_network.decoder(z)
-    for ib in range(params["input_dim"]):
-        unit_vec = torch.zeros_like(x)
-        unit_vec[:, :, ib] = 1.0
-        x_recon.backward(unit_vec, retain_graph=True)
-        gradient_z[:, :, ib, : ] = z.grad
-    dx_recon = torch.einsum('abcd, abd->abc', gradient_z, data["dz_sindy"])
+    # gradient_z = torch.empty(((params["n_runs"], params["n_time"],params["input_dim"], params["latent_dim"])))
+    # z = z.clone().detach().requires_grad_()
+    # x_recon = autoencoder_network.decoder(z)
+    # for ib in range(params["input_dim"]):
+    #     unit_vec = torch.zeros_like(x)
+    #     unit_vec[:, :, ib] = 1.0
+    #     x_recon.backward(unit_vec, retain_graph=True)
+    #     gradient_z[:, :, ib, : ] = z.grad
+    # dx_recon = torch.einsum('abcd, abd->abc', gradient_z, data["dz_sindy"])
+    # print("gradient: ", dx_recon)
+    dx_recon = feed_derivative(z, data["dz_sindy"], autoencoder_network.decoder, decoder_weights)
+    # print("feed dx: ", dx_recon)
     data["dx_sindy_recon"] = dx_recon
     losses["sindy_x"] = recon_loss(dx, data["dx_sindy_recon"])
     
@@ -175,7 +181,7 @@ class CNNDecoder(torch.nn.Module):
         self.activation1 = ReLU()
         self.activation2 = ReLU()
         self.activation3 = ReLU()
-        self.activation4 = Sigmoid()
+        #self.activation4 = Sigmoid()
 
         self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
         
@@ -187,7 +193,7 @@ class CNNDecoder(torch.nn.Module):
         x = self.layer3(x)
         x = self.activation3(x)
         x = self.layer4(x)
-        x = self.activation4(x)
+        # x = self.activation4(x)
         
         return x
     
@@ -250,3 +256,18 @@ def l1_loss(x):
     l1 = torch.nn.L1Loss()
     loss = l1(x, tmp)
     return loss
+
+def feed_derivative(x, dx, network, weights, activation='relu'):
+    assert activation == 'relu'
+    act = ReLU()
+    lj = x
+    dlj = dx
+    for j in range(len(network.layers) - 1):
+        lj = network.layers[j](lj)
+        relu_derivative = (lj > 0.0).float()
+        dlj = relu_derivative * torch.matmul(dlj, weights[j].T)
+        lj = act(lj)
+
+    dlj = torch.matmul(dlj, weights[-1].T)
+
+    return dlj
