@@ -54,7 +54,7 @@ def train_network(training_data, params, val_data=None, device="cpu"):
         loss.backward(retain_graph=True)
         optimizer.step()
 
-        if epoch%1 == 0:
+        if epoch%10 == 0:
             print(f'Epoch: {epoch:03d}, Train MSE: {loss.detach().numpy().item():.8f}')
             print([(key, losses[key].detach().numpy().item()) for key in losses.keys()])
 

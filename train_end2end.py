@@ -45,13 +45,13 @@ params["n_runs"] = data['x'].shape[0]
 params["n_time"] = data['x'].shape[1]
 data['z'] = np.random.rand(params["n_runs"], params["n_time"], params["latent_dim"])
 
-params['loss_weight_recon'] = 10.0
-params['loss_weight_sindy_z'] = 1.0
+params['loss_weight_recon'] = 1.0
+params['loss_weight_sindy_z'] = 10.0
 params['loss_weight_sindy_x'] = 1.0
-params['loss_weight_sindy_reg'] = 10.0
+params['loss_weight_sindy_reg'] = 1.0
 # consider normalizing the total loss weights to sum to 1
-params["max_epochs"] = 2
-params["learning_rate"] = 1e-4
+params["max_epochs"] = 500
+params["learning_rate"] = 1e-5
 # consider batching and/or KFold cross validation
 
 
@@ -59,7 +59,7 @@ params["learning_rate"] = 1e-4
 (vae, sindy_coeffs, loss, losses) = e2e.train_network(data, params)
 
 # SAVE
-output_directory = "./end2end/"
+output_directory = "./end2end"
 case_name = "lr{}_weights{}-{}-{}-{}".format(params["learning_rate"], params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"], params["loss_weight_sindy_reg"])
 # total losses
 with open(output_directory + '/losses/' + case_name + '.pkl', 'wb') as pickle_file:
