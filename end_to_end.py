@@ -1,5 +1,5 @@
 import torch
-from torch.nn import Linear, ReLU, Sigmoid
+from torch.nn import Linear, ReLU, Sigmoid, Identity
 
 def train_network(training_data, params, val_data=None, device="cpu"):
     # set up the device
@@ -30,6 +30,8 @@ def train_network(training_data, params, val_data=None, device="cpu"):
                                   ],
                                   lr = params["learning_rate"]
                                   )
+    early_stopping = EarlyStopping(patience=params["patience"], verbose=True)
+
     train_loss = []
     train_losses = {}
     for key in losses.keys():
@@ -54,10 +56,15 @@ def train_network(training_data, params, val_data=None, device="cpu"):
         loss.backward(retain_graph=True)
         optimizer.step()
 
-        if epoch%10 == 0:
+        if epoch%1 == 0:
             print(f'Epoch: {epoch:03d}, Train MSE: {loss.detach().numpy().item():.8f}')
             print([(key, losses[key].detach().numpy().item()) for key in losses.keys()])
 
+        # Check early stopping
+        early_stopping(loss.detach().numpy().item())
+        if early_stopping.early_stop:
+            print("Training stopped early.")
+            break
 
     return autoencoder_network, sindy_coeffs_tensor, train_loss, train_losses
 
@@ -87,16 +94,19 @@ def loss_fn(data,
 
     # sindy_dz
     z = autoencoder_network.encoder(x)
-    # gradient_x = torch.empty((params["n_runs"], params["n_time"],params["latent_dim"], params["input_dim"]))
-    # for il in range(params["latent_dim"]):
-    #     unit_vec = torch.zeros_like(z)
-    #     unit_vec[:, :, il] = 1.0
-    #     z.backward(unit_vec, retain_graph=True)
-    #     gradient_x[:, :, il, :] = x.grad
-    # dz = torch.einsum('abcd, abd->abc', gradient_x, data["dx"])
-    # print("gradient: ", dz)
-    dz = feed_derivative(x, dx, autoencoder_network.encoder, encoder_weights)
-    # print("feed dz: ", dz)
+    if params["gradv1"]:
+        gradient_x = torch.empty((params["n_runs"], params["n_time"],params["latent_dim"], params["input_dim"]))
+        for il in range(params["latent_dim"]):
+            unit_vec = torch.zeros_like(z)
+            unit_vec[:, :, il] = 1.0
+            if x.grad is not None:
+                x.grad.zero_()
+            z.backward(unit_vec, retain_graph=True)
+            gradient_x[:, :, il, :] = x.grad
+    else:
+        gradient_x = compute_grad(x, autoencoder_network.encoder)
+    dz = torch.einsum('abcd, abd->abc', gradient_x, data["dx"])
+
     data["z"] = z
     data["dz"] = dz
     data["sindy_library"] = sindy_library_tensor(z, params["latent_dim"], data["sindy_library"])
@@ -104,18 +114,21 @@ def loss_fn(data,
     losses["sindy_z"] = recon_loss(dz, data["dz_sindy"])
 
     # sindy_dx
-    # gradient_z = torch.empty(((params["n_runs"], params["n_time"],params["input_dim"], params["latent_dim"])))
-    # z = z.clone().detach().requires_grad_()
-    # x_recon = autoencoder_network.decoder(z)
-    # for ib in range(params["input_dim"]):
-    #     unit_vec = torch.zeros_like(x)
-    #     unit_vec[:, :, ib] = 1.0
-    #     x_recon.backward(unit_vec, retain_graph=True)
-    #     gradient_z[:, :, ib, : ] = z.grad
-    # dx_recon = torch.einsum('abcd, abd->abc', gradient_z, data["dz_sindy"])
-    # print("gradient: ", dx_recon)
-    dx_recon = feed_derivative(z, data["dz_sindy"], autoencoder_network.decoder, decoder_weights)
-    # print("feed dx: ", dx_recon)
+    z = z.clone().detach().requires_grad_()
+    if params["gradv1"]:
+        gradient_z = torch.empty(((params["n_runs"], params["n_time"],params["input_dim"], params["latent_dim"])))
+        x_recon = autoencoder_network.decoder(z)
+        for ib in range(params["input_dim"]):
+            unit_vec = torch.zeros_like(x)
+            unit_vec[:, :, ib] = 1.0
+            if z.grad is not None:
+                z.grad.zero_()
+            x_recon.backward(unit_vec, retain_graph=True)
+            gradient_z[:, :, ib, : ] = z.grad
+    else:
+        gradient_z = compute_grad(z, autoencoder_network.decoder)
+    dx_recon = torch.einsum('abcd, abd->abc', gradient_z, data["dz_sindy"])
+
     data["dx_sindy_recon"] = dx_recon
     losses["sindy_x"] = recon_loss(dx, data["dx_sindy_recon"])
     
@@ -141,8 +154,10 @@ class CNNEncoderVAE(torch.nn.Module):
         self.layer3 = Linear(int(n_bins / 4), int(n_bins / 8))
         self.activation3 = ReLU()
         self.layer4 = Linear(int(n_bins / 8), n_latent)
+        self.activation4 = Identity()
 
         self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
+        self.act = [self.activation1, self.activation2, self.activation3, self.activation4]
 
     def forward(self,x):
         x = self.layer1(x)
@@ -152,6 +167,7 @@ class CNNEncoderVAE(torch.nn.Module):
         x = self.layer3(x)
         x = self.activation3(x)
         x = self.layer4(x)
+        x = self.activation4(x)
         
         return x
     
@@ -181,9 +197,10 @@ class CNNDecoder(torch.nn.Module):
         self.activation1 = ReLU()
         self.activation2 = ReLU()
         self.activation3 = ReLU()
-        #self.activation4 = Sigmoid()
+        self.activation4 = Sigmoid()
 
         self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
+        self.act = [self.activation1, self.activation2, self.activation3, self.activation4]
         
     def forward(self,x):
         x = self.layer1(x)
@@ -193,7 +210,7 @@ class CNNDecoder(torch.nn.Module):
         x = self.layer3(x)
         x = self.activation3(x)
         x = self.layer4(x)
-        # x = self.activation4(x)
+        x = self.activation4(x)
         
         return x
     
@@ -257,17 +274,91 @@ def l1_loss(x):
     loss = l1(x, tmp)
     return loss
 
-def feed_derivative(x, dx, network, weights, activation='relu'):
-    assert activation == 'relu'
-    act = ReLU()
-    lj = x
-    dlj = dx
+# def feed_derivative_encoder(x, dx, network, weights, activation='relu'):
+#     assert activation == 'relu'
+#     act = ReLU()
+#     lj = x
+#     dlj = dx
+#     for j in range(len(network.layers) - 1):
+#         lj = network.layers[j](lj)
+#         relu_derivative = (lj > 0.0).float()
+#         dlj = relu_derivative * torch.matmul(dlj, weights[j].T)
+#         lj = act(lj)
+
+#     dlj = torch.matmul(dlj, weights[-1].T)
+
+#     return dlj
+
+# def feed_derivative_decoder(x, dx, network, weights, activation='relu'):
+#     assert activation == 'relu'
+#     act = ReLU()
+#     sig = Sigmoid()
+#     lj = x
+#     dlj = dx
+#     for j in range(len(network.layers) - 1):
+#         lj = network.layers[j](lj)
+#         relu_derivative = (lj > 0.0).float()
+#         dlj = relu_derivative * torch.matmul(dlj, weights[j].T)
+#         lj = act(lj)
+
+#     lj = network.layers[-1](lj)
+#     sigmoid_derivative = sig(lj) * (1 - sig(lj))
+#     dlj = sigmoid_derivative
+
+#     return dlj
+
+def compute_grad(x, network):
+    lj = x 
+    gradj = network.layers[0].weight # grad_l0
+
     for j in range(len(network.layers) - 1):
-        lj = network.layers[j](lj)
-        relu_derivative = (lj > 0.0).float()
-        dlj = relu_derivative * torch.matmul(dlj, weights[j].T)
-        lj = act(lj)
+        lj = network.layers[j](lj) # l0
+        if isinstance(network.act[j], ReLU):
+            fprimej = (lj > 0.0).float() #fp0l0
+        elif isinstance(network.act[j], Sigmoid):
+            sig = Sigmoid()(lj)
+            fprimej = sig * (1 - sig)
 
-    dlj = torch.matmul(dlj, weights[-1].T)
+        if j == 0:
+            gradj = torch.einsum('abc, cd->abcd', fprimej, gradj)
+        else:
+            gradj = torch.einsum('abc, abcd->abcd', fprimej, gradj)
+        gradj = torch.einsum('ec, abcd->abed', network.layers[j+1].weight, gradj) # grad_l1
+        lj = network.act[j](lj) # a0
+    
+    lj = network.layers[-1](lj) # l1
+    if isinstance(network.act[-1], ReLU):
+        fprimej = (lj > 0.0).float()
+    elif isinstance(network.act[-1], Sigmoid):
+        sig = Sigmoid()(lj)
+        fprimej = sig * (1 - sig) # fp1l1
+    else: # Identity
+        assert isinstance(network.act[-1], Identity)
+        fprimej = torch.ones_like(lj)
+    
+    if len(network.layers) == 1:
+        gradj = torch.einsum('abc, cd->abcd', fprimej, gradj)
+    else:
+        gradj = torch.einsum('abc, abcd->abcd', fprimej, gradj)
 
-    return dlj
+    return gradj
+
+# Early Stopping Class
+class EarlyStopping:
+    def __init__(self, patience=5, verbose=False):
+        self.patience = patience
+        self.verbose = verbose
+        self.counter = 0
+        self.best_loss = float('inf')
+        self.early_stop = False
+
+    def __call__(self, val_loss):
+        if val_loss < self.best_loss:
+            self.best_loss = val_loss
+            self.counter = 0
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+                if self.verbose:
+                    print("Early stopping triggered.")

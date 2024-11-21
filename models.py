@@ -158,7 +158,7 @@ class CNNEncoderVAE(torch.nn.Module):
         self.activation2 = ReLU()
         self.conv3 = Conv1d(in_channels=n_channels*4,out_channels=n_channels*2,kernel_size=4,stride=2,padding=1)
         self.activation3 = ReLU()
-        self.lin1 = Lin(48,n_latent)
+        self.lin1 = Lin(30, n_latent) #Lin(48,n_latent)
 
         self.layer_id = ["conv1", "conv2", "conv3", "lin1"]
         self.layers = [self.conv1, self.conv2, self.conv3, self.lin1]
@@ -175,9 +175,9 @@ class CNNEncoderVAE(torch.nn.Module):
         x = self.activation2(x)
         x = self.conv3(x)
         x = self.activation3(x)
-        x = x.view(-1,48)
+        x = x.view(-1,30) #48)
         x = self.lin1(x)
-        
+
         return x
     
     def get_weights(self):
@@ -202,13 +202,13 @@ class CNNDecoder(torch.nn.Module):
         self.n_channels = n_channels
 
         self.n_bins = n_bins
-        self.lin = Lin(n_latent,48)
-        self.conv1 = ConvTranspose1d(in_channels=n_channels,out_channels=n_channels*2,kernel_size=4,stride=2,padding=1)
+        self.lin = Lin(n_latent, 30) #Lin(n_latent,48)
+        self.conv1 = ConvTranspose1d(in_channels=n_channels*2,out_channels=n_channels*4,kernel_size=4,stride=2,padding=1)
         self.activation1 = ReLU()
         self.constantpad1d1 = ConstantPad1d((1,0),0)
-        self.conv2 = ConvTranspose1d(in_channels=n_channels*2,out_channels=n_channels,kernel_size=4,stride=2,padding=1)
+        self.conv2 = ConvTranspose1d(in_channels=n_channels*4,out_channels=n_channels*2,kernel_size=4,stride=2,padding=1)
         self.activation2 = ReLU()
-        self.conv3 = ConvTranspose1d(in_channels=n_channels,out_channels=2,kernel_size=4,stride=2,padding=1)
+        self.conv3 = ConvTranspose1d(in_channels=n_channels*2,out_channels=n_channels,kernel_size=4,stride=2,padding=1)
         self.activation3 = ReLU()
         self.lin2 = Lin(n_bins,n_bins)
         self.activation4 = Sigmoid()
@@ -223,14 +223,16 @@ class CNNDecoder(torch.nn.Module):
     def forward(self,x):
         inp = x
         x = self.lin(inp)
-        x = x.reshape(-1,4,12)
+        x = x.reshape(-1, 2, 15) #x.reshape(-1,4,12)
         x = self.conv1(x)
         x = self.activation1(x)
         x = self.constantpad1d1(x)
         x = self.conv2(x)
         x = self.activation2(x)
+        x = self.constantpad1d1(x)
         x = self.conv3(x)
         x = self.activation3(x)
+        x = self.constantpad1d1(x)
         x = self.lin2(x)
         x = self.activation4(x) 
 
@@ -255,7 +257,7 @@ class MicroAutoEncoder(torch.nn.Module):
         super(MicroAutoEncoder, self).__init__()
 
         self.encoder = CNNEncoderVAE(n_channels=n_channels,n_bins=n_bins,n_latent=n_latent)
-        self.decoder = CNNDecoder(n_channels=n_channels*2,n_bins=n_bins,n_latent=n_latent)
+        self.decoder = CNNDecoder(n_channels=n_channels,n_bins=n_bins,n_latent=n_latent)
 
     def forward(self,x):
 
