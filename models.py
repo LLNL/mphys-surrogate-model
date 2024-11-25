@@ -10,13 +10,14 @@ class CNNEncoderVAE(torch.nn.Module):
     def __init__(self,n_channels=2,n_bins=35,n_latent=10):
         super(CNNEncoderVAE, self).__init__()
         self.n_bins = n_bins
+        self.n_channels = n_channels
         self.conv1 = Conv1d(in_channels=n_channels,out_channels=n_channels*2,kernel_size=4,stride=2,padding=1)
         self.activation1 = ReLU()
         self.conv2 = Conv1d(in_channels=n_channels*2,out_channels=n_channels*4,kernel_size=4,stride=2,padding=1)
         self.activation2 = ReLU()
         self.conv3 = Conv1d(in_channels=n_channels*4,out_channels=n_channels*2,kernel_size=4,stride=2,padding=1)
         self.activation3 = ReLU()
-        self.lin1 = Linear(30, n_latent) #Lin(48,n_latent)
+        self.lin1 = Linear(int(2*n_channels*np.floor(n_bins/8)), n_latent)
 
         self.layer_id = ["conv1", "conv2", "conv3", "lin1"]
         self.layers = [self.conv1, self.conv2, self.conv3, self.lin1]
@@ -33,7 +34,7 @@ class CNNEncoderVAE(torch.nn.Module):
         x = self.activation2(x)
         x = self.conv3(x)
         x = self.activation3(x)
-        x = x.view(-1,30) #48)
+        x = x.view(-1,int(2*self.n_channels*np.floor(n_bins/8)))
         x = self.lin1(x)
 
         return x
@@ -58,9 +59,10 @@ class CNNDecoder(torch.nn.Module):
 
         self.n_latent = n_latent
         self.n_channels = n_channels
+        self.n_bins = n_bins
 
         self.n_bins = n_bins
-        self.lin = Linear(n_latent, 30) #Lin(n_latent,48)
+        self.lin = Linear(n_latent, int(2*n_channels*np.floor(n_bins/8)))
         self.conv1 = ConvTranspose1d(in_channels=n_channels*2,out_channels=n_channels*4,kernel_size=4,stride=2,padding=1)
         self.activation1 = ReLU()
         self.constantpad1d1 = ConstantPad1d((1,0),0)
@@ -81,7 +83,7 @@ class CNNDecoder(torch.nn.Module):
     def forward(self,x):
         inp = x
         x = self.lin(inp)
-        x = x.reshape(-1, 2, 15) #x.reshape(-1,4,12)
+        x = x.reshape(-1, self.n_channels*2, int(np.floor(self.n_bins/8)))
         x = self.conv1(x)
         x = self.activation1(x)
         x = self.constantpad1d1(x)

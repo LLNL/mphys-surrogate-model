@@ -15,8 +15,7 @@ def l1_loss(x):
     return loss
 
 # Functions for training end-to-end network + SINDy
-def train_network_e2e(train_dataloader, params, val_data=None, device="cpu"):
-    # TODO: get rid of the training data thing (?)
+def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu"):
     device = torch.device(device)
     print(f"Using {device} device")
 
@@ -40,17 +39,154 @@ def train_network_e2e(train_dataloader, params, val_data=None, device="cpu"):
 
     train_loss = []
     train_losses = {"recon": [], "sindy_z": [], "sindy_x": [], "sindy_reg": []}
-    epoch_losses = {"recon": 0.0, "sindy_z": 0.0, "sindy_x": 0.0, "sindy_reg": 0.0}
+    val_loss = []
+    val_losses = {"recon": [], "sindy_z": [], "sindy_x": [], "sindy_reg": []}
 
     print('TRAINING')
     for epoch in range(params['max_epochs']):
-        epoch_loss = 0.0
+        (epoch_loss, epoch_losses) = train_e2e(optimizer, 
+                                               train_dataloader, 
+                                               params,
+                                               encoder_weights,
+                                               encoder_biases,
+                                               decoder_weights,
+                                               decoder_biases,
+                                               sindy_coeffs_tensor,
+                                               autoencoder_network,
+                                               device)
+        train_loss.append(epoch_loss.float())
         for key in epoch_losses.keys():
-            epoch_losses[key] = 0.0
+            train_losses[key].append(epoch_losses[key])
 
-        for batch, (x_data, dx_data) in enumerate(train_dataloader):
-            # just do it on all of the data for now
-            optimizer.zero_grad()
+        (val_epoch_loss, val_epoch_losses) = test_e2e(
+                                               train_dataloader, 
+                                               params,
+                                               encoder_weights,
+                                               encoder_biases,
+                                               decoder_weights,
+                                               decoder_biases,
+                                               sindy_coeffs_tensor,
+                                               autoencoder_network,
+                                               device)
+                                               
+        val_loss.append(val_epoch_loss.float())
+        for key in val_epoch_losses.keys():
+            val_losses[key].append(val_epoch_losses[key])
+
+        if epoch%10 == 0:
+            print(f'\n Epoch: {epoch:03d}, \n Train MSE: {epoch_loss.float():.8f} | Val MSE: {val_epoch_loss.float():.8f}')
+            for key in epoch_losses.keys():
+                print(f'{key}: {epoch_losses[key]} | {val_epoch_losses[key]}')
+
+        # Check early stopping
+        early_stopping(epoch_loss.float())
+        if early_stopping.early_stop:
+            print("Training stopped early.")
+            break
+
+    print('\n REFINEMENT')
+    ref_params = params
+    ref_params['loss_weight_sindy_reg'] = 0.0
+    
+    for epoch in range(params['refinement_epochs']):
+        (epoch_loss, epoch_losses) = train_e2e(optimizer, 
+                                               train_dataloader, 
+                                               ref_params,
+                                               encoder_weights,
+                                               encoder_biases,
+                                               decoder_weights,
+                                               decoder_biases,
+                                               sindy_coeffs_tensor,
+                                               autoencoder_network,
+                                               device)
+        
+        train_loss.append(epoch_loss.float())
+        for key in epoch_losses.keys():
+            train_losses[key].append(epoch_losses[key])
+
+        (val_epoch_loss, val_epoch_losses) = test_e2e(
+                                               train_dataloader, 
+                                               params,
+                                               encoder_weights,
+                                               encoder_biases,
+                                               decoder_weights,
+                                               decoder_biases,
+                                               sindy_coeffs_tensor,
+                                               autoencoder_network,
+                                               device)
+        val_loss.append(val_epoch_loss.float())
+        for key in val_epoch_losses.keys():
+            val_losses[key].append(val_epoch_losses[key])
+
+        if epoch%10 == 0:
+            print(f'\n Epoch: {epoch:03d}, \n Train MSE: {epoch_loss.float():.8f} | Val MSE: {val_epoch_loss.float():.8f}')
+            for key in epoch_losses.keys():
+                print(f'{key}: {epoch_losses[key]} | {val_epoch_losses[key]}')
+
+        # Check early stopping
+        early_stopping(epoch_loss.float())
+        if early_stopping.early_stop:
+            print("Training stopped early.")
+            break
+
+    return autoencoder_network, sindy_coeffs_tensor, train_loss, train_losses, val_loss, val_losses
+
+def train_e2e(optimizer, train_dataloader, params,
+                encoder_weights, encoder_biases,
+                decoder_weights, decoder_biases,
+                sindy_coeffs_tensor, 
+                autoencoder_network, 
+                device
+                ):
+    autoencoder_network.train()
+    epoch_loss = 0.0
+    epoch_losses = {"recon": 0.0, "sindy_z": 0.0, "sindy_x": 0.0, "sindy_reg": 0.0}
+    
+    for batch, (x_data, dx_data) in enumerate(train_dataloader):
+        optimizer.zero_grad()
+        x_data = x_data.to(device)
+        dx_data = dx_data.to(device)
+        
+        loss, losses = loss_fn_e2e(
+            x_data,
+            dx_data,
+            params,
+            encoder_weights, encoder_biases,
+            decoder_weights, decoder_biases,
+            sindy_coeffs_tensor, 
+            autoencoder_network, 
+            device
+            )
+        
+        loss.backward(retain_graph=True)
+        optimizer.step()
+        
+        epoch_loss += loss
+        for key in losses.keys():
+            epoch_losses[key] += losses[key]
+    
+    epoch_loss /= len(train_dataloader)
+    for key in losses.keys():
+        epoch_losses[key] /= len(train_dataloader)
+
+    return (epoch_loss, epoch_losses)
+
+def test_e2e(val_dataloader, params,
+                encoder_weights, encoder_biases,
+                decoder_weights, decoder_biases,
+                sindy_coeffs_tensor, 
+                autoencoder_network, 
+                device
+                ):
+    autoencoder_network.eval()
+    epoch_loss = 0.0
+    epoch_losses = {"recon": 0.0, "sindy_z": 0.0, "sindy_x": 0.0, "sindy_reg": 0.0}
+    
+    with torch.no_grad():
+        for batch, (x_data, dx_data) in enumerate(val_dataloader):
+            x_data = x_data.to(device)
+            dx_data = dx_data.to(device)
+            
             loss, losses = loss_fn_e2e(
                 x_data,
                 dx_data,
@@ -61,71 +197,16 @@ def train_network_e2e(train_dataloader, params, val_data=None, device="cpu"):
                 autoencoder_network, 
                 device
                 )
+            
             epoch_loss += loss
-            for key in epoch_losses.keys():
+            for key in losses.keys():
                 epoch_losses[key] += losses[key]
+    
+    epoch_loss /= len(val_dataloader)
+    for key in losses.keys():
+        epoch_losses[key] /= len(val_dataloader)
 
-            loss.backward(retain_graph=True)
-            optimizer.step()
-        
-        train_loss.append(loss.detach().numpy().item() / num_batches)
-        for key in losses.keys():
-            train_losses[key].append(losses[key].detach().numpy().item() / num_batches)
-
-        if epoch%10 == 0:
-            print(f'Epoch: {epoch:03d}, Train MSE: {loss.detach().numpy().item():.8f}')
-            print([(key, losses[key].detach().numpy().item()) for key in losses.keys()])
-
-        # Check early stopping
-        early_stopping(loss.detach().numpy().item())
-        if early_stopping.early_stop:
-            print("Training stopped early.")
-            break
-
-    print('REFINEMENT')
-    for epoch in range(params['refinement_epochs']):
-        epoch_loss = 0.0
-        for key in epoch_losses.keys():
-            epoch_losses[key] = 0.0
-
-        ref_params = params
-        ref_params['loss_weight_sindy_reg'] = 0.0
-
-        for batch, (x_data, dx_data) in enumerate(train_dataloader):
-            # just do it on all of the data for now
-            optimizer.zero_grad()
-            loss, losses = loss_fn_e2e(
-                x_data,
-                dx_data,
-                ref_params,
-                encoder_weights, encoder_biases,
-                decoder_weights, decoder_biases,
-                sindy_coeffs_tensor, 
-                autoencoder_network, 
-                device
-                )
-            epoch_loss += loss
-            for key in epoch_losses.keys():
-                epoch_losses[key] += losses[key]
-
-            loss.backward(retain_graph=True)
-            optimizer.step()
-        
-        train_loss.append(loss.detach().numpy().item() / num_batches)
-        for key in losses.keys():
-            train_losses[key].append(losses[key].detach().numpy().item() / num_batches)
-
-        if epoch%10 == 0:
-            print(f'Epoch: {epoch:03d}, Train MSE: {loss.detach().numpy().item():.8f}')
-            print([(key, losses[key].detach().numpy().item()) for key in losses.keys()])
-
-        # Check early stopping
-        early_stopping(loss.detach().numpy().item())
-        if early_stopping.early_stop:
-            print("Training stopped early.")
-            break
-
-    return autoencoder_network, sindy_coeffs_tensor, train_loss, train_losses
+    return (epoch_loss, epoch_losses)
 
 def loss_fn_e2e(x_data,
             dx_data,
@@ -153,26 +234,20 @@ def loss_fn_e2e(x_data,
     # sindy_dz
     xx = x.clone().detach().requires_grad_()
     z = autoencoder_network.encoder(xx)
-    if params["gradv1"]:
-        gradient_x = torch.func.vmap(torch.func.vmap(torch.func.jacrev(autoencoder_network.encoder)))(x)
-    else:
-        gradient_x = compute_grad(x, autoencoder_network.encoder)
+    gradient_x = torch.func.vmap(torch.func.vmap(torch.func.jacrev(autoencoder_network.encoder)))(x)
     dz = torch.einsum('abcd, abd->abc', gradient_x, dx)
 
-    sindy_library = du.sindy_library_tensor(z, params["latent_dim"])
+    sindy_library = du.sindy_library_tensor(z, params["latent_dim"]).to(device)
+    sindy_coeffs = sindy_coeffs.to(device)
     dz_sindy = torch.matmul(sindy_library, sindy_coeffs.T)
     losses["sindy_z"] = recon_loss(dz, dz_sindy)
 
     # sindy_dx
     z = z.clone().detach().requires_grad_()
-    if params["gradv1"]:
-        gradient_z = torch.func.vmap(torch.func.vmap(torch.func.jacrev(autoencoder_network.decoder)))(z)
-    else:
-        gradient_z = compute_grad(z, autoencoder_network.decoder)
+    gradient_z = torch.func.vmap(torch.func.vmap(torch.func.jacrev(autoencoder_network.decoder)))(z)
     dx_recon = torch.einsum('abcd, abd->abc', gradient_z, dz_sindy)
 
-    dx_sindy_recon = dx_recon
-    losses["sindy_x"] = recon_loss(dx, dx_sindy_recon)
+    losses["sindy_x"] = recon_loss(dx, dx_recon)
     
     # sindy reg
     losses["sindy_reg"] = l1_loss(sindy_coeffs)
@@ -182,42 +257,6 @@ def loss_fn_e2e(x_data,
         loss += losses[key] * params["loss_weight_" + key]
 
     return loss, losses
-
-def compute_grad(x, network):
-    lj = x 
-    gradj = network.layers[0].weight # grad_l0
-
-    for j in range(len(network.layers) - 1):
-        lj = network.layers[j](lj) # l0
-        if isinstance(network.act[j], ReLU):
-            fprimej = (lj > 0.0).float() #fp0l0
-        elif isinstance(network.act[j], Sigmoid):
-            sig = Sigmoid()(lj)
-            fprimej = sig * (1 - sig)
-
-        if j == 0:
-            gradj = torch.einsum('abc, cd->abcd', fprimej, gradj)
-        else:
-            gradj = torch.einsum('abc, abcd->abcd', fprimej, gradj)
-        gradj = torch.einsum('ec, abcd->abed', network.layers[j+1].weight, gradj) # grad_l1
-        lj = network.act[j](lj) # a0
-    
-    lj = network.layers[-1](lj) # l1
-    if isinstance(network.act[-1], ReLU):
-        fprimej = (lj > 0.0).float()
-    elif isinstance(network.act[-1], Sigmoid):
-        sig = Sigmoid()(lj)
-        fprimej = sig * (1 - sig) # fp1l1
-    else: # Identity
-        assert isinstance(network.act[-1], Identity)
-        fprimej = torch.ones_like(lj)
-    
-    if len(network.layers) == 1:
-        gradj = torch.einsum('abc, cd->abcd', fprimej, gradj)
-    else:
-        gradj = torch.einsum('abc, abcd->abcd', fprimej, gradj)
-
-    return gradj
 
 # Early Stopping Class
 class EarlyStopping:

@@ -2,6 +2,7 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import xarray as xr
 import torch
+import random
 
 
 # Utilities for training CNN on 1-channel and 2-channel data from 1d KiD runs
@@ -116,6 +117,77 @@ def create_dataloader(filepath, bs, tvt_split = (50, 25, 25), shuffle=True, ds=N
         return (train_dataloader, test_dataloader, val_dataloader, case_idx)
     else:
         return (train_dataloader, test_dataloader, val_dataloader)
+
+# Utilities for end-to-end training of box model
+class E2EDataset(Dataset):
+    def __init__(self, x, dx):
+        self.x = x
+        self.dx = dx
+
+    def __len__(self):
+        return int(self.x.shape[0])
+
+    def __getitem__(self, idx):
+        return (self.x[idx, :, :], self.dx[idx, :, :])
+
+def create_e2e_dataloader(ds, shuffle_runs=True, normx = True, normdx = True, batch_size=100, tvt_split = (80, 10, 10), ):
+    one_sec = np.timedelta64(1, 's')
+    t = (ds['time'] / one_sec).to_numpy()
+    dt = int((ds['time'].isel(time=1) - ds['time'].isel(time=0)) / one_sec)
+    x = ds['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
+
+    if shuffle_runs:
+        shuffle_idx = ds['run'].data
+        random.shuffle(shuffle_idx)
+        x = x[shuffle_idx, :, :]
+
+    dx = np.gradient(x, axis=1) / dt
+
+    if normx:
+        x_norm = np.max(x)
+    else:
+        x_norm = 1.0
+    
+    if normdx:
+        dx_norm = np.max(dx)
+        t_norm = x_norm / dx_norm
+    else:
+        t_norm = 1.0
+
+    x = x / x_norm
+    dx = dx / x_norm * t_norm
+    t = t / t_norm
+
+
+    # Train
+    x_train = x[0:int(tvt_split[0]/100 * x.shape[0])]
+    dx_train = dx[0:int(tvt_split[0]/100 * x.shape[0])]
+    traindataset = E2EDataset(x_train, dx_train)
+    train_dataloader = DataLoader(traindataset, batch_size=batch_size)
+
+    # Validate
+    if tvt_split[1] > 0:
+        x_val = x[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:1])/100 * x.shape[0])]
+        dx_val = x[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:1])/100 * x.shape[0])]
+        valdataset = E2EDataset(x_val, dx_val)
+        val_dataloader = DataLoader(valdataset, batch_size=batch_size)
+    else:
+        val_dataloader = None
+    
+    # Testing
+    if tvt_split[2] > 0:
+        x_test = x[int(sum(tvt_split[0:1])/100 * x.shape[0])]
+        dx_test = dx[int(sum(tvt_split[0:1])/100 * x.shape[0])]
+        testdataset = E2EDataset(x_test, dx_test)
+        test_dataloader = DataLoader(testdataset, batch_size=batch_size)
+    else:
+        test_dataloader = None
+
+    data = (x, dx, t)
+    norms = (x_norm, t_norm)
+    data_loaders = (train_dataloader, val_dataloader, test_dataloader)
+
+    return (data, norms, data_loaders)
 
 def sindy_library_tensor(z, latent_dim):
     # not implemented for order 2 and higher terms
