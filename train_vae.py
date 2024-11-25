@@ -1,4 +1,6 @@
 import models
+import data_utils as du
+import training
 import torch
 import numpy as np
 from tqdm import tqdm
@@ -12,7 +14,7 @@ weight_decay = 1e-3
 output_path = "./models_unscaled/"
 
 # get data
-train_dataloader, test_dataloader, val_dataloader = models.create_dataloader("../pysdm_data/", batch_size)
+train_dataloader, test_dataloader, val_dataloader = du.create_dataloader("../pysdm_data/", batch_size)
 
 # set up the device
 device = torch.device(
@@ -32,16 +34,16 @@ val_mse_recs = np.zeros((latent_try.size, epochs))
 
 for il, n_latent in enumerate(latent_try):
 	# define model
-	model = models.MicroAutoEncoder(n_latent=n_latent)
+	model = models.CNNAutoEncoder(n_latent=n_latent)
 	model = model.to(device)
 	optimizer = torch.optim.AdamW(model.parameters(), lr=init_lr, weight_decay=weight_decay)
 	criterion = torch.nn.MSELoss()
 
 	for epoch in tqdm(range(0,epochs)):
 	    
-		mod = models.train(model, train_dataloader, models.recon_loss, optimizer, device)
-		train_mse = models.test(model, train_dataloader, models.recon_loss, device)
-		val_mse = models.test(model, val_dataloader, models.recon_loss, device)
+		mod = training.train(model, train_dataloader, training.recon_loss, optimizer, device)
+		train_mse = training.test(model, train_dataloader, training.recon_loss, device)
+		val_mse = training.test(model, val_dataloader, training.recon_loss, device)
 
 		train_mse_recs[il, epoch] = train_mse
 		val_mse_recs[il, epoch] = val_mse

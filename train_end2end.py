@@ -3,7 +3,7 @@ import pickle as pkl
 import random
 import xarray as xr
 import torch
-import end_to_end as e2e
+import training
 
 # Load the data
 filepath = "box_data/*"
@@ -56,7 +56,7 @@ params["learning_rate"] = 1e-5
 
 
 # TRAINING
-(vae, sindy_coeffs, loss, losses) = e2e.train_network(data, params)
+(vae, sindy_coeffs, loss, losses) = training.train_network_e2e(data, params)
 
 # SAVE
 output_directory = "./end2end"
