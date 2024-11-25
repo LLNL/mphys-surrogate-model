@@ -257,4 +257,5 @@ def get_latent_var(model, dataloader, device, n_latent):
     
     return latents
 
-
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)

@@ -19,15 +19,16 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
     device = torch.device(device)
     print(f"Using {device} device")
 
-    num_batches = len(train_dataloader)
-
     autoencoder_network = models.FFNNAutoEncoder(n_bins=params["input_dim"], n_latent=params["latent_dim"])
+    num_params = models.count_parameters(autoencoder_network)
     (encoder_weights, encoder_biases) = autoencoder_network.encoder.get_weights()
     (decoder_weights, decoder_biases) = autoencoder_network.decoder.get_weights()
     autoencoder_network.to(device)
+    print(f"Autoencoder has {num_params} trainable parameters")
 
     sindy_coeffs_tensor = torch.empty((params["latent_dim"], params["library_size"]), requires_grad=True)
     torch.nn.init.uniform_(sindy_coeffs_tensor)
+    print(f"SINDy has {torch.numel(sindy_coeffs_tensor)} trainable parameters")
     
     optimizer = torch.optim.Adam([sindy_coeffs_tensor, 
                                   *encoder_weights, *encoder_biases,
@@ -39,8 +40,9 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
 
     train_loss = []
     train_losses = {"recon": [], "sindy_z": [], "sindy_x": [], "sindy_reg": []}
-    val_loss = []
-    val_losses = {"recon": [], "sindy_z": [], "sindy_x": [], "sindy_reg": []}
+    if val_dataloader is not None:
+        val_loss = []
+        val_losses = {"recon": [], "sindy_z": [], "sindy_x": [], "sindy_reg": []}
 
     print('TRAINING')
     for epoch in range(params['max_epochs']):
