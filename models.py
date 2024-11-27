@@ -19,7 +19,6 @@ class CNNEncoderVAE(torch.nn.Module):
         self.activation3 = ReLU()
         self.lin1 = Linear(int(2*n_channels*np.floor(n_bins/8)), n_latent)
 
-        self.layer_id = ["conv1", "conv2", "conv3", "lin1"]
         self.layers = [self.conv1, self.conv2, self.conv3, self.lin1]
         
         torch.nn.init.kaiming_normal_(self.conv1.weight)
@@ -40,18 +39,18 @@ class CNNEncoderVAE(torch.nn.Module):
         return x
     
     def get_weights(self):
-        weights = {}
-        biases = {}
+        weights = []
+        biases = []
         for (i, layer) in enumerate(self.layers):
-            weights[self.layer_id[i]] = layer.weight
-            biases[self.layer_id[i]] = layer.bias
+            weights.append(layer.weight)
+            biases.append(layer.bias)
 
         return (weights, biases)
     
     def set_weights(self, weights, biases):
         for (i, layer) in enumerate(self.layers):
-            layer.weight.data = weights[self.layer_id[i]]
-            layer.bias.data = biases[self.layer_id[i]]
+            layer.weight.data = weights[i]
+            layer.bias.data = biases[i]
 
 class CNNDecoder(torch.nn.Module):
     def __init__(self,n_channels=2,n_bins=100,n_latent=10,n_hidden=50):
@@ -73,7 +72,6 @@ class CNNDecoder(torch.nn.Module):
         self.lin2 = Linear(n_bins,n_bins)
         self.activation4 = Sigmoid()
 
-        self.layer_id = ["lin", "conv1", "conv2", "conv3", "lin2"]
         self.layers = [self.lin, self.conv1, self.conv2, self.conv3, self.lin2]
         
         torch.nn.init.kaiming_normal_(self.conv1.weight)
@@ -99,18 +97,18 @@ class CNNDecoder(torch.nn.Module):
         return x
     
     def get_weights(self):
-        weights = {}
-        biases = {}
+        weights = []
+        biases = []
         for (i, layer) in enumerate(self.layers):
-            weights[self.layer_id[i]] = layer.weight
-            biases[self.layer_id[i]] = layer.bias
+            weights.append(layer.weight)
+            biases.append(layer.bias)
 
         return (weights, biases)
     
     def set_weights(self, weights, biases):
         for (i, layer) in enumerate(self.layers):
-            layer.weight.data = weights[self.layer_id[i]]
-            layer.bias.data = biases[self.layer_id[i]]
+            layer.weight.data = weights[i]
+            layer.bias.data = biases[i]
 
 class CNNAutoEncoder(torch.nn.Module):
     def __init__(self,n_channels=2,n_bins=100,n_latent=10):
