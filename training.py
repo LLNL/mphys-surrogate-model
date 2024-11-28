@@ -15,7 +15,7 @@ def l1_loss(x):
     return loss
 
 # Functions for training end-to-end network + SINDy
-def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu", cnn=True):
+def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu", cnn=False):
     device = torch.device(device)
     print(f"Using {device} device")
 
@@ -75,12 +75,12 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
                                                autoencoder_network,
                                                device)
                                                
-        val_loss.append(val_epoch_loss.float())
+        val_loss.append(val_epoch_loss)
         for key in val_epoch_losses.keys():
             val_losses[key].append(val_epoch_losses[key])
 
         if epoch%10 == 0:
-            print(f'\n Epoch: {epoch:03d}, \n Train MSE: {epoch_loss:.8f} | Val MSE: {val_epoch_loss.float():.8f}')
+            print(f'\n Epoch: {epoch:03d}, \n Train MSE: {epoch_loss:.8f} | Val MSE: {val_epoch_loss:.8f}')
             for key in epoch_losses.keys():
                 print(f'{key}: {epoch_losses[key]} | {val_epoch_losses[key]}')
 
@@ -125,7 +125,7 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
             val_losses[key].append(val_epoch_losses[key])
 
         if epoch%10 == 0:
-            print(f'\n Epoch: {epoch:03d}, \n Train MSE: {epoch_loss:.8f} | Val MSE: {val_epoch_loss.float():.8f}')
+            print(f'\n Epoch: {epoch:03d}, \n Train MSE: {epoch_loss:.8f} | Val MSE: {val_epoch_loss:.8f}')
             for key in epoch_losses.keys():
                 print(f'{key}: {epoch_losses[key]} | {val_epoch_losses[key]}')
 
