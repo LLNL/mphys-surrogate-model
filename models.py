@@ -33,7 +33,7 @@ class CNNEncoderVAE(torch.nn.Module):
         x = self.activation2(x)
         x = self.conv3(x)
         x = self.activation3(x)
-        x = x.view(-1,int(2*self.n_channels*np.floor(n_bins/8)))
+        x = x.view(-1,1,int(2*self.n_channels*np.floor(n_bins/8)))
         x = self.lin1(x)
 
         return x

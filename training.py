@@ -15,11 +15,10 @@ def l1_loss(x):
     return loss
 
 # Functions for training end-to-end network + SINDy
-def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu", cnn=False):
+def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu"):
     device = torch.device(device)
-    print(f"Using {device} device")
 
-    if cnn:
+    if params["CNN"]:
         autoencoder_network = models.CNNAutoEncoder(n_channels=1, n_bins=params["input_dim"], n_latent=params["latent_dim"])
     else:
         autoencoder_network = models.FFNNAutoEncoder(n_bins=params["input_dim"], n_latent=params["latent_dim"])
@@ -48,8 +47,53 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
         val_loss = []
         val_losses = {"recon": [], "sindy_z": [], "sindy_x": [], "sindy_reg": []}
 
-    print('TRAINING')
-    for epoch in range(params['max_epochs']):
+    printerval = 1 if params["CNN"] else 10
+
+    print('PRETRAINING')
+    ref_params = params.copy()
+    ref_params['loss_weight_sindy_reg'] = 0.0
+    ref_params['loss_weight_sindy_x'] = 0.0
+    ref_params['loss_weight_sindy_z'] = 0.0
+    for epoch in range(params["pretraining_epochs"]):
+        (epoch_loss, epoch_losses) = train_e2e(optimizer, 
+                                               train_dataloader, 
+                                               ref_params,
+                                               encoder_weights,
+                                               encoder_biases,
+                                               decoder_weights,
+                                               decoder_biases,
+                                               sindy_coeffs_tensor,
+                                               autoencoder_network,
+                                               device,
+                                               cnn=params["CNN"])
+        train_loss.append(epoch_loss)
+        for key in epoch_losses.keys():
+            train_losses[key].append(epoch_losses[key])
+
+        (val_epoch_loss, val_epoch_losses) = test_e2e(
+                                               train_dataloader, 
+                                               ref_params,
+                                               encoder_weights,
+                                               encoder_biases,
+                                               decoder_weights,
+                                               decoder_biases,
+                                               sindy_coeffs_tensor,
+                                               autoencoder_network,
+                                               device,
+                                               cnn=params["CNN"])
+                                               
+        val_loss.append(val_epoch_loss)
+        for key in val_epoch_losses.keys():
+            val_losses[key].append(val_epoch_losses[key])
+
+        if epoch%printerval == 0:
+            print(f'\n Epoch: {epoch:03d}, \n Train MSE: {epoch_loss:.8f} | Val MSE: {val_epoch_loss:.8f}')
+            for key in epoch_losses.keys():
+                print(f'{key}: {epoch_losses[key]} | {val_epoch_losses[key]}')
+
+
+    print('\n TRAINING')
+    for epoch in range(params['training_epochs']):
         (epoch_loss, epoch_losses) = train_e2e(optimizer, 
                                                train_dataloader, 
                                                params,
@@ -59,7 +103,8 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
                                                decoder_biases,
                                                sindy_coeffs_tensor,
                                                autoencoder_network,
-                                               device)
+                                               device,
+                                               cnn=params["CNN"])
         train_loss.append(epoch_loss)
         for key in epoch_losses.keys():
             train_losses[key].append(epoch_losses[key])
@@ -73,13 +118,14 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
                                                decoder_biases,
                                                sindy_coeffs_tensor,
                                                autoencoder_network,
-                                               device)
+                                               device,
+                                               cnn=params["CNN"])
                                                
         val_loss.append(val_epoch_loss)
         for key in val_epoch_losses.keys():
             val_losses[key].append(val_epoch_losses[key])
 
-        if epoch%10 == 0:
+        if epoch%printerval == 0:
             print(f'\n Epoch: {epoch:03d}, \n Train MSE: {epoch_loss:.8f} | Val MSE: {val_epoch_loss:.8f}')
             for key in epoch_losses.keys():
                 print(f'{key}: {epoch_losses[key]} | {val_epoch_losses[key]}')
@@ -91,7 +137,7 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
             break
 
     print('\n REFINEMENT')
-    ref_params = params
+    ref_params = params.copy()
     ref_params['loss_weight_sindy_reg'] = 0.0
     
     for epoch in range(params['refinement_epochs']):
@@ -104,7 +150,8 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
                                                decoder_biases,
                                                sindy_coeffs_tensor,
                                                autoencoder_network,
-                                               device)
+                                               device,
+                                               cnn=params["CNN"])
         
         train_loss.append(epoch_loss)
         for key in epoch_losses.keys():
@@ -119,12 +166,13 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
                                                decoder_biases,
                                                sindy_coeffs_tensor,
                                                autoencoder_network,
-                                               device)
+                                               device,
+                                               cnn=params["CNN"])
         val_loss.append(val_epoch_loss)
         for key in val_epoch_losses.keys():
             val_losses[key].append(val_epoch_losses[key])
 
-        if epoch%10 == 0:
+        if epoch%printerval == 0:
             print(f'\n Epoch: {epoch:03d}, \n Train MSE: {epoch_loss:.8f} | Val MSE: {val_epoch_loss:.8f}')
             for key in epoch_losses.keys():
                 print(f'{key}: {epoch_losses[key]} | {val_epoch_losses[key]}')
@@ -142,7 +190,8 @@ def train_e2e(optimizer, train_dataloader, params,
                 decoder_weights, decoder_biases,
                 sindy_coeffs_tensor, 
                 autoencoder_network, 
-                device
+                device,
+                cnn=False
                 ):
     #autoencoder_network.train()
     epoch_loss = 0.0
@@ -162,7 +211,8 @@ def train_e2e(optimizer, train_dataloader, params,
             decoder_weights, decoder_biases,
             sindy_coeffs_tensor, 
             autoencoder_network, 
-            device
+            device,
+            cnn=cnn
             )
         
         loss.backward(retain_graph=True)
@@ -183,7 +233,8 @@ def test_e2e(val_dataloader, params,
                 decoder_weights, decoder_biases,
                 sindy_coeffs_tensor, 
                 autoencoder_network, 
-                device
+                device,
+                cnn=False
                 ):
     autoencoder_network.eval()
     epoch_loss = 0.0
@@ -203,7 +254,8 @@ def test_e2e(val_dataloader, params,
                 decoder_weights, decoder_biases,
                 sindy_coeffs_tensor, 
                 autoencoder_network, 
-                device
+                device,
+                cnn=cnn
                 )
             
             epoch_loss += loss.item()
@@ -223,7 +275,8 @@ def loss_fn_e2e(x_data,
             decoder_weights, decoder_biases,
             sindy_coeffs, 
             autoencoder_network, 
-            device="cpu"
+            device="cpu",
+            cnn=False
             ):
     
     # first update the weights & coefficients
@@ -239,31 +292,41 @@ def loss_fn_e2e(x_data,
     x_recon = autoencoder_network(x)
     losses["recon"] = recon_loss(x, x_recon)
 
-    # sindy_dz
-    xx = x.clone().detach().requires_grad_()
-    z = autoencoder_network.encoder(xx)
-    gradient_x = torch.func.vmap(torch.func.vmap(torch.func.jacrev(autoencoder_network.encoder, chunk_size=20), chunk_size=20), chunk_size=20)(xx)
-    dz = torch.einsum('abcd, abd->abc', gradient_x, dx)
-    del gradient_x
+    if (params["loss_weight_sindy_z"] + params["loss_weight_sindy_x"]) > 0.0:
+        # sindy_dz
+        xx = x.clone().detach().requires_grad_()
+        z = autoencoder_network.encoder(xx)
+        if cnn:
+            gradient_x = torch.func.vmap(torch.func.jacrev(autoencoder_network.encoder, chunk_size=20), chunk_size=20)(xx)[:,0,:,:,0,:]
+        else:
+            gradient_x = torch.func.vmap(torch.func.vmap(torch.func.jacrev(autoencoder_network.encoder, chunk_size=20), chunk_size=20), chunk_size=20)(xx)
+        
+        dz = torch.einsum('abcd, abd->abc', gradient_x, dx)
+        del gradient_x
 
-    sindy_library = du.sindy_library_tensor(z, params["latent_dim"]).to(device)
-    sindy_coeffs_data = sindy_coeffs.to(device)
-    dz_sindy = torch.matmul(sindy_library, sindy_coeffs_data.T)
-    losses["sindy_z"] = recon_loss(dz, dz_sindy)
-    del sindy_library, dz
-
-    # sindy_dx
-    z = z.clone().detach().requires_grad_()
-    gradient_z = torch.func.vmap(torch.func.vmap(torch.func.jacrev(autoencoder_network.decoder)))(z)
-    dx_recon = torch.einsum('abcd, abd->abc', gradient_z, dz_sindy)
-    del z, gradient_z
-
-    losses["sindy_x"] = recon_loss(dx, dx_recon)
-    del dx, dx_recon, dz_sindy
+        sindy_library = du.sindy_library_tensor(z, params["latent_dim"]).to(device)
+        sindy_coeffs_data = sindy_coeffs.to(device)
+        dz_sindy = torch.matmul(sindy_library, sindy_coeffs_data.T)
+        losses["sindy_z"] = recon_loss(dz, dz_sindy)
+        del sindy_library, dz
     
-    # sindy reg
-    losses["sindy_reg"] = l1_loss(sindy_coeffs_data)
-    del sindy_coeffs_data
+        if params["loss_weight_sindy_x"] > 0.0:
+            # sindy_dx
+            z = z.clone().detach().requires_grad_()
+            if cnn:
+                gradient_z = torch.func.vmap(torch.func.vmap(torch.func.jacrev(autoencoder_network.decoder, chunk_size=20), chunk_size=20), chunk_size=20)(z)[:,0,0,:,:,:]
+            else:
+                gradient_z = torch.func.vmap(torch.func.vmap(torch.func.jacrev(autoencoder_network.decoder)))(z)
+            
+            dx_recon = torch.einsum('abcd, abd->abc', gradient_z, dz_sindy)
+            del z, gradient_z
+
+        losses["sindy_x"] = recon_loss(dx, dx_recon)
+        del dx, dx_recon, dz_sindy
+    
+        # sindy reg
+        losses["sindy_reg"] = l1_loss(sindy_coeffs_data)
+        del sindy_coeffs_data
 
     loss = 0.0
     for i, key in enumerate(losses.keys()):
