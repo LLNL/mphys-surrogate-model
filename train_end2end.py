@@ -1,4 +1,4 @@
-import numpy as np
+import sys
 import data_utils as du
 import xarray as xr
 import torch
@@ -34,15 +34,17 @@ params['library_dim'] = 4
 params["CNN"] = True
 params["tracemalloc"] = True
 
-params['loss_weight_recon'] = 1e2
-params['loss_weight_sindy_z'] = 1.0
-params['loss_weight_sindy_x'] = 1.0
-params['loss_weight_sindy_reg'] = 1.0
-params["pretraining_epochs"] = 100
-params["training_epochs"] = 100
-params["refinement_epochs"] = 20
-params["learning_rate"] = 1e-3
+params["pretraining_epochs"] = int(sys.argv[1]) # 100
+params["training_epochs"] = int(sys.argv[2]) # 100
+params["refinement_epochs"] = int(sys.argv[3]) # 100
+params['loss_weight_recon'] = int(sys.argv[4]) # 1
+params['loss_weight_sindy_z'] = int(sys.argv[5]) # 1
+params['loss_weight_sindy_x'] = int(sys.argv[6]) # 1
+params['loss_weight_sindy_reg'] = int(sys.argv[7]) # 1
+params["learning_rate"] = float(sys.argv[8]) #1e-3
 params["patience"] = 50
+
+print(params)
 
 if concat_files:
     ds_all = xr.open_mfdataset(filepath + ".nc", combine='nested', concat_dim='run')
