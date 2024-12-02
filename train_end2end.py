@@ -31,17 +31,17 @@ params['latent_dim'] = 3
 params['poly_order'] = 1
 params["library_size"] = params["poly_order"] * params["latent_dim"] + 1 # note this only holds for types of x, x^2; not xy
 params['library_dim'] = 4
-params["CNN"] = True
 params["tracemalloc"] = True
 
 params["pretraining_epochs"] = int(sys.argv[1]) # 100
 params["training_epochs"] = int(sys.argv[2]) # 100
 params["refinement_epochs"] = int(sys.argv[3]) # 100
-params['loss_weight_recon'] = int(sys.argv[4]) # 1
-params['loss_weight_sindy_z'] = int(sys.argv[5]) # 1
-params['loss_weight_sindy_x'] = int(sys.argv[6]) # 1
-params['loss_weight_sindy_reg'] = int(sys.argv[7]) # 1
+params['loss_weight_recon'] = float(sys.argv[4]) # 1
+params['loss_weight_sindy_z'] = float(sys.argv[5]) # 1
+params['loss_weight_sindy_x'] = float(sys.argv[6]) # 1
+params['loss_weight_sindy_reg'] = float(sys.argv[7]) # 1
 params["learning_rate"] = float(sys.argv[8]) #1e-3
+params["CNN"] = True if sys.argv[9] == "CNN" else False
 params["patience"] = 50
 
 print(params)

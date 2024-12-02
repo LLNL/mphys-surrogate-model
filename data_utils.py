@@ -136,11 +136,6 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
     dt = int((ds['time'].isel(time=1) - ds['time'].isel(time=0)) / one_sec)
     x = ds['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
 
-    if shuffle_runs:
-        shuffle_idx = ds['run'].data
-        random.shuffle(shuffle_idx)
-        x = x[shuffle_idx, :, :]
-
     dx = np.gradient(x, axis=1) / dt
 
     if normx:
@@ -157,6 +152,15 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
     x = x / x_norm
     dx = dx / x_norm * t_norm
     t = t / t_norm
+
+    x_data = x.copy()
+    dx_data = dx.copy()
+
+    if shuffle_runs:
+        shuffle_idx = ds['run'].data
+        random.shuffle(shuffle_idx)
+        x = x[shuffle_idx, :, :]
+        dx = dx[shuffle_idx, :, :]
 
     if cnn:
         old_shape = x.shape
@@ -188,7 +192,7 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
     else:
         test_dataloader = None
 
-    data = (x, dx, t)
+    data = (x_data, dx_data, t)
     norms = (x_norm, t_norm)
     data_loaders = (train_dataloader, val_dataloader, test_dataloader)
 
