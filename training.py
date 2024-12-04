@@ -1,7 +1,7 @@
 import torch
 import models
 import data_utils as du
-from torch.nn import ReLU, Sigmoid, Identity
+import pysindy as ps
 
 # Losses
 def recon_loss(recon_x, x):
@@ -15,7 +15,7 @@ def l1_loss(x):
     return loss
 
 # Functions for training end-to-end network + SINDy
-def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu"):
+def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu", X=None, T=None):
     device = torch.device(device)
 
     if params["CNN"]:
@@ -29,8 +29,10 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
     autoencoder_network.to(device)
     print(f"Autoencoder has {num_params} trainable parameters")
 
-    sindy_coeffs_tensor = torch.empty((params["latent_dim"], params["library_size"]), requires_grad=True)
-    torch.nn.init.uniform_(sindy_coeffs_tensor)
+    library_size = du.library_size(params["latent_dim"], params["poly_order"])
+    sindy_coeffs_tensor = torch.empty((params["latent_dim"], library_size), requires_grad=True)
+    #torch.nn.init.constant_(sindy_coeffs_tensor, 0.0)
+    torch.nn.init.normal_(sindy_coeffs_tensor)
     print(f"SINDy has {torch.numel(sindy_coeffs_tensor)} trainable parameters")
     
     optimizer = torch.optim.Adam([sindy_coeffs_tensor, 
@@ -47,7 +49,7 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
         val_loss = []
         val_losses = {"recon": [], "sindy_z": [], "sindy_x": [], "sindy_reg": []}
 
-    printerval = 1 if params["CNN"] else 10
+    printerval = 10
 
     print('PRETRAINING')
     ref_params = params.copy()
@@ -91,6 +93,11 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
             for key in epoch_losses.keys():
                 print(f'{key}: {epoch_losses[key]} | {val_epoch_losses[key]}')
 
+    if X is not None and T is not None:
+        print("Re-initialized SINDy coefficients with provided data")
+        sindy_coeffs_tensor = torch.tensor(initialize_sindy(autoencoder_network, params, X, T)).float()
+
+    printerval = 1 if params["CNN"] else 10
 
     print('\n TRAINING')
     for epoch in range(params['training_epochs']):
@@ -268,6 +275,22 @@ def test_e2e(val_dataloader, params,
 
     return (epoch_loss, epoch_losses)
 
+
+def initialize_sindy(vae, params, X, T):
+    optimizer = ps.SR3(
+        threshold=1e-1, thresholder="l1", max_iter=1000, normalize_columns=False, tol=1e-1
+        )
+    sindy_model = ps.SINDy(
+        optimizer=optimizer,
+        feature_library=ps.PolynomialLibrary(2)
+    )
+    z_encoded = vae.encoder(torch.tensor(X).reshape(-1, 1, params["input_dim"]))
+    z_encoded = z_encoded.reshape(params["n_runs"], -1, params["latent_dim"]).detach().numpy()
+    sindy_model.fit(z_encoded, t=T)
+    sindy_model.print()
+
+    return optimizer.coef_
+
 def loss_fn_e2e(x_data,
             dx_data,
             params,
@@ -304,8 +327,9 @@ def loss_fn_e2e(x_data,
         dz = torch.einsum('abcd, abd->abc', gradient_x, dx)
         del gradient_x
 
-        sindy_library = du.sindy_library_tensor(z, params["latent_dim"]).to(device)
+        sindy_library = du.sindy_library_tensor(z, params["latent_dim"], params["poly_order"]).to(device)
         sindy_coeffs_data = sindy_coeffs.to(device)
+
         dz_sindy = torch.matmul(sindy_library, sindy_coeffs_data.T)
         losses["sindy_z"] = recon_loss(dz, dz_sindy)
         del sindy_library, dz

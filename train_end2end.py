@@ -4,6 +4,7 @@ import xarray as xr
 import torch
 import pickle as pkl
 import training
+import uuid
 
 import tracemalloc
 
@@ -28,20 +29,17 @@ print(f"Using {device} device")
 params["device"] = device
 params["batch_size"] = 400
 params['latent_dim'] = 3
-params['poly_order'] = 1
-params["library_size"] = params["poly_order"] * params["latent_dim"] + 1 # note this only holds for types of x, x^2; not xy
-params['library_dim'] = 4
+params['poly_order'] = int(sys.argv[1])
 params["tracemalloc"] = True
-
-params["pretraining_epochs"] = int(sys.argv[1]) # 100
-params["training_epochs"] = int(sys.argv[2]) # 100
-params["refinement_epochs"] = int(sys.argv[3]) # 100
-params['loss_weight_recon'] = float(sys.argv[4]) # 1
-params['loss_weight_sindy_z'] = float(sys.argv[5]) # 1
-params['loss_weight_sindy_x'] = float(sys.argv[6]) # 1
-params['loss_weight_sindy_reg'] = float(sys.argv[7]) # 1
-params["learning_rate"] = float(sys.argv[8]) #1e-3
-params["CNN"] = True if sys.argv[9] == "CNN" else False
+params["pretraining_epochs"] = 1
+params["training_epochs"] = 1
+params["refinement_epochs"] = 1
+params['loss_weight_recon'] = float(sys.argv[2]) 
+params['loss_weight_sindy_z'] = 1.0
+params['loss_weight_sindy_x'] = 1.0
+params['loss_weight_sindy_reg'] = float(sys.argv[3])
+params["learning_rate"] = 1e-3
+params["CNN"] = True if sys.argv[4] == "CNN" else False
 params["patience"] = 50
 
 print(params)
@@ -68,7 +66,7 @@ params["n_time"] = len(ds_all['time'])
 if params["tracemalloc"]:
     tracemalloc.start()
 
-(vae, sindy_coeffs, loss, losses, val_loss, val_losses) = training.train_network_e2e(train_data, params, val_dataloader=val_data, device=params["device"])
+(vae, sindy_coeffs, loss, losses, val_loss, val_losses) = training.train_network_e2e(train_data, params, val_dataloader=val_data, device=params["device"], X=X, T=T)
 
 if params["tracemalloc"]:
     # displaying the memory
@@ -82,9 +80,14 @@ if params["tracemalloc"]:
 # SAVE
 output_directory = "./end2end"
 if params["CNN"]:
-    case_name = "CNN_{}-{}-{}_lr{}_weights{}-{}-{}-{}".format(params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"], params["learning_rate"], params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"], params["loss_weight_sindy_reg"])
+    prefix = "CNN"
 else:
-    case_name = "FFNN_{}-{}-{}_lr{}_weights{}-{}-{}-{}".format(params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"], params["learning_rate"], params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"], params["loss_weight_sindy_reg"])
+    prefix = "FFNN"
+case_name = prefix + "_order{}_{}-{}-{}_lr{}_weights{}-{}-{}-{}_{}".format(
+        params["poly_order"],
+        params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"], params["learning_rate"], 
+        params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"], params["loss_weight_sindy_reg"],
+        uuid.uuid4().hex)
 
 # total losses
 with open(output_directory + '/losses/' + case_name + '.pkl', 'wb') as pickle_file:

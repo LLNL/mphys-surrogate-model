@@ -3,6 +3,7 @@ import numpy as np
 import xarray as xr
 import torch
 import random
+from scipy.special import binom
 
 
 # Utilities for training CNN on 1-channel and 2-channel data from 1d KiD runs
@@ -198,15 +199,31 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
 
     return (data, norms, data_loaders)
 
-def sindy_library_tensor(z, latent_dim):
+def sindy_library_tensor(z, latent_dim, poly_order):
     # not implemented for order 2 and higher terms
-    library_dim = latent_dim + 1 
+    library_dim = library_size(latent_dim, poly_order)
     new_library = torch.zeros(z.shape[0], z.shape[1], library_dim)
 
+    idx = 0
     # i = 0: constant
-    new_library[:, :, 0] = 1.0
+    new_library[:, :, idx] = 1.0
 
+    idx += 1
     # i = 1:nl + 1 -> first order
-    new_library[:, :, 1:] = z
+    new_library[:, :, idx:idx + latent_dim] = z
+
+    idx += latent_dim
+    # second order
+    if poly_order >= 2:
+        for i in range(latent_dim):
+            for j in range(i, latent_dim):
+                new_library[:, :, idx] = z[:, :, i] * z[:, :, j]
+                idx += 1
 
     return new_library
+
+def library_size(n, poly_order):
+    l = 0
+    for k in range(poly_order + 1):
+        l += int(binom(n + k - 1, k))
+    return l
