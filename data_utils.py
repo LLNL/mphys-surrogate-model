@@ -177,8 +177,8 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
 
     # Validate
     if tvt_split[1] > 0:
-        x_val = x[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:1])/100 * x.shape[0])]
-        dx_val = x[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:1])/100 * x.shape[0])]
+        x_val = x[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:2])/100 * x.shape[0])]
+        dx_val = x[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:2])/100 * x.shape[0])]
         valdataset = E2EDataset(x_val, dx_val)
         val_dataloader = DataLoader(valdataset, batch_size=batch_size)
     else:
@@ -186,8 +186,8 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
     
     # Testing
     if tvt_split[2] > 0:
-        x_test = x[int(sum(tvt_split[0:1])/100 * x.shape[0])]
-        dx_test = dx[int(sum(tvt_split[0:1])/100 * x.shape[0])]
+        x_test = x[int(sum(tvt_split[0:2])/100 * x.shape[0]):]
+        dx_test = dx[int(sum(tvt_split[0:2])/100 * x.shape[0]):]
         testdataset = E2EDataset(x_test, dx_test)
         test_dataloader = DataLoader(testdataset, batch_size=batch_size)
     else:
