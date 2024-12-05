@@ -93,17 +93,13 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
             for key in epoch_losses.keys():
                 print(f'{key}: {epoch_losses[key]} | {val_epoch_losses[key]}')
 
+    ##########################
     if X is not None and T is not None:
         print("Re-initialized SINDy coefficients with provided data")
         sindy_coeffs_tensor = torch.tensor(initialize_sindy(autoencoder_network, params, X, T)).float()
 
     printerval = 1 if params["CNN"] else 10
-    optimizer = torch.optim.Adam([sindy_coeffs_tensor, 
-                                *encoder_weights, *encoder_biases,
-                                *decoder_weights, *decoder_biases
-                                ],
-                                lr = params["learning_rate"]
-                                )
+    reset_optimizer_state(optimizer)
     early_stopping = EarlyStopping(patience=params["patience"], verbose=True)
 
     print('\n TRAINING')
@@ -150,15 +146,11 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
             print("Training stopped early.")
             break
 
+    ##########################
     print('\n REFINEMENT')
     ref_params = params.copy()
     ref_params['loss_weight_sindy_reg'] = 0.0
-    optimizer = torch.optim.Adam([sindy_coeffs_tensor, 
-                                  *encoder_weights, *encoder_biases,
-                                  *decoder_weights, *decoder_biases
-                                  ],
-                                  lr = params["learning_rate"]
-                                  )
+    reset_optimizer_state(optimizer)
     early_stopping = EarlyStopping(patience=params["patience"], verbose=True)
     
     for epoch in range(params['refinement_epochs']):
@@ -392,6 +384,12 @@ class EarlyStopping:
                 if self.verbose:
                     print("Early stopping triggered.")
 
+def reset_optimizer_state(optimizer):
+    for group in optimizer.param_groups:
+        for p in group['params']:
+            if p.grad is not None:
+                p.grad.detach_()
+                p.grad.zero_()
 
 # Functions for standalone training of network (i.e. no timeseries, not end-to-end)
 def train(model, dataloader, loss_fn, optimizer, device):
