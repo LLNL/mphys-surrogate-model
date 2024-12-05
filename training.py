@@ -1,7 +1,7 @@
 import torch
 import models
 import data_utils as du
-import pysindy as ps
+#import pysindy as ps
 
 # Losses
 def recon_loss(recon_x, x):
