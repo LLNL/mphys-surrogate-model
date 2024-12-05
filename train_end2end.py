@@ -66,7 +66,7 @@ params["n_time"] = len(ds_all['time'])
 if params["tracemalloc"]:
     tracemalloc.start()
 
-(vae, sindy_coeffs, loss, losses, val_loss, val_losses) = training.train_network_e2e(train_data, params, val_dataloader=val_data, device=params["device"], X=X, T=T)
+(vae, sindy_coeffs, loss, losses, val_loss, val_losses) = training.train_network_e2e(train_data, params, val_dataloader=val_data, device=params["device"])#, X=X, T=T)
 
 if params["tracemalloc"]:
     # displaying the memory
