@@ -98,6 +98,13 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
         sindy_coeffs_tensor = torch.tensor(initialize_sindy(autoencoder_network, params, X, T)).float()
 
     printerval = 1 if params["CNN"] else 10
+    optimizer = torch.optim.Adam([sindy_coeffs_tensor, 
+                                *encoder_weights, *encoder_biases,
+                                *decoder_weights, *decoder_biases
+                                ],
+                                lr = params["learning_rate"]
+                                )
+    early_stopping = EarlyStopping(patience=params["patience"], verbose=True)
 
     print('\n TRAINING')
     for epoch in range(params['training_epochs']):
@@ -146,6 +153,13 @@ def train_network_e2e(train_dataloader, params, val_dataloader=None, device="cpu
     print('\n REFINEMENT')
     ref_params = params.copy()
     ref_params['loss_weight_sindy_reg'] = 0.0
+    optimizer = torch.optim.Adam([sindy_coeffs_tensor, 
+                                  *encoder_weights, *encoder_biases,
+                                  *decoder_weights, *decoder_biases
+                                  ],
+                                  lr = params["learning_rate"]
+                                  )
+    early_stopping = EarlyStopping(patience=params["patience"], verbose=True)
     
     for epoch in range(params['refinement_epochs']):
         (epoch_loss, epoch_losses) = train_e2e(optimizer, 
