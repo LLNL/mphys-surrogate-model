@@ -4,6 +4,7 @@ import xarray as xr
 import torch
 import random
 from scipy.special import binom
+from scipy.integrate import odeint
 
 
 # Utilities for training CNN on 1-channel and 2-channel data from 1d KiD runs
@@ -227,3 +228,25 @@ def library_size(n, poly_order):
     for k in range(poly_order + 1):
         l += int(binom(n + k - 1, k))
     return l
+
+"""
+SINDy solutions
+"""
+def first_order_dt(t, z, sindy_coeffs, poly_order, z_lim):
+# z has shape (n_latent)
+    n_latent = z.size
+    library = sindy_library_tensor(torch.tensor(z).reshape(1, 1, n_latent), n_latent, poly_order)
+    dz = torch.matmul(library, sindy_coeffs.T)[0][0].detach().numpy()
+    for il in range(n_latent):
+        if z[il] >= z_lim[il][1]:
+            dz[il] = 0.0
+        elif z[il] <= z_lim[il][0]:
+            dz[il] = 0.0
+
+    return dz
+
+def sindy_simulate(z0, T, sindy_coeffs, poly_order, z_lim):
+    f = lambda z,t : first_order_dt(t, z, sindy_coeffs, poly_order, z_lim)
+
+    Z = odeint(f, z0, T)
+    return Z
