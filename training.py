@@ -394,7 +394,7 @@ def reset_optimizer_state(optimizer):
 # Functions for standalone training of network (i.e. no timeseries, not end-to-end)
 def train(model, dataloader, loss_fn, optimizer, device):
     model.train()
-    for (bindata, _) in dataloader:
+    for bindata in dataloader:
         optimizer.zero_grad(set_to_none=True)
         bindata = bindata.to(device)
         recon = model(bindata.float())
@@ -410,7 +410,7 @@ def test(model, dataloader, loss_fn, device):
     test_loss = 0
 
     with torch.no_grad():
-        for (bindata, _) in dataloader:
+        for bindata in dataloader:
             bindata = bindata.to(device)
             recon = model(bindata.float())
             test_loss += loss_fn(recon.float(), bindata.float())

@@ -58,7 +58,7 @@ def create_timeseries_dataloader(ds):
     (data_loader, _, _, t_idx) = create_dataloader(None, bs, tvt_split=(100, 0, 0), shuffle=False, ds=ds, return_idx=True)
     return (data_loader, t_idx)
 
-def create_dataloader(filepath, bs, tvt_split = (50, 25, 25), shuffle=True, ds=None, return_idx=False):
+def create_dataloader(filepath, bs, tvt_split = (80, 10, 10), shuffle=True, ds=None, return_idx=False, erf=False):
     if filepath is not None:
         ds = xr.open_mfdataset(filepath + "*.nc", combine='nested', concat_dim='run')
         r_bins_edges = np.logspace(np.log10(0.1 * 1e-6), np.log10(10 * 1e-3), 101, endpoint=True,)
@@ -120,6 +120,54 @@ def create_dataloader(filepath, bs, tvt_split = (50, 25, 25), shuffle=True, ds=N
     else:
         return (train_dataloader, test_dataloader, val_dataloader)
 
+def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_size=100, tvt_split = (80, 10, 10), ):
+    x = ds['dmdlnr'].to_numpy()
+    if normx:
+        x_norm = np.max(x)
+    else:
+        x_norm = 1.0
+    
+    x = x / x_norm
+    x_data = x.copy()
+
+    if shuffle_runs:
+        shuffle_idx = ds['loc'].data
+        random.shuffle(shuffle_idx)
+        x = x[shuffle_idx, :]
+
+    if cnn:
+        old_shape = x.shape
+        print(f"{old_shape[0]} runs")
+        x.shape = (old_shape[0], 1, old_shape[1])
+
+    # Train
+    x_train = x[0:int(tvt_split[0]/100 * x.shape[0])]
+    traindataset = BinDataset1C(x_train)
+    train_dataloader = DataLoader(traindataset, batch_size=batch_size)
+
+    # Validate
+    if tvt_split[1] > 0:
+        x_val = x[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:2])/100 * x.shape[0])]
+        valdataset = BinDataset1C(x_val)
+        val_dataloader = DataLoader(valdataset, batch_size=batch_size)
+    else:
+        val_dataloader = None
+    
+    # Testing
+    if tvt_split[2] > 0:
+        x_test = x[int(sum(tvt_split[0:2])/100 * x.shape[0]):]
+        testdataset = BinDataset1C(x_test)
+        test_dataloader = DataLoader(testdataset, batch_size=batch_size)
+    else:
+        test_dataloader = None
+
+    data = (x_data,)
+    norms = (x_norm,)
+    data_loaders = (train_dataloader, val_dataloader, test_dataloader)
+
+    return (data, norms, data_loaders)
+
+
 # Utilities for end-to-end training of box model
 class E2EDataset(Dataset):
     def __init__(self, x, dx):
@@ -179,7 +227,7 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
     # Validate
     if tvt_split[1] > 0:
         x_val = x[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:2])/100 * x.shape[0])]
-        dx_val = x[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:2])/100 * x.shape[0])]
+        dx_val = dx[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:2])/100 * x.shape[0])]
         valdataset = E2EDataset(x_val, dx_val)
         val_dataloader = DataLoader(valdataset, batch_size=batch_size)
     else:
