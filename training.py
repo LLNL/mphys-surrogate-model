@@ -282,20 +282,20 @@ def test_e2e(val_dataloader, params,
     return (epoch_loss, epoch_losses)
 
 
-def initialize_sindy(vae, params, X, T):
-    optimizer = ps.SR3(
-        threshold=1e-1, thresholder="l1", max_iter=1000, normalize_columns=False, tol=1e-1
-        )
-    sindy_model = ps.SINDy(
-        optimizer=optimizer,
-        feature_library=ps.PolynomialLibrary(2)
-    )
-    z_encoded = vae.encoder(torch.tensor(X).reshape(-1, 1, params["input_dim"]))
-    z_encoded = z_encoded.reshape(params["n_runs"], -1, params["latent_dim"]).detach().numpy()
-    sindy_model.fit(z_encoded, t=T)
-    sindy_model.print()
-
-    return optimizer.coef_
+# def initialize_sindy(vae, params, X, T):
+#     optimizer = ps.SR3(
+#         threshold=1e-1, thresholder="l1", max_iter=1000, normalize_columns=False, tol=1e-1
+#         )
+#     sindy_model = ps.SINDy(
+#         optimizer=optimizer,
+#         feature_library=ps.PolynomialLibrary(2)
+#     )
+#     z_encoded = vae.encoder(torch.tensor(X).reshape(-1, 1, params["input_dim"]))
+#     z_encoded = z_encoded.reshape(params["n_runs"], -1, params["latent_dim"]).detach().numpy()
+#     sindy_model.fit(z_encoded, t=T)
+#     sindy_model.print()
+#
+#     return optimizer.coef_
 
 def loss_fn_e2e(x_data,
             dx_data,

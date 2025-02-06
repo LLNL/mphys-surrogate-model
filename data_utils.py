@@ -180,11 +180,14 @@ class E2EDataset(Dataset):
     def __getitem__(self, idx):
         return (self.x[idx, :, :], self.dx[idx, :, :])
 
-def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx = True, batch_size=100, tvt_split = (80, 10, 10), ):
+def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx = True, batch_size=100, tvt_split = (80, 10, 10), condensation=False):
     one_sec = np.timedelta64(1, 's')
     t = (ds['time'] / one_sec).to_numpy()
     dt = int((ds['time'].isel(time=1) - ds['time'].isel(time=0)) / one_sec)
     x = ds['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
+    if condensation:
+        supersat = (ds["RH"] - 1) / 100
+        temp = ds["T"]
 
     dx = np.gradient(x, axis=1) / dt
 
@@ -215,8 +218,8 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
     if cnn:
         old_shape = x.shape
         print(f"{old_shape[0]} runs with {old_shape[1]} timesteps each")
-        x.shape = (old_shape[0] * old_shape[1], 1, old_shape[2])
-        dx.shape = x.shape
+        x = x.reshape((old_shape[0] * old_shape[1], 1, old_shape[2]))
+        dx = dx.reshape(x.shape)
 
     # Train
     x_train = x[0:int(tvt_split[0]/100 * x.shape[0])]
