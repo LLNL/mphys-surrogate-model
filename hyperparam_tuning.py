@@ -24,7 +24,7 @@ params_rng['loss_weight_sindy_x'] = (-4, 2) # logscale
 params_rng['loss_weight_sindy_reg'] = (-4, 2) # logscale
 params_rng["learning_rate"] = (-4, -1) # logscale
 
-n_samples = 9
+n_samples = 2 #9
 
 def get_psd_evolution(x0, coeff, vae, t_sim, zlim, p_order=2):
     z0 = vae.encoder(torch.Tensor(x0.reshape(1, -1))).detach().numpy()[0][0]
@@ -147,7 +147,7 @@ for sample in samples_int:
         if i <= 1:
             params[key] = sample[i]
         elif i <= 4:
-            params[key] = 1 + int(sample[i] * 999)
+            params[key] = 1 #+ int(sample[i] * 999)
         else:
             params[key] = 1e1**(sample[i])
 
