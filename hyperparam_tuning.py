@@ -10,7 +10,7 @@ import uuid
 from scipy.stats import qmc
 
 train_models = True
-eval_models = True
+eval_models = False
 filepath = "box64.nc" #"box64_small.nc"
 
 params_rng = {}
@@ -126,52 +126,57 @@ print(f"Using {device} device")
 
 # Set up the param set
 ds_all = xr.open_dataset(filepath)
-params = {}
-params['input_dim'] = len(ds_all['mass_bin'])
-params["n_runs"] = len(ds_all['run'])
-params["n_time"] = len(ds_all['time'])
-params["device"] = device
-params["batch_size"] = 400
-params["CNN"] = True
-params["patience"] = 50
-params['loss_weight_recon'] = 1e0
-params["training_epochs"] = 1000
-
-# get the LHS and scale the parameters as integers
-lhs_ranges = list(params_rng.values())
-sampler = qmc.LatinHypercube(d = len(lhs_ranges))
-samples_unit = sampler.random(n=n_samples)
-lb = [g[0] for g in lhs_ranges]
-ub = [g[1] for g in lhs_ranges]
-samples_int = np.round(qmc.scale(samples_unit, lb, ub)).astype(int)
-
-for sample in samples_int:
+if train_models:
+    params = {}
+    params['input_dim'] = len(ds_all['mass_bin'])
+    params["n_runs"] = len(ds_all['run'])
+    params["n_time"] = len(ds_all['time'])
+    params["device"] = device
+    params["batch_size"] = 400
+    params["CNN"] = True
+    params["patience"] = 50
     params['loss_weight_recon'] = 1e0
-    for (i, key) in enumerate(params_rng.keys()):
-        if i <= 1:
-            params[key] = sample[i]
-        elif i <= 3:
-            params[key] = 1 + int(sample[i] * 999)
-        else:
-            params[key] = 1e1**(sample[i])
+    params["training_epochs"] = 1000
 
-    # rescale the weights
-    max_weight = 1.0
-    for key in list(params.keys()):
-        if key.startswith("loss_weight"):
-            if params[key] > max_weight:
-                max_weight = params[key]
-    for key in list(params.keys()):
-        if key.startswith("loss_weight"):
-            params[key] /= max_weight
+    # get the LHS and scale the parameters as integers
+    lhs_ranges = list(params_rng.values())
+    sampler = qmc.LatinHypercube(d = len(lhs_ranges))
+    samples_unit = sampler.random(n=n_samples)
+    lb = [g[0] for g in lhs_ranges]
+    ub = [g[1] for g in lhs_ranges]
+    samples_int = np.round(qmc.scale(samples_unit, lb, ub)).astype(int)
 
-    print(params)
+    for sample in samples_int:
+        params['loss_weight_recon'] = 1e0
+        for (i, key) in enumerate(params_rng.keys()):
+            if i <= 1:
+                params[key] = sample[i]
+            elif i <= 3:
+                params[key] = 1 + int(sample[i] * 999)
+            else:
+                params[key] = 1e1**(sample[i])
 
-    # train the model
-    (case_name, vae, X, T) = train_model(ds_all, params)
-    X_train = X[0:int(80/100 * X.shape[0])]
-    X_test = X[int(80 / 100 * X.shape[0]):]
+        # rescale the weights
+        max_weight = 1.0
+        for key in list(params.keys()):
+            if key.startswith("loss_weight"):
+                if params[key] > max_weight:
+                    max_weight = params[key]
+        for key in list(params.keys()):
+            if key.startswith("loss_weight"):
+                params[key] /= max_weight
 
-    # retrain SINDy
-    W1_err = compute_sim_error(X_train, X_test, vae, T, params, "./hyperparam_e2e", case_name)
-    print(f"W1 error: {W1_err}")
+        print(params)
+
+        # train the model
+        (case_name, vae, X, T) = train_model(ds_all, params)
+        X_train = X[0:int(80/100 * X.shape[0])]
+        X_test = X[int(80 / 100 * X.shape[0]):]
+
+        if eval_models:
+            # retrain SINDy
+            W1_err = compute_sim_error(X_train, X_test, vae, T, params, "./hyperparam_e2e", case_name)
+            print(f"W1 error: {W1_err}")
+
+elif eval_models: # don't train, only evaluate
+    print("not set up yet")
