@@ -180,7 +180,7 @@ class E2EDataset(Dataset):
     def __getitem__(self, idx):
         return (self.x[idx, :, :], self.dx[idx, :, :])
 
-def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx = True, batch_size=100, tvt_split = (80, 10, 10), condensation=False):
+def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx = True, batch_size=100, tvt_split = (80, 10, 10), condensation=False, seed=None):
     one_sec = np.timedelta64(1, 's')
     t = (ds['time'] / one_sec).to_numpy()
     dt = int((ds['time'].isel(time=1) - ds['time'].isel(time=0)) / one_sec)
@@ -210,6 +210,8 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
     dx_data = dx.copy()
 
     if shuffle_runs:
+        if seed:
+            random.seed(seed)
         shuffle_idx = ds['run'].data
         random.shuffle(shuffle_idx)
         x = x[shuffle_idx, :, :]
@@ -262,7 +264,8 @@ def sindy_library_tensor(z, latent_dim, poly_order):
 
     idx += 1
     # i = 1:nl + 1 -> first order
-    new_library[:, :, idx:idx + latent_dim] = z
+    if poly_order >= 1:
+        new_library[:, :, idx:idx + latent_dim] = z
 
     idx += latent_dim
     # second order

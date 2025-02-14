@@ -10,21 +10,20 @@ import uuid
 from scipy.stats import qmc
 
 train_models = True
-eval_models = False
-filepath = "box64.nc"
+eval_models = True
+filepath = "box64.nc" #"box64_small.nc"
 
 params_rng = {}
 params_rng['latent_dim'] = (2, 4)
 params_rng['poly_order'] = (1, 3)
 params_rng["pretraining_epochs"] = (0, 1)  # boolean
-params_rng["training_epochs"] = (0, 1)      # boolean
 params_rng["refinement_epochs"] = (0, 1)    # boolean
 params_rng['loss_weight_sindy_z'] = (-4, 2) # logscale
 params_rng['loss_weight_sindy_x'] = (-4, 2) # logscale
 params_rng['loss_weight_sindy_reg'] = (-4, 2) # logscale
 params_rng["learning_rate"] = (-4, -1) # logscale
 
-n_samples = 2 #9
+n_samples = 1
 
 def get_psd_evolution(x0, coeff, vae, t_sim, zlim, p_order=2):
     z0 = vae.encoder(torch.Tensor(x0.reshape(1, -1))).detach().numpy()[0][0]
@@ -35,12 +34,12 @@ def get_psd_evolution(x0, coeff, vae, t_sim, zlim, p_order=2):
 
     return x_sim
 
-def compute_sim_error(X_train, X_test, vae, coeff, T, params, outdir, case_name):
+def compute_sim_error(X_train, X_test, vae, T, params, outdir, case_name):
     ztr_encoded = vae.encoder(torch.tensor(X_train).reshape(-1, 1, params["input_dim"]))
     ztr_encoded = ztr_encoded.reshape(X_train.shape[0], -1, params["latent_dim"]).detach().numpy()
 
     # retrain sindy
-    coeff = retrain_sindy(ztr_encoded, T, outdir, case_name)
+    coeff = retrain_sindy(ztr_encoded, T, outdir, case_name, params["poly_order"])
 
     zlim = np.zeros((params["latent_dim"], 2))
     for il in range(params["latent_dim"]):
@@ -54,22 +53,22 @@ def compute_sim_error(X_train, X_test, vae, coeff, T, params, outdir, case_name)
         x_sim = get_psd_evolution(x_0, coeff, vae, T, zlim, p_order=params["poly_order"])
         for (j, t) in enumerate(T):
             w1_dist[i, j] = wasserstein_distance(X_test[i, j], x_sim[j])
-            l2_err[i, j] = np.linalg.norm(X_test[id, j] - x_sim[j])
+            l2_err[i, j] = np.linalg.norm(X_test[i, j] - x_sim[j])
 
-    np.savez(outdir + "/metrics/" + case_name + ".pkl",
+    np.savez(outdir + "/metrics/" + case_name + ".npz",
             l2_err=l2_err,
             w1_dist=w1_dist)
 
     return np.sum(w1_dist)
 
-def retrain_sindy(ztr_encoded, T, output_dir, case_name):
+def retrain_sindy(ztr_encoded, T, output_dir, case_name, poly_order):
     import pysindy as ps
     optimizer = ps.SR3(
         threshold=1e-1, thresholder="l0", max_iter=1000, normalize_columns=False, tol=1e-1
     )
     sindy_model = ps.SINDy(
         optimizer=optimizer,
-        feature_library=ps.PolynomialLibrary(2)
+        feature_library=ps.PolynomialLibrary(int(poly_order)),
     )
     sindy_model.fit(ztr_encoded, t=T)
 
@@ -79,9 +78,9 @@ def retrain_sindy(ztr_encoded, T, output_dir, case_name):
     return optimizer.coef_
 
 
-def train_model(ds_all, params, num_eval=2, split=(80, 10, 10), output_directory = "./hyperparam_e2e"):
-    for _ in range(num_eval):
-        (data, norms, data_loaders) = du.create_e2e_dataloader(ds_all, cnn=params["CNN"], batch_size=params["batch_size"], tvt_split=split)
+def train_model(ds_all, params, num_eval=1, split=(80, 10, 10), output_directory = "./hyperparam_e2e"):
+    for seed in range(num_eval):
+        (data, norms, data_loaders) = du.create_e2e_dataloader(ds_all, cnn=params["CNN"], batch_size=params["batch_size"], tvt_split=split, seed=seed)
         (train_data, val_data, test_data) = data_loaders
         (X, DX, T) = data
 
@@ -92,7 +91,7 @@ def train_model(ds_all, params, num_eval=2, split=(80, 10, 10), output_directory
         else:
             prefix = "FFNN"
         case_name = prefix + "_nl{}_order{}_tr{}-{}-{}_lr{}_weights{}-{}-{}-{}_{}".format(
-            params["input_dim"],
+            params["latent_dim"],
             params["poly_order"],
             params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"],
             params["learning_rate"],
@@ -105,9 +104,13 @@ def train_model(ds_all, params, num_eval=2, split=(80, 10, 10), output_directory
         # sindy_coeffs
         with open(output_directory + '/sindy/' + case_name + '.pkl', 'wb') as pickle_file:
             pkl.dump(sindy_coeffs, pickle_file)
+        with open(output_directory + "/" + case_name + '.pkl', 'wb') as pickle_file:
+            pkl.dump(params, pickle_file)
         # vae model
         torch.save(vae.state_dict(), output_directory + '/autoencoder/' + case_name + ".pth")
         print(f"Saved model and losses as {case_name}")
+
+        return (case_name, vae, X, T)
 
 
 # MAIN #
@@ -132,6 +135,7 @@ params["batch_size"] = 400
 params["CNN"] = True
 params["patience"] = 50
 params['loss_weight_recon'] = 1e0
+params["training_epochs"] = 1 #1000
 
 # get the LHS and scale the parameters as integers
 lhs_ranges = list(params_rng.values())
@@ -146,7 +150,7 @@ for sample in samples_int:
     for (i, key) in enumerate(params_rng.keys()):
         if i <= 1:
             params[key] = sample[i]
-        elif i <= 4:
+        elif i <= 3:
             params[key] = 1 #+ int(sample[i] * 999)
         else:
             params[key] = 1e1**(sample[i])
@@ -162,4 +166,12 @@ for sample in samples_int:
             params[key] /= max_weight
 
     print(params)
-    train_model(ds_all, params)
+
+    # train the model
+    (case_name, vae, X, T) = train_model(ds_all, params)
+    X_train = X[0:int(80/100 * X.shape[0])]
+    X_test = X[int(80 / 100 * X.shape[0]):]
+
+    # retrain SINDy
+    W1_err = compute_sim_error(X_train, X_test, vae, T, params, "./hyperparam_e2e", case_name)
+    print(f"W1 error: {W1_err}")
