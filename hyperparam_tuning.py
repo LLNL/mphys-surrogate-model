@@ -1,4 +1,3 @@
-import sys
 import numpy as np
 import data_utils as du
 from scipy.stats import wasserstein_distance
@@ -8,10 +7,13 @@ import pickle as pkl
 import training
 import uuid
 from scipy.stats import qmc
+import glob
+import models
 
-train_models = True
-eval_models = False
-filepath = "box64.nc" #"box64_small.nc"
+train_models = False
+eval_models = True
+filepath = "box64.nc" #"box64_small.nc" #
+output_directory = "./hyperparam_e2e"
 
 params_rng = {}
 params_rng['latent_dim'] = (2, 4)
@@ -49,6 +51,8 @@ def compute_sim_error(X_train, X_test, vae, T, params, outdir, case_name):
     w1_dist = np.zeros((X_test.shape[0], len(T)))
     l2_err = np.zeros_like(w1_dist)
     for i in range(len(X_test)):
+        if i%10 == 0:
+            print(f"Testing {i} out of {len(X_test)}")
         x_0 = X_test[i, 0]
         x_sim = get_psd_evolution(x_0, coeff, vae, T, zlim, p_order=params["poly_order"])
         for (j, t) in enumerate(T):
@@ -152,7 +156,7 @@ if train_models:
             if i <= 1:
                 params[key] = sample[i]
             elif i <= 3:
-                params[key] = 1 + int(sample[i] * 999)
+                params[key] = 1 + int(sample[i] * 199)
             else:
                 params[key] = 1e1**(sample[i])
 
@@ -171,7 +175,7 @@ if train_models:
         # train the model
         (case_name, vae, X, T) = train_model(ds_all, params)
         X_train = X[0:int(80/100 * X.shape[0])]
-        X_test = X[int(80 / 100 * X.shape[0]):]
+        X_test = X[int(90 / 100 * X.shape[0]):]
 
         if eval_models:
             # retrain SINDy
@@ -179,4 +183,38 @@ if train_models:
             print(f"W1 error: {W1_err}")
 
 elif eval_models: # don't train, only evaluate
-    print("not set up yet")
+    for filename in glob.glob(output_directory + "/*.pkl"):
+        print(filename)
+        with open(filename, 'rb') as pickle_file:
+            params = pkl.load(pickle_file)
+
+        if params["CNN"]:
+            prefix = "CNN"
+        else:
+            prefix = "FFNN"
+        case_name = prefix + "_nl{}_order{}_tr{}-{}-{}_lr{}_weights{}-{}-{}-{}_{}".format(
+            params["latent_dim"],
+            params["poly_order"],
+            params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"],
+            params["learning_rate"],
+            params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"],
+            params["loss_weight_sindy_reg"],
+            filename[-36:-4])
+
+        vae = models.CNNAutoEncoder(n_channels=1, n_bins=63, n_latent=params["latent_dim"])
+        device = torch.device(device)
+        vae.load_state_dict(torch.load(output_directory + "/autoencoder/" + case_name + ".pth", map_location=device))
+
+        seed = 1 # may need to reimplement later
+        split = (80, 10, 10)
+        (data, norms, data_loaders) = du.create_e2e_dataloader(ds_all, cnn=params["CNN"],
+                                                               batch_size=params["batch_size"], tvt_split=split,
+                                                               seed=seed)
+        (train_data, val_data, test_data) = data_loaders
+        (X, DX, T) = data
+
+        X_test = X[int(90 / 100 * X.shape[0]):]
+        X_train = X[0:int(80 / 100 * X.shape[0])]
+        W1_err = compute_sim_error(X_train, X_test, vae, T, params, "./hyperparam_e2e", case_name)
+        print(f"W1 error: {W1_err}")
+        print("\n")
