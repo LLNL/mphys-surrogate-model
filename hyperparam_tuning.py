@@ -10,8 +10,8 @@ from scipy.stats import qmc
 import glob
 import models
 
-train_models = False
-eval_models = True
+train_models = True
+eval_models = False
 filepath = "box64.nc" #"box64_small.nc" #
 output_directory = "./hyperparam_e2e"
 
@@ -67,19 +67,25 @@ def compute_sim_error(X_train, X_test, vae, T, params, outdir, case_name):
 
 def retrain_sindy(ztr_encoded, T, output_dir, case_name, poly_order):
     import pysindy as ps
-    optimizer = ps.SR3(
-        threshold=1e-1, thresholder="l0", max_iter=1000, normalize_columns=False, tol=1e-1
-    )
-    sindy_model = ps.SINDy(
-        optimizer=optimizer,
-        feature_library=ps.PolynomialLibrary(int(poly_order)),
-    )
-    sindy_model.fit(ztr_encoded, t=T)
+    try:
+        optimizer = ps.SR3(
+            threshold=1e-1, thresholder="l0", max_iter=1000, normalize_columns=False, tol=1e-1
+        )
+        sindy_model = ps.SINDy(
+            optimizer=optimizer,
+            feature_library=ps.PolynomialLibrary(int(poly_order)),
+        )
+        sindy_model.fit(ztr_encoded, t=T)
+        sindy_coeffs = optimizer.coef_
+    except np.linalg.LinAlgError:
+        print("Could not retrain sindy")
+        with open(output_directory + "/sindy/" + case_name + ".pkl", 'rb') as pickle_file:
+            sindy_coeffs = pkl.load(pickle_file)
 
     with open(output_dir + '/sindy_retrain/' + case_name + '.pkl', 'wb') as pickle_file:
-        pkl.dump(optimizer.coef_, pickle_file)
+        pkl.dump(sindy_coeffs, pickle_file)
 
-    return optimizer.coef_
+    return sindy_coeffs
 
 
 def train_model(ds_all, params, num_eval=1, split=(80, 10, 10), output_directory = "./hyperparam_e2e"):
@@ -156,7 +162,7 @@ if train_models:
             if i <= 1:
                 params[key] = sample[i]
             elif i <= 3:
-                params[key] = 1 + int(sample[i] * 199)
+                params[key] = 1 + int(sample[i] * 999)
             else:
                 params[key] = 1e1**(sample[i])
 
