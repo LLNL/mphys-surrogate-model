@@ -10,8 +10,8 @@ from scipy.stats import qmc
 import glob
 import models
 
-train_models = True
-eval_models = False
+train_models = False
+eval_models = True
 filepath = "box64.nc" #"box64_small.nc" #
 output_directory = "./hyperparam_e2e"
 
@@ -189,7 +189,7 @@ if train_models:
             print(f"W1 error: {W1_err}")
 
 elif eval_models: # don't train, only evaluate
-    for filename in glob.glob(output_directory + "/*.pkl"):
+    for filename in glob.glob(output_directory + "/CNN_order2*.pkl"):
         print(filename)
         with open(filename, 'rb') as pickle_file:
             params = pkl.load(pickle_file)
@@ -198,8 +198,8 @@ elif eval_models: # don't train, only evaluate
             prefix = "CNN"
         else:
             prefix = "FFNN"
-        case_name = prefix + "_nl{}_order{}_tr{}-{}-{}_lr{}_weights{}-{}-{}-{}_{}".format(
-            params["latent_dim"],
+        case_name = prefix + "_order{}_{}-{}-{}_lr{}_weights{}-{}-{}-{}_{}".format(
+            #params["latent_dim"],
             params["poly_order"],
             params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"],
             params["learning_rate"],
