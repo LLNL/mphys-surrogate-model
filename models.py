@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torch.nn import Conv1d, ConvTranspose1d
-from torch.nn import Linear, ReLU, Sigmoid, ConstantPad1d, Identity
+from torch.nn import Linear, ReLU, Sigmoid, ConstantPad1d, Identity, ELU, Tanh
 
 """
 Convolutional NN Autoencoder; can operate on multiple channels of input (such as number and mass densities)
@@ -235,6 +235,60 @@ class FFNNAutoEncoder(torch.nn.Module):
             for layer in network.layers:
                 torch.nn.init.kaiming_uniform_(layer.weight, nonlinearity='relu')
                 torch.nn.init.uniform_(layer.bias)
+
+
+"""
+Black-box network for predicting time derivatives
+"""
+class LatentSpaceDerivatives(torch.nn.Module):
+    def __init__(self, n_latent=3):
+        super(LatentSpaceDerivatives, self).__init__()
+        self.n_latent = n_latent
+
+        self.layer1 = Linear(n_latent, n_latent)
+        self.layer2 = Linear(n_latent, n_latent)
+        self.layer3 = Linear(n_latent, n_latent)
+        self.layer4 = Linear(n_latent, n_latent)
+        self.activation1 = ELU()
+        self.activation2 = ELU()
+        self.activation3 = ELU()
+        self.activation4 = Tanh()
+
+        self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
+        self.act = [self.activation1, self.activation2, self.activation3, self.activation4]
+
+        self.initialize_weights()
+
+    def forward(self, x):
+        x = self.layer1(x)
+        x = self.activation1(x)
+        x = self.layer2(x)
+        x = self.activation2(x)
+        x = self.layer3(x)
+        x = self.activation3(x)
+        x = self.layer4(x)
+        x = self.activation4(x)
+
+        return x
+
+    def get_weights(self):
+        weights = []
+        biases = []
+        for (i, layer) in enumerate(self.layers):
+            weights.append(layer.weight)
+            biases.append(layer.bias)
+
+        return (weights, biases)
+
+    def set_weights(self, weights, biases):
+        for (i, layer) in enumerate(self.layers):
+            layer.weight.data = weights[i]
+            layer.bias.data = biases[i]
+
+    def initialize_weights(self):
+        for layer in self.layers:
+            torch.nn.init.kaiming_uniform_(layer.weight, nonlinearity='relu')
+            torch.nn.init.uniform_(layer.bias)
     
 """
 Utility functions
