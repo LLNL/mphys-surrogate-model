@@ -11,6 +11,7 @@ import glob
 import models
 
 train_models = True
+n_init = 8
 eval_models = False
 filepath = "box64_train.nc" #"box64_small.nc" #
 filepath_test = "box64_test.nc"
@@ -85,39 +86,38 @@ def retrain_sindy(ztr_encoded, T, output_dir, case_name, poly_order):
     return sindy_coeffs
 
 
-def train_model(ds_all, params, num_eval=8, split=(90, 10, 0), output_directory = "./hyperparam_e2e"):
-    for k in range(num_eval):
-        (data, norms, data_loaders) = du.create_e2e_dataloader(ds_all, cnn=params["CNN"], batch_size=params["batch_size"], tvt_split=split)
-        (train_data, val_data, test_data) = data_loaders
-        (X, DX, T) = data
+def train_model(ds_all, params, split=(90, 10, 0), output_directory = "./hyperparam_e2e"):
+    (data, norms, data_loaders) = du.create_e2e_dataloader(ds_all, cnn=params["CNN"], batch_size=params["batch_size"], tvt_split=split)
+    (train_data, val_data, test_data) = data_loaders
+    (X, DX, T) = data
 
-        (vae, sindy_coeffs, loss, losses, val_loss, val_losses) = training.train_network_e2e(train_data, params, val_dataloader=val_data, device=params["device"])
+    (vae, sindy_coeffs, loss, losses, val_loss, val_losses) = training.train_network_e2e(train_data, params, val_dataloader=val_data, device=params["device"])
 
-        if params["CNN"]:
-            prefix = "CNN"
-        else:
-            prefix = "FFNN"
-        case_name = prefix + "_nl{}_order{}_tr{}-{}-{}_lr{}_weights{}-{}-{}-{}_{}".format(
-            params["latent_dim"],
-            params["poly_order"],
-            params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"],
-            params["learning_rate"],
-            params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"],
-            params["loss_weight_sindy_reg"],
-            uuid.uuid4().hex)
+    if params["CNN"]:
+        prefix = "CNN"
+    else:
+        prefix = "FFNN"
+    case_name = prefix + "_nl{}_order{}_tr{}-{}-{}_lr{}_weights{}-{}-{}-{}_{}".format(
+        params["latent_dim"],
+        params["poly_order"],
+        params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"],
+        params["learning_rate"],
+        params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"],
+        params["loss_weight_sindy_reg"],
+        uuid.uuid4().hex)
 
-        with open(output_directory + '/losses/' + case_name + '.pkl', 'wb') as pickle_file:
-            pkl.dump((loss, losses), pickle_file)
-        # sindy_coeffs
-        with open(output_directory + '/sindy/' + case_name + '.pkl', 'wb') as pickle_file:
-            pkl.dump(sindy_coeffs, pickle_file)
-        with open(output_directory + "/" + case_name + '.pkl', 'wb') as pickle_file:
-            pkl.dump(params, pickle_file)
-        # vae model
-        torch.save(vae.state_dict(), output_directory + '/autoencoder/' + case_name + ".pth")
-        print(f"Saved model and losses as {case_name}")
+    with open(output_directory + '/losses/' + case_name + '.pkl', 'wb') as pickle_file:
+        pkl.dump((loss, losses), pickle_file)
+    # sindy_coeffs
+    with open(output_directory + '/sindy/' + case_name + '.pkl', 'wb') as pickle_file:
+        pkl.dump(sindy_coeffs, pickle_file)
+    with open(output_directory + "/" + case_name + '.pkl', 'wb') as pickle_file:
+        pkl.dump(params, pickle_file)
+    # vae model
+    torch.save(vae.state_dict(), output_directory + '/autoencoder/' + case_name + ".pth")
+    print(f"Saved model and losses as {case_name}")
 
-        return (case_name, vae, X, T)
+    return (case_name, vae, X, T)
 
 
 # MAIN #
@@ -181,7 +181,8 @@ if train_models:
         print(params)
 
         # train the model
-        (case_name, vae, X_train, T) = train_model(ds_all, params)
+        for k in range(n_init):
+            (case_name, vae, X_train, T) = train_model(ds_all, params)
 
 if eval_models: # don't train, only evaluate
     ds_test = xr.open_dataset(filepath_test)
