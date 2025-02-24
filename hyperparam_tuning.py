@@ -10,22 +10,19 @@ from scipy.stats import qmc
 import glob
 import models
 
-train_models = False
-eval_models = True
-filepath = "box64.nc" #"box64_small.nc" #
-output_directory = "./hyperparam_e2e"
+train_models = True
+eval_models = False
+filepath = "box64_train.nc" #"box64_small.nc" #
+filepath_test = "box64_test.nc"
+output_directory = "./hyperparam_e2e_test"
 
 params_rng = {}
-params_rng['latent_dim'] = (2, 4)
-params_rng['poly_order'] = (1, 3)
-params_rng["pretraining_epochs"] = (0, 1)  # boolean
-params_rng["refinement_epochs"] = (0, 1)    # boolean
-params_rng['loss_weight_sindy_z'] = (-4, 2) # logscale
-params_rng['loss_weight_sindy_x'] = (-4, 2) # logscale
-params_rng['loss_weight_sindy_reg'] = (-4, 2) # logscale
-params_rng["learning_rate"] = (-4, -1) # logscale
+params_rng['loss_weight_sindy_z'] = (-2, 2) # logscale
+params_rng['loss_weight_sindy_x'] = (-2, 2) # logscale
+params_rng['loss_weight_sindy_reg'] = (-2, 2) # logscale
+params_rng["learning_rate"] = (-4, -2) # logscale
 
-n_samples = 8
+# n_samples = 8
 
 def get_psd_evolution(x0, coeff, vae, t_sim, zlim, p_order=2):
     z0 = vae.encoder(torch.Tensor(x0.reshape(1, -1))).detach().numpy()[0][0]
@@ -88,9 +85,9 @@ def retrain_sindy(ztr_encoded, T, output_dir, case_name, poly_order):
     return sindy_coeffs
 
 
-def train_model(ds_all, params, num_eval=1, split=(80, 10, 10), output_directory = "./hyperparam_e2e"):
-    for seed in range(num_eval):
-        (data, norms, data_loaders) = du.create_e2e_dataloader(ds_all, cnn=params["CNN"], batch_size=params["batch_size"], tvt_split=split, seed=seed)
+def train_model(ds_all, params, num_eval=8, split=(90, 10, 0), output_directory = "./hyperparam_e2e"):
+    for k in range(num_eval):
+        (data, norms, data_loaders) = du.create_e2e_dataloader(ds_all, cnn=params["CNN"], batch_size=params["batch_size"], tvt_split=split)
         (train_data, val_data, test_data) = data_loaders
         (X, DX, T) = data
 
@@ -146,12 +143,17 @@ if train_models:
     params["CNN"] = True
     params["patience"] = 50
     params['loss_weight_recon'] = 1e0
-    params["training_epochs"] = 1000
+    params["training_epochs"] = 1 #1000
+    params['latent_dim'] = 3
+    params['poly_order'] = 2
+    params["pretraining_epochs"] = 1
+    params["refinement_epochs"] = 1 #200
 
     # get the LHS and scale the parameters as integers
     lhs_ranges = list(params_rng.values())
-    sampler = qmc.LatinHypercube(d = len(lhs_ranges))
-    samples_unit = sampler.random(n=n_samples)
+    # sampler = qmc.LatinHypercube(d = len(lhs_ranges))
+    sampler = qmc.Sobol(d = len(lhs_ranges))
+    samples_unit = sampler.random(n=1)
     lb = [g[0] for g in lhs_ranges]
     ub = [g[1] for g in lhs_ranges]
     samples_int = np.round(qmc.scale(samples_unit, lb, ub)).astype(int)
@@ -159,12 +161,12 @@ if train_models:
     for sample in samples_int:
         params['loss_weight_recon'] = 1e0
         for (i, key) in enumerate(params_rng.keys()):
-            if i <= 1:
-                params[key] = sample[i]
-            elif i <= 3:
-                params[key] = 1 + int(sample[i] * 999)
-            else:
-                params[key] = 1e1**(sample[i])
+            # if i <= 1:
+            #     params[key] = sample[i]
+            # elif i <= 3:
+            #     params[key] = 1 + int(sample[i] * 999)
+            # else:
+            params[key] = 1e1**(sample[i])
 
         # rescale the weights
         max_weight = 1.0
@@ -179,16 +181,10 @@ if train_models:
         print(params)
 
         # train the model
-        (case_name, vae, X, T) = train_model(ds_all, params)
-        X_train = X[0:int(80/100 * X.shape[0])]
-        X_test = X[int(90 / 100 * X.shape[0]):]
+        (case_name, vae, X_train, T) = train_model(ds_all, params)
 
-        if eval_models:
-            # retrain SINDy
-            W1_err = compute_sim_error(X_train, X_test, vae, T, params, "./hyperparam_e2e", case_name)
-            print(f"W1 error: {W1_err}")
-
-elif eval_models: # don't train, only evaluate
+if eval_models: # don't train, only evaluate
+    ds_test = xr.open_dataset(filepath_test)
     for filename in glob.glob(output_directory + "/CNN_order2*.pkl"):
         print(filename)
         with open(filename, 'rb') as pickle_file:
@@ -211,16 +207,14 @@ elif eval_models: # don't train, only evaluate
         device = torch.device(device)
         vae.load_state_dict(torch.load(output_directory + "/autoencoder/" + case_name + ".pth", map_location=device))
 
-        seed = 1 # may need to reimplement later
-        split = (80, 10, 10)
-        (data, norms, data_loaders) = du.create_e2e_dataloader(ds_all, cnn=params["CNN"],
-                                                               batch_size=params["batch_size"], tvt_split=split,
-                                                               seed=seed)
-        (train_data, val_data, test_data) = data_loaders
-        (X, DX, T) = data
+        split = (90, 10, 0)
+        (data, _, _) = du.create_e2e_dataloader(ds_all, cnn=params["CNN"],
+                                                               batch_size=params["batch_size"], tvt_split=split)
+        (X_train, DX, T) = data
+        (data, _, _) = du.create_e2e_dataloader(ds_test, cnn=params["CNN"],
+                                                               batch_size=params["batch_size"], tvt_split=split)
+        (X_test, DX, T) = data
 
-        X_test = X[int(90 / 100 * X.shape[0]):]
-        X_train = X[0:int(80 / 100 * X.shape[0])]
         W1_err = compute_sim_error(X_train, X_test, vae, T, params, "./hyperparam_e2e", case_name)
         print(f"W1 error: {W1_err}")
         print("\n")

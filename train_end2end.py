@@ -94,7 +94,8 @@ output_directory = "./end2end_bb" #"./end2end"
 #         params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"], params["learning_rate"],
 #         params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"], params["loss_weight_sindy_reg"],
 #         uuid.uuid4().hex)
-case_name = "CNN_BB_tr{}-{}-lr{}_weights{}-{}-{}".format(params["pretraining_epochs"], params["training_epochs"], params["learning_rate"], params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"])
+case_name = "CNN_BB_tr{}-{}-lr{}_weights{}-{}-{}_{}".format(params["pretraining_epochs"], params["training_epochs"],
+    params["learning_rate"], params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"], uuid.uuid4().hex)
 
 # total losses
 with open(output_directory + '/losses/' + case_name + '.pkl', 'wb') as pickle_file:
