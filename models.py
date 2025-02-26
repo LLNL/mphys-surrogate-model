@@ -241,14 +241,18 @@ class FFNNAutoEncoder(torch.nn.Module):
 Black-box network for predicting time derivatives
 """
 class LatentSpaceDerivatives(torch.nn.Module):
-    def __init__(self, n_latent=3):
+    def __init__(self, n_latent=3, layer_size=None):
         super(LatentSpaceDerivatives, self).__init__()
         self.n_latent = n_latent
+        if layer_size is None:
+            layer_size = (n_latent, n_latent, n_latent)
+        else:
+            assert(len(layer_size) == 3)
 
-        self.layer1 = Linear(n_latent, n_latent)
-        self.layer2 = Linear(n_latent, n_latent)
-        self.layer3 = Linear(n_latent, n_latent)
-        self.layer4 = Linear(n_latent, n_latent)
+        self.layer1 = Linear(n_latent, layer_size[0])
+        self.layer2 = Linear(layer_size[0], layer_size[1])
+        self.layer3 = Linear(layer_size[1], layer_size[2])
+        self.layer4 = Linear(layer_size[2], n_latent)
         self.activation1 = ELU()
         self.activation2 = ELU()
         self.activation3 = ELU()
@@ -284,6 +288,46 @@ class LatentSpaceDerivatives(torch.nn.Module):
         for (i, layer) in enumerate(self.layers):
             layer.weight.data = weights[i]
             layer.bias.data = biases[i]
+
+    def initialize_weights(self):
+        for layer in self.layers:
+            torch.nn.init.kaiming_uniform_(layer.weight, nonlinearity='relu')
+            torch.nn.init.uniform_(layer.bias)
+
+
+"""
+Black-box network for predicting states
+"""
+class Autoregressive(torch.nn.Module):
+    def __init__(self, n_bins=3):
+        super(Autoregressive, self).__init__()
+        self.n_bins = n_bins
+
+        self.layer1 = Linear(self.n_bins, 100)
+        self.layer2 = Linear(100, 200)
+        self.layer3 = Linear(200, 100)
+        self.layer4 = Linear(100, self.n_bins)
+        self.activation1 = ELU()
+        self.activation2 = ELU()
+        self.activation3 = ELU()
+        self.activation4 = Sigmoid()
+
+        self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
+        self.act = [self.activation1, self.activation2, self.activation3, self.activation4]
+
+        self.initialize_weights()
+
+    def forward(self, x):
+        x = self.layer1(x)
+        x = self.activation1(x)
+        x = self.layer2(x)
+        x = self.activation2(x)
+        x = self.layer3(x)
+        x = self.activation3(x)
+        x = self.layer4(x)
+        x = self.activation4(x)
+
+        return x
 
     def initialize_weights(self):
         for layer in self.layers:
