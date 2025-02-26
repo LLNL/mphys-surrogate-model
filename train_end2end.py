@@ -41,6 +41,7 @@ params['loss_weight_sindy_reg'] = 0.0 #float(sys.argv[3])
 params["learning_rate"] = 1e-3
 params["CNN"] = True #if sys.argv[4] == "CNN" else False
 params["patience"] = 50
+params["layers"] = (10, 20, 10)
 
 print(params)
 
@@ -94,7 +95,7 @@ output_directory = "./end2end_bb" #"./end2end"
 #         params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"], params["learning_rate"],
 #         params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"], params["loss_weight_sindy_reg"],
 #         uuid.uuid4().hex)
-case_name = "CNN_BB_tr{}-{}-lr{}_weights{}-{}-{}_{}".format(params["pretraining_epochs"], params["training_epochs"],
+case_name = "CNN_BBlg_tr{}-{}-lr{}_weights{}-{}-{}_{}".format(params["pretraining_epochs"], params["training_epochs"],
     params["learning_rate"], params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"], uuid.uuid4().hex)
 
 # total losses

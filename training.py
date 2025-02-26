@@ -209,7 +209,7 @@ def train_network_e2e_bb(train_dataloader, params, val_dataloader=None, device="
     else:
         autoencoder_network = models.FFNNAutoEncoder(n_bins=params["input_dim"], n_latent=params["latent_dim"])
 
-    derivative_network = models.LatentSpaceDerivatives(n_latent=params["latent_dim"])
+    derivative_network = models.LatentSpaceDerivatives(n_latent=params["latent_dim"], layer_size=params["layers"])
 
     num_params = models.count_parameters(autoencoder_network)
     np_deriv = models.count_parameters(derivative_network)

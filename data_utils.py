@@ -304,3 +304,17 @@ def sindy_simulate(z0, T, sindy_coeffs, poly_order, z_lim):
 
     Z = odeint(f, z0, T)
     return Z
+
+def bb_simulate(z0, T, dz_network, poly_order, z_lim):
+    def f(z,t):
+        n_latent = z.size
+        dz = dz_network(torch.Tensor(z)).detach().numpy()
+        for il in range(n_latent):
+            if z[il] >= z_lim[il][1]:
+                dz[il] = 0.0
+            elif z[il] <= z_lim[il][0]:
+                dz[il] = 0.0
+        return dz
+
+    Z = odeint(f, z0, T)
+    return Z
