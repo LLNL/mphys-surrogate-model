@@ -10,7 +10,8 @@ import tracemalloc
 
 concat_files = False
 #filepath = "box_data_64/*"
-filepath = "box64.nc"
+#filepath = "box64.nc"
+filepath = "./erf_col_data/noadv_coal.nc"
 
 params = {}
 # set up the device
@@ -27,13 +28,13 @@ torch.backends.cudnn.benchmark = (
 print(f"Using {device} device")
 
 params["device"] = device
-params["batch_size"] = 400
+params["batch_size"] = 100
 params['latent_dim'] = 3
-params['poly_order'] = "BB" #int(sys.argv[1])
+params['poly_order'] = 2 #int(sys.argv[1])
 params["tracemalloc"] = True
 params["pretraining_epochs"] = 1
-params["training_epochs"] = 1
-params["refinement_epochs"] = 0
+params["training_epochs"] = 1000
+params["refinement_epochs"] = 200
 params['loss_weight_recon'] = 10.0 #float(sys.argv[2])
 params['loss_weight_sindy_z'] = 1.0
 params['loss_weight_sindy_x'] = 1.0
@@ -41,7 +42,8 @@ params['loss_weight_sindy_reg'] = 0.0 #float(sys.argv[3])
 params["learning_rate"] = 1e-3
 params["CNN"] = True #if sys.argv[4] == "CNN" else False
 params["patience"] = 50
-params["layers"] = (10, 20, 10)
+#params["layers"] = (10, 20, 10)
+params["erf_data"] = True
 
 print(params)
 
@@ -57,12 +59,15 @@ else:
     ds_all = xr.open_dataset(filepath)
 
 params['input_dim'] = len(ds_all['mass_bin'])
-params["n_runs"] = len(ds_all['run'])
-params["n_time"] = len(ds_all['time'])
+#params["n_runs"] = len(ds_all['run'])
+#params["n_time"] = len(ds_all['time'])
 
-(data, norms, data_loaders) = du.create_e2e_dataloader(ds_all, cnn=params["CNN"], batch_size=params["batch_size"])
-(train_data, val_data, test_data) = data_loaders
-(X, DX, T) = data
+# (data, norms, data_loaders) = du.create_e2e_dataloader(ds_all, cnn=params["CNN"], batch_size=params["batch_size"])
+# (train_data, val_data, test_data) = data_loaders
+# (X, DX, T) = data
+(data, norms, data_loaders) = du.create_erf_dataloader(ds_all, cnn=True, batch_size=params["batch_size"])
+(train_data, val_data) = data_loaders
+(x, qv, T, dx, dqv) = data
 
 if params["tracemalloc"]:
     tracemalloc.start()
@@ -85,18 +90,19 @@ if params["tracemalloc"]:
 
 
 # SAVE
-output_directory = "./end2end_bb" #"./end2end"
+output_directory = "./end2end"
 # if params["CNN"]:
 #     prefix = "CNN"
 # else:
 #     prefix = "FFNN"
-# case_name = prefix + "_order{}_{}-{}-{}_lr{}_weights{}-{}-{}-{}_{}".format(
-#         params["poly_order"],
-#         params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"], params["learning_rate"],
-#         params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"], params["loss_weight_sindy_reg"],
-#         uuid.uuid4().hex)
-case_name = "CNN_BBlg_tr{}-{}-lr{}_weights{}-{}-{}_{}".format(params["pretraining_epochs"], params["training_epochs"],
-    params["learning_rate"], params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"], uuid.uuid4().hex)
+prefix = "ERF_CNN"
+case_name = prefix + "_order{}_{}-{}-{}_lr{}_weights{}-{}-{}-{}_{}".format(
+        params["poly_order"],
+        params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"], params["learning_rate"],
+        params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"], params["loss_weight_sindy_reg"],
+        uuid.uuid4().hex)
+# case_name = "CNN_BBlg_tr{}-{}-lr{}_weights{}-{}-{}_{}".format(params["pretraining_epochs"], params["training_epochs"],
+#     params["learning_rate"], params["loss_weight_recon"], params["loss_weight_sindy_z"], params["loss_weight_sindy_x"], uuid.uuid4().hex)
 
 # total losses
 with open(output_directory + '/losses/' + case_name + '.pkl', 'wb') as pickle_file:

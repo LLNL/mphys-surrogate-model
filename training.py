@@ -348,7 +348,11 @@ def train_e2e(optimizer, train_dataloader, params,
     epoch_loss = 0.0
     epoch_losses = {"recon": 0.0, "sindy_z": 0.0, "sindy_x": 0.0, "sindy_reg": 0.0}
     
-    for batch, (x_data, dx_data) in enumerate(train_dataloader):
+    for batch, train_data in enumerate(train_dataloader):
+        if "erf_data" in params.keys():
+            (x_data, _, _, dx_data, _) = train_data
+        else:
+            (x_data, dx_data) = train_data
         # (x_data, dx_data) = train_dataloader
         optimizer.zero_grad(set_to_none=True)
         x_data = x_data.to(device)
@@ -481,7 +485,11 @@ def test_e2e(val_dataloader, params,
     
     with torch.no_grad():
         # (x_data, dx_data) = val_dataloader
-        for batch, (x_data, dx_data) in enumerate(val_dataloader):
+        for batch, val_data in enumerate(val_dataloader):
+            if "erf_data" in params.keys():
+                (x_data, _, _, dx_data, _) = val_data
+            else:
+                (x_data, dx_data) = val_data
             x_data = x_data.to(device)
             dx_data = dx_data.to(device)
             

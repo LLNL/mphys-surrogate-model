@@ -27,6 +27,20 @@ class BinDataset2C(Dataset):
 
     def __getitem__(self, idx):
         return self.bin0[idx, :, :]
+
+class BinThermoDataset1C(Dataset):
+    def __init__(self, dmdlnr, qv, T, dx, dqv_cond):
+        self.bin0 = dmdlnr.astype(np.float32)
+        self.qv = qv.astype(np.float32)
+        self.T = T.astype(np.float32)
+        self.dx = dx.astype(np.float32)
+        self.dqv_cond = dqv_cond.astype(np.float32)
+
+    def __len__(self):
+        return int(self.bin0.shape[0])
+
+    def __getitem__(self, idx):
+        return self.bin0[idx, :], self.qv[idx], self.T[idx], self.dx[idx], self.dqv_cond[idx]
     
 def normalize_data_1d(bin0):
     # data QC
@@ -120,50 +134,87 @@ def create_dataloader(filepath, bs, tvt_split = (80, 10, 10), shuffle=True, ds=N
     else:
         return (train_dataloader, test_dataloader, val_dataloader)
 
-def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_size=100, tvt_split = (80, 10, 10), ):
-    x = ds['dmdlnr'].to_numpy()
+def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_size=100, tvt_split = (80, 10, 10), ql_lim = 5e-4):
+    ds = ds.stack(run=("x", "y", "z", "rst"))
+    ds["ql"] = ds["qc"] + ds["qr"]
+
+    # filter out areas where there isn't enough cloud
+    ql_filter = ds["ql"].isel(t=0) >= ql_lim
+    ql_filter = ql_filter.broadcast_like(ds["qc"])
+    ds_filtered = ds.where(ql_filter, drop=True)
+
+    x = ds_filtered['dmdlnr'].transpose('run', 't', 'mass_bin').to_numpy()
+    qv = ds_filtered['qv'].transpose('run', 't').to_numpy()
+    ql = ds_filtered['ql'].transpose('run', 't').to_numpy()
+    T = ds_filtered['temp'].transpose('run', 't').to_numpy()
+
+    dt = (ds['t'].isel(t=1) - ds['t'].isel(t=0)).item()
+    dx = np.gradient(x, axis=1) / dt
+    dql = np.gradient(ql, axis=1) / dt
+
     if normx:
-        x_norm = np.max(x)
+        #x_norm = np.max(x)
+        x_norm = np.percentile(x, 98)
+        qv_range = (np.min(qv), np.max(qv))
+        T_range = (np.min(T), np.max(T))
     else:
-        x_norm = 1.0
-    
-    x = x / x_norm
-    x_data = x.copy()
+        x_norm = 1
+        qv_range = (0, 1)
+        T_range = (0, 1)
+
+    x = x.copy() / x_norm
+    dx = dx.copy() / x_norm
+    qv = (qv.copy() - qv_range[0]) / (qv_range[1] - qv_range[0])
+    dqv = dql.copy() / (qv_range[1] - qv_range[0])
+    T = (T.copy() - T_range[0]) / (T_range[1] - T_range[0])
 
     if shuffle_runs:
-        shuffle_idx = ds['loc'].data
+        shuffle_idx = np.arange(len(ds_filtered['run']))
         random.shuffle(shuffle_idx)
-        x = x[shuffle_idx, :]
+        x = x[shuffle_idx, :, :]
+        dx = dx[shuffle_idx, :, :]
+        qv = qv[shuffle_idx, :]
+        dqv = dqv[shuffle_idx, :]
+        T = T[shuffle_idx, :]
 
     if cnn:
         old_shape = x.shape
-        print(f"{old_shape[0]} runs")
-        x.shape = (old_shape[0], 1, old_shape[1])
+        print(f"{old_shape[0]} runs with {old_shape[1]} timesteps each")
+        x = x.reshape((old_shape[0] * old_shape[1], 1, old_shape[2]))
+        dx = dx.reshape(x.shape)
+        qv = qv.reshape(qv.shape[0] * qv.shape[1], 1)
+        dqv = dqv.reshape(dqv.shape[0] * dqv.shape[1], 1)
+        T = T.reshape(T.shape[0] * T.shape[1], 1)
+
+    dataset = BinThermoDataset1C(x, qv, T, dx, dqv)
+    train_dataloader = DataLoader(dataset, batch_size=batch_size)
 
     # Train
-    x_train = x[0:int(tvt_split[0]/100 * x.shape[0])]
-    traindataset = BinDataset1C(x_train)
+    id_train = int(tvt_split[0]/100 * x.shape[0])
+    traindataset = BinThermoDataset1C(x[0:id_train], qv[0:id_train],
+                                      T[0:id_train], dx[0:id_train], dqv[0:id_train])
     train_dataloader = DataLoader(traindataset, batch_size=batch_size)
 
     # Validate
     if tvt_split[1] > 0:
-        x_val = x[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:2])/100 * x.shape[0])]
-        valdataset = BinDataset1C(x_val)
+        id_val = int(sum(tvt_split[0:2])/100 * x.shape[0])
+        valdataset = BinThermoDataset1C(x[id_train:id_val], qv[id_train:id_val],
+                                          T[id_train:id_val], dx[id_train:id_val], dqv[id_train:id_val])
         val_dataloader = DataLoader(valdataset, batch_size=batch_size)
     else:
         val_dataloader = None
-    
-    # Testing
-    if tvt_split[2] > 0:
-        x_test = x[int(sum(tvt_split[0:2])/100 * x.shape[0]):]
-        testdataset = BinDataset1C(x_test)
-        test_dataloader = DataLoader(testdataset, batch_size=batch_size)
-    else:
-        test_dataloader = None
+    #
+    # # Testing
+    # if tvt_split[2] > 0:
+    #     x_test = x[int(sum(tvt_split[0:2])/100 * x.shape[0]):]
+    #     testdataset = BinDataset1C(x_test)
+    #     test_dataloader = DataLoader(testdataset, batch_size=batch_size)
+    # else:
+    #     test_dataloader = None
 
-    data = (x_data,)
-    norms = (x_norm,)
-    data_loaders = (train_dataloader, val_dataloader, test_dataloader)
+    data = (x, qv, T, dx, dqv)
+    norms = (x_norm, qv_range, T_range)
+    data_loaders = (train_dataloader, val_dataloader)#, test_dataloader)
 
     return (data, norms, data_loaders)
 
