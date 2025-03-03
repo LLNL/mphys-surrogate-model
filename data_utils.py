@@ -134,16 +134,29 @@ def create_dataloader(filepath, bs, tvt_split = (80, 10, 10), shuffle=True, ds=N
     else:
         return (train_dataloader, test_dataloader, val_dataloader)
 
-def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_size=100, tvt_split = (80, 10, 10), ql_lim = 5e-4):
+def find_last_nonzero_index_along_dim(data_array, dim):
+    non_zero_indices = xr.apply_ufunc(
+        lambda arr: np.nonzero(arr)[0][-1] if np.any(arr) else -1,
+        data_array,
+        input_core_dims=[[dim]],
+        vectorize=True
+    )
+    return non_zero_indices
+
+def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_size=100, tvt_split = (80, 10, 10), ql_lim = 1e-4, rmax_lim = 20e-6):
     ds = ds.stack(run=("x", "y", "z", "rst"))
     ds["ql"] = ds["qc"] + ds["qr"]
+    t = ds['t'].to_numpy()
 
     # filter out areas where there isn't enough cloud
     ql_filter = ds["ql"].isel(t=0) >= ql_lim
     ql_filter = ql_filter.broadcast_like(ds["qc"])
-    ds_filtered = ds.where(ql_filter, drop=True)
+    r_filter = ds['radius_bin'][find_last_nonzero_index_along_dim(ds['dmdlnr'].isel(t=0), "radius_bin")] >= rmax_lim
+    r_filter = r_filter.broadcast_like(ds["qc"]).drop('radius_bin')
+    total_filter = (ql_filter & r_filter)
+    ds_filtered = ds.where(total_filter.broadcast_like(ds["qc"]), drop=True)
 
-    x = ds_filtered['dmdlnr'].transpose('run', 't', 'mass_bin').to_numpy()
+    x = ds_filtered['dmdlnr'].transpose('run', 't', 'radius_bin').to_numpy()
     qv = ds_filtered['qv'].transpose('run', 't').to_numpy()
     ql = ds_filtered['ql'].transpose('run', 't').to_numpy()
     T = ds_filtered['temp'].transpose('run', 't').to_numpy()
@@ -162,11 +175,17 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_
         qv_range = (0, 1)
         T_range = (0, 1)
 
-    x = x.copy() / x_norm
-    dx = dx.copy() / x_norm
-    qv = (qv.copy() - qv_range[0]) / (qv_range[1] - qv_range[0])
-    dqv = dql.copy() / (qv_range[1] - qv_range[0])
-    T = (T.copy() - T_range[0]) / (T_range[1] - T_range[0])
+    x = x / x_norm
+    dx = dx / x_norm
+    qv = (qv - qv_range[0]) / (qv_range[1] - qv_range[0])
+    dqv = dql / (qv_range[1] - qv_range[0])
+    T = (T - T_range[0]) / (T_range[1] - T_range[0])
+
+    x_data = x.copy()
+    dx_data = dx.copy()
+    qv_data = qv.copy()
+    dqv_data = dqv.copy()
+    T_data = T.copy()
 
     if shuffle_runs:
         shuffle_idx = np.arange(len(ds_filtered['run']))
@@ -212,7 +231,7 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_
     # else:
     #     test_dataloader = None
 
-    data = (x, qv, T, dx, dqv)
+    data = (x_data, qv_data, T_data, dx_data, dqv_data, t)
     norms = (x_norm, qv_range, T_range)
     data_loaders = (train_dataloader, val_dataloader)#, test_dataloader)
 
