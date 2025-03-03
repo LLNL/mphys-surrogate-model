@@ -10,12 +10,12 @@ from scipy.stats import qmc
 import glob
 import models
 
-train_models = True
+train_models = False
 n_init = 8
-eval_models = False
+eval_models = True
 filepath = "box64_train.nc" #"box64_small.nc" #
 filepath_test = "box64_test.nc"
-output_directory = "./hyperparam_e2e_test"
+output_directory = "./hyperparam_e2e"
 
 params_rng = {}
 params_rng['loss_weight_sindy_z'] = (-2, 2) # logscale
@@ -75,7 +75,7 @@ def retrain_sindy(ztr_encoded, T, output_dir, case_name, poly_order):
         )
         sindy_model.fit(ztr_encoded, t=T)
         sindy_coeffs = optimizer.coef_
-    except np.linalg.LinAlgError:
+    except:# np.linalg.LinAlgError:
         print("Could not retrain sindy")
         with open(output_directory + "/sindy/" + case_name + ".pkl", 'rb') as pickle_file:
             sindy_coeffs = pkl.load(pickle_file)
@@ -186,7 +186,7 @@ if train_models:
 
 if eval_models: # don't train, only evaluate
     ds_test = xr.open_dataset(filepath_test)
-    for filename in glob.glob(output_directory + "/CNN_order2*.pkl"):
+    for filename in glob.glob(output_directory + "/CNN_nl3_order2*.pkl"):
         print(filename)
         with open(filename, 'rb') as pickle_file:
             params = pkl.load(pickle_file)
@@ -195,8 +195,8 @@ if eval_models: # don't train, only evaluate
             prefix = "CNN"
         else:
             prefix = "FFNN"
-        case_name = prefix + "_order{}_{}-{}-{}_lr{}_weights{}-{}-{}-{}_{}".format(
-            #params["latent_dim"],
+        case_name = prefix + "_nl{}_order{}_tr{}-{}-{}_lr{}_weights{}-{}-{}-{}_{}".format(
+            params["latent_dim"],
             params["poly_order"],
             params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"],
             params["learning_rate"],
