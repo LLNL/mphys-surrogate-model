@@ -8,7 +8,6 @@ import uuid
 
 import tracemalloc
 
-concat_files = False
 #filepath = "box_data_64/*"
 #filepath = "box64.nc"
 filepath = "./erf_col_data/noadv_coal.nc"
@@ -47,18 +46,9 @@ params["erf_data"] = True
 
 print(params)
 
-if concat_files:
-    ds_all = xr.open_mfdataset(filepath + ".nc", combine='nested', concat_dim='run')
-    ds_all.load()
-    ds_all = ds_all.fillna(0.0)
-    ds_all = ds_all.rename_dims({'dv/dlnr_bin_index': 'mass_bin_idx'})
-    ds_all = ds_all.rename_vars({'dv/dlnr': 'dvdlnr'})
-    ds_all = ds_all.rename({'dv/dlnr_bin_index': 'mass_bin'})
-    ds_all.to_netcdf('box64.nc')
-else:
-    ds_all = xr.open_dataset(filepath)
+ds_all = xr.open_dataset(filepath)
 
-params['input_dim'] = len(ds_all['mass_bin'])
+params['input_dim'] = len(ds_all['radius_bin'])
 #params["n_runs"] = len(ds_all['run'])
 #params["n_time"] = len(ds_all['time'])
 
@@ -67,7 +57,7 @@ params['input_dim'] = len(ds_all['mass_bin'])
 # (X, DX, T) = data
 (data, norms, data_loaders) = du.create_erf_dataloader(ds_all, cnn=True, batch_size=params["batch_size"])
 (train_data, val_data) = data_loaders
-(x, qv, T, dx, dqv) = data
+(x, qv, T, dx, dqv, time) = data
 
 if params["tracemalloc"]:
     tracemalloc.start()
