@@ -37,7 +37,7 @@ class CNNEncoderVAE(torch.nn.Module):
         x = self.lin1(x)
 
         return x
-    
+
     def get_weights(self):
         weights = []
         biases = []
@@ -46,7 +46,7 @@ class CNNEncoderVAE(torch.nn.Module):
             biases.append(layer.bias)
 
         return (weights, biases)
-    
+
     def set_weights(self, weights, biases):
         for (i, layer) in enumerate(self.layers):
             layer.weight.data = weights[i]
@@ -73,29 +73,32 @@ class CNNDecoder(torch.nn.Module):
         self.activation4 = Sigmoid()
 
         self.layers = [self.lin, self.conv1, self.conv2, self.conv3, self.lin2]
-        
+
         torch.nn.init.kaiming_normal_(self.conv1.weight)
         torch.nn.init.kaiming_normal_(self.conv2.weight)
         torch.nn.init.kaiming_normal_(self.conv3.weight)
-        
+
     def forward(self,x):
         inp = x
         x = self.lin(inp)
         x = x.reshape(-1, self.n_channels*2, int(np.floor(self.n_bins/8)))
         x = self.conv1(x)
         x = self.activation1(x)
-        #x = self.constantpad1d1(x)
+        if self.n_bins % 8 != 0:
+            x = self.constantpad1d1(x)
         x = self.conv2(x)
         x = self.activation2(x)
-        #x = self.constantpad1d1(x)
+        if self.n_bins % 8 != 0:
+            x = self.constantpad1d1(x)
         x = self.conv3(x)
         x = self.activation3(x)
-        #x = self.constantpad1d1(x)
+        if self.n_bins % 8 != 0:
+            x = self.constantpad1d1(x)
         x = self.lin2(x)
-        x = self.activation4(x) 
+        x = self.activation4(x)
 
         return x
-    
+
     def get_weights(self):
         weights = []
         biases = []
@@ -104,7 +107,7 @@ class CNNDecoder(torch.nn.Module):
             biases.append(layer.bias)
 
         return (weights, biases)
-    
+
     def set_weights(self, weights, biases):
         for (i, layer) in enumerate(self.layers):
             layer.weight.data = weights[i]
@@ -121,7 +124,7 @@ class CNNAutoEncoder(torch.nn.Module):
 
         latent = self.encoder(x)
 
-        reconstruction = self.decoder(latent) 
+        reconstruction = self.decoder(latent)
 
         return reconstruction
 
@@ -154,9 +157,9 @@ class FFNNEncoderVAE(torch.nn.Module):
         x = self.activation3(x)
         x = self.layer4(x)
         x = self.activation4(x)
-        
+
         return x
-    
+
     def get_weights(self):
         weights = []
         biases = []
@@ -165,7 +168,7 @@ class FFNNEncoderVAE(torch.nn.Module):
             biases.append(layer.bias)
 
         return (weights, biases)
-    
+
     def set_weights(self, weights, biases):
         for (i, layer) in enumerate(self.layers):
             layer.weight.data = weights[i]
@@ -187,7 +190,7 @@ class FFNNDecoder(torch.nn.Module):
 
         self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
         self.act = [self.activation1, self.activation2, self.activation3, self.activation4]
-        
+
     def forward(self,x):
         x = self.layer1(x)
         x = self.activation1(x)
@@ -197,9 +200,9 @@ class FFNNDecoder(torch.nn.Module):
         x = self.activation3(x)
         x = self.layer4(x)
         x = self.activation4(x)
-        
+
         return x
-    
+
     def get_weights(self):
         weights = []
         biases = []
@@ -208,7 +211,7 @@ class FFNNDecoder(torch.nn.Module):
             biases.append(layer.bias)
 
         return (weights, biases)
-    
+
     def set_weights(self, weights, biases):
         for (i, layer) in enumerate(self.layers):
             layer.weight.data = weights[i]
@@ -224,12 +227,12 @@ class FFNNAutoEncoder(torch.nn.Module):
         self.initialize_weights()
 
     def forward(self,x):
-        
+
         latent = self.encoder(x)
-        reconstruction = self.decoder(latent) 
+        reconstruction = self.decoder(latent)
 
         return reconstruction
-    
+
     def initialize_weights(self):
         for network in (self.encoder, self.decoder):
             for layer in network.layers:
@@ -303,10 +306,10 @@ class Autoregressive(torch.nn.Module):
         super(Autoregressive, self).__init__()
         self.n_bins = n_bins
 
-        self.layer1 = Linear(self.n_bins, 100)
-        self.layer2 = Linear(100, 200)
-        self.layer3 = Linear(200, 100)
-        self.layer4 = Linear(100, self.n_bins)
+        self.layer1 = Linear(self.n_bins, 10)
+        self.layer2 = Linear(10, 20)
+        self.layer3 = Linear(20, 10)
+        self.layer4 = Linear(10, self.n_bins)
         self.activation1 = ELU()
         self.activation2 = ELU()
         self.activation3 = ELU()
@@ -331,8 +334,8 @@ class Autoregressive(torch.nn.Module):
 
     def initialize_weights(self):
         for layer in self.layers:
-            torch.nn.init.kaiming_uniform_(layer.weight, nonlinearity='relu')
-            torch.nn.init.uniform_(layer.bias)
+            torch.nn.init.xavier_normal_(layer.weight)
+            torch.nn.init.normal_(layer.bias)
     
 """
 Utility functions
