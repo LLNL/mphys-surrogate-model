@@ -8,14 +8,20 @@ import uuid
 num_epochs = 1
 batch_size = 100
 lr = 1e-3
+CNN = True
 
 class VAEAutoregressor(torch.nn.Module):
-    def __init__(self,n_channels=2,n_bins=100,n_latent=10):
+    def __init__(self,n_channels=2,n_bins=100,n_latent=10, CNN=True):
         super(VAEAutoregressor, self).__init__()
 
-        self.encoder = models.CNNEncoderVAE(n_channels=n_channels,n_bins=n_bins,n_latent=n_latent)
+        if CNN:
+            self.encoder = models.CNNEncoderVAE(n_channels=n_channels,n_bins=n_bins,n_latent=n_latent)
+            self.decoder = models.CNNDecoder(n_channels=n_channels, n_bins=n_bins, n_latent=n_latent)
+
+        else:
+            self.encoder = models.FFNNEncoderVAE(n_bins=n_bins, n_latent=n_latent)
+            self.decoder = models.FFNNDecoder(n_bins=n_bins, n_latent=n_latent)
         self.autoregressor = models.Autoregressive(n_bins=n_latent)
-        self.decoder = models.CNNDecoder(n_channels=n_channels,n_bins=n_bins,n_latent=n_latent)
 
     def forward(self,x):
         latent = self.encoder(x)
@@ -51,7 +57,7 @@ test_inputs = torch.Tensor(test_inputs).reshape((-1, 1, 63))
 test_outputs = torch.Tensor(test_outputs).reshape(-1, 1, 63)
 
 # Initialize the model
-model = VAEAutoregressor(n_channels=1, n_bins=63, n_latent=3)
+model = VAEAutoregressor(n_channels=1, n_bins=63, n_latent=3, CNN=CNN)
 
 # Loss function and optimizer
 criterion = torch.nn.MSELoss()
@@ -127,7 +133,10 @@ for epoch in range(num_epochs):
 
 # Export/save
 output_directory = "vae_autoregressor"
-case_name = f"lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
+if CNN:
+    case_name = f"lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
+else:
+    case_name = f"FFNN_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
 
 with open(output_directory + '/losses/' + case_name + '.pkl', 'wb') as pickle_file:
     pkl.dump((losses,
