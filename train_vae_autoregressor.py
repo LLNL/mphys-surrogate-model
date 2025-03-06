@@ -130,7 +130,15 @@ output_directory = "vae_autoregressor"
 case_name = f"lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
 
 with open(output_directory + '/losses/' + case_name + '.pkl', 'wb') as pickle_file:
-    pkl.dump((loss, losses), pickle_file)
+    pkl.dump((losses,
+            recon_losses,
+              dx_losses,
+              dz_losses,
+              test_losses,
+            test_recon_losses,
+            test_dx_losses,
+            test_dz_losses
+            ), pickle_file)
 
 # vae model
 torch.save(model.state_dict(), output_directory + '/model/' + case_name + ".pth")
