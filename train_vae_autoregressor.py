@@ -5,10 +5,11 @@ import pickle as pkl
 import models
 import uuid
 
-num_epochs = 1
+num_epochs = 10
 batch_size = 100
 lr = 1e-3
 wd = 1e-3
+lr_sched = True
 CNN = True
 
 class VAEAutoregressor(torch.nn.Module):
@@ -63,6 +64,7 @@ model = VAEAutoregressor(n_channels=1, n_bins=63, n_latent=3, CNN=CNN)
 # Loss function and optimizer
 criterion = torch.nn.MSELoss()
 optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
+sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min')
 
 total_params = sum(p.numel() for p in model.parameters())
 print(f"Total number of parameters: {total_params}")
@@ -86,6 +88,7 @@ test_dz_losses = []
 
 for epoch in range(num_epochs):
     # train
+    model.train()
     for batch_X, batch_y in train_loader:
         # Forward pass
         pred_y = model(batch_X)
@@ -110,6 +113,7 @@ for epoch in range(num_epochs):
     dz_losses.append(loss_dz.item())
 
     # test
+    model.eval()
     for batch_X, batch_y in test_loader:
         # Forward pass
         pred_y = model(batch_X)
@@ -128,14 +132,17 @@ for epoch in range(num_epochs):
     test_dx_losses.append(loss_dx.item())
     test_dz_losses.append(loss_dz.item())
 
+    if lr_sched:
+        sched.step(loss / len(test_loader))
+
     if epoch % 10 == 0:
-        print(f"Epoch [{epoch}/{num_epochs}], Train Loss: {losses[-1]:.4f} |  Test Loss: {test_losses[-1]:.4f}")
+        print(f"Epoch [{epoch}/{num_epochs}], Train Loss: {losses[-1]:.4f} |  Test Loss: {test_losses[-1]:.4f} | LR: {sched.get_last_lr()}")
 
 
 # Export/save
 output_directory = "vae_autoregressor"
 if CNN:
-    case_name = f"CNN_AdamW_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
+    case_name = f"CNN_AdamW_sched_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
 else:
     case_name = f"FFNN_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
 
