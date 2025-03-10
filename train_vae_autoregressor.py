@@ -8,6 +8,7 @@ import uuid
 num_epochs = 1
 batch_size = 100
 lr = 1e-3
+wd = 1e-3
 CNN = True
 
 class VAEAutoregressor(torch.nn.Module):
@@ -61,7 +62,7 @@ model = VAEAutoregressor(n_channels=1, n_bins=63, n_latent=3, CNN=CNN)
 
 # Loss function and optimizer
 criterion = torch.nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
 
 total_params = sum(p.numel() for p in model.parameters())
 print(f"Total number of parameters: {total_params}")
@@ -134,7 +135,7 @@ for epoch in range(num_epochs):
 # Export/save
 output_directory = "vae_autoregressor"
 if CNN:
-    case_name = f"lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
+    case_name = f"CNN_AdamW_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
 else:
     case_name = f"FFNN_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
 
