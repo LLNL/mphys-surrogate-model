@@ -336,6 +336,25 @@ class Autoregressive(torch.nn.Module):
         for layer in self.layers:
             torch.nn.init.xavier_normal_(layer.weight)
             torch.nn.init.normal_(layer.bias)
+
+class VAEAutoregressor(torch.nn.Module):
+    def __init__(self,n_channels=2,n_bins=100,n_latent=10, CNN=True):
+        super(VAEAutoregressor, self).__init__()
+
+        if CNN:
+            self.encoder = CNNEncoderVAE(n_channels=n_channels,n_bins=n_bins,n_latent=n_latent)
+            self.decoder = CNNDecoder(n_channels=n_channels, n_bins=n_bins, n_latent=n_latent)
+
+        else:
+            self.encoder = FFNNEncoderVAE(n_bins=n_bins, n_latent=n_latent)
+            self.decoder = FFNNDecoder(n_bins=n_bins, n_latent=n_latent)
+        self.autoregressor = Autoregressive(n_bins=n_latent)
+
+    def forward(self,x):
+        latent = self.encoder(x)
+        next_latent = self.autoregressor(latent)
+        next_x = self.decoder(next_latent)
+        return next_x
     
 """
 Utility functions
