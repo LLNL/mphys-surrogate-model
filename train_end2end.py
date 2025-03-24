@@ -10,7 +10,7 @@ import tracemalloc
 
 #filepath = "box_data_64/*"
 #filepath = "box64.nc"
-filepath = "./erf_col_data/noadv_coal.nc"
+filepath = "./erf_col_data/noadv_coal2048.nc"
 
 params = {}
 # set up the device
@@ -85,7 +85,7 @@ output_directory = "./end2end"
 #     prefix = "CNN"
 # else:
 #     prefix = "FFNN"
-prefix = "ERF_CNN"
+prefix = "ERF2048_CNN"
 case_name = prefix + "_order{}_{}-{}-{}_lr{}_weights{}-{}-{}-{}_{}".format(
         params["poly_order"],
         params["pretraining_epochs"], params["training_epochs"], params["refinement_epochs"], params["learning_rate"],
