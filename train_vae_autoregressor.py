@@ -4,12 +4,13 @@ import torch
 import pickle as pkl
 import models
 import uuid
+import data_utils as du
 
 num_epochs = 10
 batch_size = 100
 lr = 1e-3
 wd = 1e-3
-lr_sched = True
+lr_sched = False
 CNN = True
 
 class VAEAutoregressor(torch.nn.Module):
@@ -32,34 +33,41 @@ class VAEAutoregressor(torch.nn.Module):
         return next_x
 
 # Open dataset
-ds_all = xr.open_dataset('box64_train.nc')
-x_scale = ds_all['dvdlnr'].max().data
-x = ds_all['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
-x = x / x_scale
-ds_test = xr.open_dataset('box64_test.nc')
-x_test = ds_test['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
-x_test = x_test / x_scale
+# ds_all = xr.open_dataset('box64_train.nc')
+# x_scale = ds_all['dvdlnr'].max().data
+# x = ds_all['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
+# x = x / x_scale
+# ds_test = xr.open_dataset('box64_test.nc')
+# x_test = ds_test['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
+# x_test = x_test / x_scale
+
+ds_all = xr.open_dataset('./erf_col_data/noadv_coal2048.nc').sel(t=np.linspace(0, 600, 11, endpoint=True))
+(data, _, _) = du.create_erf_dataloader(ds_all, cnn=True)
+(x, _, _, _, _, time) = data
+x_test = x[-50:]
+x = x[:-50]
 
 # Reshape data
+n_bins = x.shape[2]
 inputs = x[:,:-1,:]
 inputs = inputs.reshape([-1, inputs.shape[2]])
 outputs = x[:,1:,:]
 outputs = outputs.reshape([-1, outputs.shape[2]])
 
 test_inputs = x_test[:,:-1,:]
-test_inputs = test_inputs.reshape([-1, test_inputs.shape[2]])
+test_inputs = test_inputs.reshape([-1, n_bins])
 test_outputs = x_test[:,1:,:]
-test_outputs = test_outputs.reshape([-1, test_outputs.shape[2]])
+test_outputs = test_outputs.reshape([-1, n_bins])
 
 # Convert to PyTorch tensors
-inputs = torch.Tensor(inputs).reshape((-1, 1, 63))
-outputs = torch.Tensor(outputs).reshape(-1, 1, 63)
+inputs = torch.Tensor(inputs).reshape((-1, 1, n_bins))
+outputs = torch.Tensor(outputs).reshape(-1, 1, n_bins)
 
-test_inputs = torch.Tensor(test_inputs).reshape((-1, 1, 63))
-test_outputs = torch.Tensor(test_outputs).reshape(-1, 1, 63)
+test_inputs = torch.Tensor(test_inputs).reshape((-1, 1, n_bins))
+test_outputs = torch.Tensor(test_outputs).reshape(-1, 1, n_bins)
 
 # Initialize the model
-model = VAEAutoregressor(n_channels=1, n_bins=63, n_latent=3, CNN=CNN)
+model = VAEAutoregressor(n_channels=1, n_bins=n_bins, n_latent=3, CNN=CNN)
 
 # Loss function and optimizer
 criterion = torch.nn.MSELoss()
@@ -142,7 +150,7 @@ for epoch in range(num_epochs):
 # Export/save
 output_directory = "vae_autoregressor"
 if CNN:
-    case_name = f"CNN_AdamW_sched_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
+    case_name = f"ERF2048_CNN_AdamW_L2_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
 else:
     case_name = f"FFNN_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
 
