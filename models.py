@@ -302,14 +302,16 @@ class LatentSpaceDerivatives(torch.nn.Module):
 Black-box network for predicting states
 """
 class Autoregressive(torch.nn.Module):
-    def __init__(self, n_bins=3):
+    def __init__(self, n_bins=3, layer_size=None):
         super(Autoregressive, self).__init__()
         self.n_bins = n_bins
+        if layer_size is None:
+            layer_size = (10, 20, 10)
 
-        self.layer1 = Linear(self.n_bins, 10)
-        self.layer2 = Linear(10, 20)
-        self.layer3 = Linear(20, 10)
-        self.layer4 = Linear(10, self.n_bins)
+        self.layer1 = Linear(self.n_bins, layer_size[0])
+        self.layer2 = Linear(layer_size[0], layer_size[1])
+        self.layer3 = Linear(layer_size[1], layer_size[2])
+        self.layer4 = Linear(layer_size[2], self.n_bins)
         self.activation1 = ELU()
         self.activation2 = ELU()
         self.activation3 = ELU()
