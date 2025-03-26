@@ -181,12 +181,6 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_
     dqv = dql / (qv_range[1] - qv_range[0])
     T = (T - T_range[0]) / (T_range[1] - T_range[0])
 
-    x_data = x.copy()
-    dx_data = dx.copy()
-    qv_data = qv.copy()
-    dqv_data = dqv.copy()
-    T_data = T.copy()
-
     if shuffle_runs:
         shuffle_idx = np.arange(len(ds_filtered['run']))
         random.shuffle(shuffle_idx)
@@ -204,9 +198,6 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_
         qv = qv.reshape(qv.shape[0] * qv.shape[1], 1)
         dqv = dqv.reshape(dqv.shape[0] * dqv.shape[1], 1)
         T = T.reshape(T.shape[0] * T.shape[1], 1)
-
-    dataset = BinThermoDataset1C(x, qv, T, dx, dqv)
-    train_dataloader = DataLoader(dataset, batch_size=batch_size)
 
     # Train
     id_train = int(tvt_split[0]/100 * x.shape[0])
@@ -231,7 +222,7 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_
     # else:
     #     test_dataloader = None
 
-    data = (x_data, qv_data, T_data, dx_data, dqv_data, t)
+    data = (x, qv, T, dx, dqv, t)
     norms = (x_norm, qv_range, T_range)
     data_loaders = (train_dataloader, val_dataloader)#, test_dataloader)
 
