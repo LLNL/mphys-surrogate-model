@@ -143,7 +143,7 @@ def find_last_nonzero_index_along_dim(data_array, dim):
     )
     return non_zero_indices
 
-def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_size=100, tvt_split = (80, 10, 10), ql_lim = 1e-4, rmax_lim = 20e-6):
+def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, shuffle_data=False, normx = True, batch_size=100, tvt_split = (80, 10, 10), ql_lim = 1e-4, rmax_lim = 20e-6):
     ds = ds.stack(run=("x", "y", "z", "rst"))
     ds["ql"] = ds["qc"] + ds["qr"]
     t = ds['t'].to_numpy()
@@ -157,6 +157,8 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_
     ds_filtered = ds.where(total_filter.broadcast_like(ds["qc"]), drop=True)
 
     x = ds_filtered['dmdlnr'].transpose('run', 't', 'radius_bin').to_numpy()
+    print(f"{x.shape[0]} runs with {x.shape[1]} timesteps each")
+
     qv = ds_filtered['qv'].transpose('run', 't').to_numpy()
     ql = ds_filtered['ql'].transpose('run', 't').to_numpy()
     T = ds_filtered['temp'].transpose('run', 't').to_numpy()
@@ -181,6 +183,12 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_
     dqv = dql / (qv_range[1] - qv_range[0])
     T = (T - T_range[0]) / (T_range[1] - T_range[0])
 
+    x_data = x.copy()
+    dx_data = dx.copy()
+    qv_data = qv.copy()
+    dqv_data = dqv.copy()
+    T_data = T.copy()
+
     if shuffle_runs:
         shuffle_idx = np.arange(len(ds_filtered['run']))
         random.shuffle(shuffle_idx)
@@ -190,9 +198,17 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_
         dqv = dqv[shuffle_idx, :]
         T = T[shuffle_idx, :]
 
+    if shuffle_data:
+        shuffle_idx = np.arange(len(ds_filtered['run']))
+        random.shuffle(shuffle_idx)
+        x_data = x_data[shuffle_idx, :, :]
+        dx_data = dx_data[shuffle_idx, :, :]
+        qv_data = qv_data[shuffle_idx, :]
+        dqv_data = dqv_data[shuffle_idx, :]
+        T_data = T_data[shuffle_idx, :]
+
     if cnn:
         old_shape = x.shape
-        print(f"{old_shape[0]} runs with {old_shape[1]} timesteps each")
         x = x.reshape((old_shape[0] * old_shape[1], 1, old_shape[2]))
         dx = dx.reshape(x.shape)
         qv = qv.reshape(qv.shape[0] * qv.shape[1], 1)
@@ -222,7 +238,7 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, batch_
     # else:
     #     test_dataloader = None
 
-    data = (x, qv, T, dx, dqv, t)
+    data = (x_data, qv_data, T_data, dx_data, dqv_data, t)
     norms = (x_norm, qv_range, T_range)
     data_loaders = (train_dataloader, val_dataloader)#, test_dataloader)
 

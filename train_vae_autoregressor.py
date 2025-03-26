@@ -42,7 +42,7 @@ class VAEAutoregressor(torch.nn.Module):
 # x_test = x_test / x_scale
 
 ds_all = xr.open_dataset('./erf_col_data/noadv_coal2048.nc').sel(t=np.linspace(0, 600, 11, endpoint=True))
-(data, _, _) = du.create_erf_dataloader(ds_all, cnn=True)
+(data, _, _) = du.create_erf_dataloader(ds_all, cnn=False, shuffle_data=True)
 (x, _, _, _, _, time) = data
 x_test = x[-50:]
 x = x[:-50]
@@ -144,7 +144,7 @@ for epoch in range(num_epochs):
         sched.step(loss / len(test_loader))
 
     if epoch % 10 == 0:
-        print(f"Epoch [{epoch}/{num_epochs}], Train Loss: {losses[-1]:.4f} |  Test Loss: {test_losses[-1]:.4f} | LR: {sched.get_last_lr()}")
+        print(f"Epoch [{epoch}/{num_epochs}], Train Loss: {losses[-1]:.4f} |  Test Loss: {test_losses[-1]:.4f}") # | LR: {sched.get_last_lr()}")
 
 
 # Export/save
