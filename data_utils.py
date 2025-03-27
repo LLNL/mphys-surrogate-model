@@ -395,3 +395,48 @@ def bb_simulate(z0, T, dz_network, poly_order, z_lim):
 
     Z = odeint(f, z0, T)
     return Z
+
+def calculate_autocorrelation(dsd_data, max_lag=10):
+    # Create an empty array to store results
+    # We'll use lag=0 to n_lag
+    autocorr = np.zeros((dsd_data.shape[0], max_lag + 1))
+
+    # For each run, calculate autocorrelation
+    for r in range(dsd_data.shape[0]):
+        run_data = dsd_data[r]
+
+        # For each lag value
+        for lag in range(max_lag + 1):
+            if lag == 0:
+                # At lag 0, we're correlating the signal with itself
+                # This should equal 1 if normalized
+                corr_sum = 0
+                for t in range(dsd_data.shape[1]):
+                    # Calculate correlation across the bin dimension
+                    x = run_data[t]
+                    # Normalize by subtracting mean and dividing by std
+                    x_norm = (x - np.mean(x)) / (np.std(x) + 1e-10)  # Adding small epsilon to avoid division by zero
+                    corr_sum += 1  # Perfect correlation with itself
+                autocorr[r, lag] = corr_sum / dsd_data.shape[1]
+            else:
+                # For other lags, we correlate shifted versions
+                corr_sum = 0
+                count = 0
+                for t in range(dsd_data.shape[1] - lag):
+                    # Get data for current time point and lagged time point
+                    x1 = run_data[t]
+                    x2 = run_data[t+lag]
+
+                    # Normalize
+                    x1_norm = (x1 - np.mean(x1)) / (np.std(x1) + 1e-10)
+                    x2_norm = (x2 - np.mean(x2)) / (np.std(x2) + 1e-10)
+
+                    # Calculate correlation (dot product of normalized vectors)
+                    corr = np.sum(x1_norm * x2_norm) / len(x1)
+                    corr_sum += corr
+                    count += 1
+
+                if count > 0:
+                    autocorr[r, lag] = corr_sum / count
+
+    return autocorr
