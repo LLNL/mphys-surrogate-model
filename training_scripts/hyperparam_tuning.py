@@ -11,9 +11,9 @@ import glob
 train_models = False
 n_init = 8
 eval_models = True
-filepath = "data/box64_train.nc"
-filepath_test = "data/box64_test.nc"
-output_directory = "./hyperparam_e2e"
+filepath = "../data/box64_train.nc"
+filepath_test = "../data/box64_test.nc"
+output_directory = "../hyperparam_e2e"
 
 params_rng = {}
 params_rng['loss_weight_sindy_z'] = (-2, 2) # logscale
