@@ -233,7 +233,7 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, shuffle_data=False, 
     # # Testing
     # if tvt_split[2] > 0:
     #     x_test = x[int(sum(tvt_split[0:2])/100 * x.shape[0]):]
-    #     testdataset = BinDataset1C(x_test)
+    #     testdataset = BinThermoDataset1C(x_test)
     #     test_dataloader = DataLoader(testdataset, batch_size=batch_size)
     # else:
     #     test_dataloader = None
