@@ -17,7 +17,7 @@ id = uuid.uuid4().hex
 
 # get data
 #train_dataloader, test_dataloader, val_dataloader = du.create_dataloader("../pysdm_data/", batch_size)
-ds_all = xr.open_dataset('./box64.nc')
+ds_all = xr.open_dataset('data/box64.nc')
 (data, norms, data_loaders) = du.create_e2e_dataloader(ds_all, cnn=True, batch_size=batch_size)
 (train_dataloader, val_dataloader, test_dataloader) = data_loaders
 (X, DX, T) = data

@@ -41,7 +41,7 @@ class VAEAutoregressor(torch.nn.Module):
 # x_test = ds_test['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
 # x_test = x_test / x_scale
 
-ds_all = xr.open_dataset('./erf_col_data/noadv_coal2048.nc').sel(t=np.linspace(0, 600, 11, endpoint=True))
+ds_all = xr.open_dataset('data/erf_col_noadv_coal2048.nc').sel(t=np.linspace(0, 600, 11, endpoint=True))
 (data, _, _) = du.create_erf_dataloader(ds_all, cnn=False, shuffle_data=True)
 (x, _, _, _, _, time) = data
 x_test = x[-50:]

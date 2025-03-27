@@ -8,7 +8,7 @@ import uuid
 import tracemalloc
 
 #filepath = "box64.nc"
-filepath = "./erf_col_data/noadv_coal2048.nc"
+filepath = "data/erf_col_noadv_coal2048.nc"
 
 params = {}
 # set up the device
