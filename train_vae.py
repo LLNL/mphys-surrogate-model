@@ -1,6 +1,5 @@
-from src import data_utils as du, models
+from src import data_utils as du, models, training
 import xarray as xr
-import training
 import torch
 import numpy as np
 import uuid

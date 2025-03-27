@@ -1,10 +1,9 @@
 import numpy as np
-from src import data_utils as du, models
+from src import data_utils as du, models, training
 from scipy.stats import wasserstein_distance
 import xarray as xr
 import torch
 import pickle as pkl
-import training
 import uuid
 from scipy.stats import qmc
 import glob

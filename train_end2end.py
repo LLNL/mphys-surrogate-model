@@ -1,8 +1,7 @@
-from src import data_utils as du
+from src import data_utils as du, training
 import xarray as xr
 import torch
 import pickle as pkl
-import training
 import uuid
 import tracemalloc
 
@@ -61,8 +60,8 @@ if params["tracemalloc"]:
 
 if params["poly_order"] == "BB":
     (vae, dzdt, loss, losses, val_loss, val_losses) = training.train_network_e2e_bb(train_data, params,
-                                                                                         val_dataloader=val_data,
-                                                                                         device=params[
+                                                                                    val_dataloader=val_data,
+                                                                                    device=params[
                                                                                              "device"])  # , X=X, T=T)
 else:
     (vae, sindy_coeffs, loss, losses, val_loss, val_losses) = training.train_network_e2e(train_data, params, val_dataloader=val_data, device=params["device"])#, X=X, T=T)
