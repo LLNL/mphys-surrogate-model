@@ -5,10 +5,8 @@ import torch
 import pickle as pkl
 import training
 import uuid
-
 import tracemalloc
 
-#filepath = "box_data_64/*"
 #filepath = "box64.nc"
 filepath = "./erf_col_data/noadv_coal2048.nc"
 

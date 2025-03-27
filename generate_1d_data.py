@@ -40,6 +40,6 @@ for rho_times_w in (
             )
             simulation[key] = Simulation(settings[key])
             output[key] = simulation[key].run().products
-            nc_exporter = NetCDFExporter_1d(output[key], settings[key], simulation[key], "data/" + key + ".nc")
+            nc_exporter = NetCDFExporter_1d(output[key], settings[key], simulation[key], "box_data_64/" + key + ".nc")
             nc_exporter.run()
             print("saved")

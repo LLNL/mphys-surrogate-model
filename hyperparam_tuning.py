@@ -13,7 +13,7 @@ import models
 train_models = False
 n_init = 8
 eval_models = True
-filepath = "box64_train.nc" #"box64_small.nc" #
+filepath = "box64_train.nc"
 filepath_test = "box64_test.nc"
 output_directory = "./hyperparam_e2e"
 
