@@ -2,9 +2,8 @@ import numpy as np
 import xarray as xr
 import torch
 import pickle as pkl
-import models
 import uuid
-from src import data_utils as du
+from src import data_utils as du, models
 
 num_epochs = 10
 batch_size = 100
@@ -18,7 +17,7 @@ class VAEAutoregressor(torch.nn.Module):
         super(VAEAutoregressor, self).__init__()
 
         if CNN:
-            self.encoder = models.CNNEncoderVAE(n_channels=n_channels,n_bins=n_bins,n_latent=n_latent)
+            self.encoder = models.CNNEncoderVAE(n_channels=n_channels, n_bins=n_bins, n_latent=n_latent)
             self.decoder = models.CNNDecoder(n_channels=n_channels, n_bins=n_bins, n_latent=n_latent)
 
         else:

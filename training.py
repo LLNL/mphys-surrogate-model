@@ -1,6 +1,5 @@
 import torch
-import models
-from src import data_utils as du
+from src import data_utils as du, models
 
 
 #import pysindy as ps

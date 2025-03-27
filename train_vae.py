@@ -1,5 +1,4 @@
-import models
-from src import data_utils as du
+from src import data_utils as du, models
 import xarray as xr
 import training
 import torch

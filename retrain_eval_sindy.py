@@ -1,7 +1,7 @@
 import torch
 import pickle as pkl
 import glob
-import models
+from src import models
 
 output_directory = "./hyperparam_e2e"
 device = "cpu"

@@ -1,5 +1,5 @@
 import numpy as np
-from src import data_utils as du
+from src import data_utils as du, models
 from scipy.stats import wasserstein_distance
 import xarray as xr
 import torch
@@ -8,7 +8,6 @@ import training
 import uuid
 from scipy.stats import qmc
 import glob
-import models
 
 train_models = False
 n_init = 8
