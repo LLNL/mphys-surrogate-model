@@ -1,0 +1,22 @@
+#!/bin/bash
+
+#BSUB -G ml-uphys
+#BSUB -J erfcol_sindy
+#BSUB -B 
+#BSUB -N 
+#BSUB -nnodes 1
+#BSUB -o output.%J.out
+#BSUB -q pbatch
+#BSUB -W 01:00		# walltime
+
+source /p/vast1/dejong5/anaconda3-lassen/bin/activate
+module unload cuda
+conda activate torch
+
+export OMP_NUM_THREADS=1
+export PYTHON=/p/vast1/dejong5/anaconda3-lassen/envs/torch/bin/python
+
+#lrun -n 1 -c 1 -g 1 ${PYTHON} -u train_end2end.py
+lrun -n 1 -c 1 -g 1 ${PYTHON} -u train_vae_autoregressor.py
+#wait
+
