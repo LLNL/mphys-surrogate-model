@@ -147,7 +147,7 @@ for epoch in range(num_epochs):
 
 
 # Export/save
-output_directory = "vae_autoregressor"
+output_directory = "../trained_models/vae_autoregressor"
 if CNN:
     case_name = f"ERF2048_CNN_AdamW_L2_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
 else:

@@ -18,7 +18,7 @@ conda activate learning
 export PYTHON=~/.conda/envs/learning/bin/python
 
 echo 'running'
-srun -n1 ${PYTHON} -u hyperparam_tuning.py
+srun -n1 ${PYTHON} -u training_scripts/hyperparam_tuning.py
 
 echo 'Done'
 

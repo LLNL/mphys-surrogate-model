@@ -13,7 +13,7 @@ n_init = 8
 eval_models = True
 filepath = "../data/box64_train.nc"
 filepath_test = "../data/box64_test.nc"
-output_directory = "../hyperparam_e2e"
+output_directory = "../trained_models/hyperparam_e2e"
 
 params_rng = {}
 params_rng['loss_weight_sindy_z'] = (-2, 2) # logscale
@@ -84,7 +84,7 @@ def retrain_sindy(ztr_encoded, T, output_dir, case_name, poly_order):
     return sindy_coeffs
 
 
-def train_model(ds_all, params, split=(90, 10, 0), output_directory = "./hyperparam_e2e"):
+def train_model(ds_all, params, split=(90, 10, 0), output_directory = "../trained_models/hyperparam_e2e"):
     (data, norms, data_loaders) = du.create_e2e_dataloader(ds_all, cnn=params["CNN"], batch_size=params["batch_size"], tvt_split=split)
     (train_data, val_data, test_data) = data_loaders
     (X, DX, T) = data
@@ -214,6 +214,6 @@ if eval_models: # don't train, only evaluate
                                                                batch_size=params["batch_size"], tvt_split=split)
         (X_test, DX, T) = data
 
-        W1_err = compute_sim_error(X_train, X_test, vae, T, params, "./hyperparam_e2e", case_name)
+        W1_err = compute_sim_error(X_train, X_test, vae, T, params, "../trained_models/hyperparam_e2e", case_name)
         print(f"W1 error: {W1_err}")
         print("\n")

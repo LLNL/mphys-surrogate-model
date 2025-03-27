@@ -10,7 +10,7 @@ n_latent = 3
 epochs = 1000
 init_lr = 1e-3
 weight_decay = 1e-3
-output_path = "../cnn_decoupled/"
+output_path = "../trained_models/cnn_decoupled/"
 id = uuid.uuid4().hex
 
 # get data

@@ -76,7 +76,7 @@ if params["tracemalloc"]:
 
 
 # SAVE
-output_directory = "./end2end"
+output_directory = "../trained_models/end2end"
 prefix = "ERF2048_CNN"
 if params["poly_order"] == "BB":
     case_name = "CNN_BBlg_tr{}-{}-lr{}_weights{}-{}-{}_{}".format(params["pretraining_epochs"], params["training_epochs"],
