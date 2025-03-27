@@ -3,5 +3,5 @@
 *.pyc
 *.pkl
 *.nc
-__pycache__/*
+*.pyc
 .idea/*

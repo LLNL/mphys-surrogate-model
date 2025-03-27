@@ -4,7 +4,7 @@ import torch
 import pickle as pkl
 import models
 import uuid
-import data_utils as du
+from src import data_utils as du
 
 num_epochs = 10
 batch_size = 100

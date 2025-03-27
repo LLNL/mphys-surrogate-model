@@ -1,5 +1,4 @@
-import sys
-import data_utils as du
+from src import data_utils as du
 import xarray as xr
 import torch
 import pickle as pkl

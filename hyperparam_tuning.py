@@ -1,5 +1,5 @@
 import numpy as np
-import data_utils as du
+from src import data_utils as du
 from scipy.stats import wasserstein_distance
 import xarray as xr
 import torch
