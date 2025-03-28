@@ -1,3 +1,8 @@
+import sys
+import os
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(project_root)
+
 from src import data_utils as du, training
 import xarray as xr
 import torch
@@ -28,8 +33,8 @@ params['latent_dim'] = 3
 params['poly_order'] = 2 # = "BB" for FFNN dzdt version
 params["tracemalloc"] = True
 params["pretraining_epochs"] = 1
-params["training_epochs"] = 1000
-params["refinement_epochs"] = 200
+params["training_epochs"] = 1
+params["refinement_epochs"] = 2
 params['loss_weight_recon'] = 10.0 #float(sys.argv[2])
 params['loss_weight_sindy_z'] = 1.0
 params['loss_weight_sindy_x'] = 1.0
