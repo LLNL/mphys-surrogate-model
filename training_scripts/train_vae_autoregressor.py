@@ -10,12 +10,13 @@ import pickle as pkl
 import uuid
 from src import data_utils as du, models
 
-num_epochs = 10
+num_epochs = 1000
 batch_size = 100
 lr = 1e-3
 wd = 1e-3
 lr_sched = False
 CNN = True
+n_lag = 3 # default is 1
 
 class VAEAutoregressor(torch.nn.Module):
     def __init__(self,n_channels=2,n_bins=100,n_latent=10, CNN=True):
@@ -36,31 +37,31 @@ class VAEAutoregressor(torch.nn.Module):
         next_x = self.decoder(next_latent)
         return next_x
 
-# Open dataset
-# ds_all = xr.open_dataset('box64_train.nc')
-# x_scale = ds_all['dvdlnr'].max().data
-# x = ds_all['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
-# x = x / x_scale
-# ds_test = xr.open_dataset('box64_test.nc')
-# x_test = ds_test['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
-# x_test = x_test / x_scale
+#Open dataset
+ds_all = xr.open_dataset('box64_train.nc')
+x_scale = ds_all['dvdlnr'].max().data
+x = ds_all['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
+x = x / x_scale
+ds_test = xr.open_dataset('box64_test.nc')
+x_test = ds_test['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
+x_test = x_test / x_scale
 
-ds_all = xr.open_dataset('../data/erf_col_noadv_coal2048.nc').sel(t=np.linspace(0, 600, 11, endpoint=True))
-(data, _, _) = du.create_erf_dataloader(ds_all, cnn=False, shuffle_data=True)
-(x, _, _, _, _, time) = data
-x_test = x[-50:]
-x = x[:-50]
+# ds_all = xr.open_dataset('../data/erf_col_noadv_coal2048.nc').sel(t=np.linspace(0, 600, 11, endpoint=True))
+# (data, _, _) = du.create_erf_dataloader(ds_all, cnn=False, shuffle_data=True)
+# (x, _, _, _, _, time) = data
+# x_test = x[-50:]
+# x = x[:-50]
 
 # Reshape data
 n_bins = x.shape[2]
-inputs = x[:,:-1,:]
+inputs = x[:,:-1*n_lag,:]
 inputs = inputs.reshape([-1, inputs.shape[2]])
-outputs = x[:,1:,:]
+outputs = x[:,n_lag:,:]
 outputs = outputs.reshape([-1, outputs.shape[2]])
 
-test_inputs = x_test[:,:-1,:]
+test_inputs = x_test[:,:-1*n_lag,:]
 test_inputs = test_inputs.reshape([-1, n_bins])
-test_outputs = x_test[:,1:,:]
+test_outputs = x_test[:,n_lag:,:]
 test_outputs = test_outputs.reshape([-1, n_bins])
 
 # Convert to PyTorch tensors
@@ -152,9 +153,9 @@ for epoch in range(num_epochs):
 
 
 # Export/save
-output_directory = "../trained_models/vae_autoregressor"
+output_directory = "trained_models/vae_autoregressor"
 if CNN:
-    case_name = f"ERF2048_CNN_AdamW_L2_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
+    case_name = f"lag{n_lag}_CNN_AdamW_L2_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
 else:
     case_name = f"FFNN_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
 
