@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torch.nn import Conv1d, ConvTranspose1d
-from torch.nn import Linear, ReLU, Sigmoid, ConstantPad1d, Identity, ELU, Tanh
+from torch.nn import Linear, ReLU, Sigmoid, ConstantPad1d, Identity, ELU, Tanh, Softmax
 
 """
 Convolutional NN Autoencoder; can operate on multiple channels of input (such as number and mass densities)
@@ -53,7 +53,7 @@ class CNNEncoderVAE(torch.nn.Module):
             layer.bias.data = biases[i]
 
 class CNNDecoder(torch.nn.Module):
-    def __init__(self,n_channels=2,n_bins=100,n_latent=10,n_hidden=50):
+    def __init__(self,n_channels=2,n_bins=100,n_latent=10,distribution=False):
         super(CNNDecoder, self).__init__()
 
         self.n_latent = n_latent
@@ -70,7 +70,10 @@ class CNNDecoder(torch.nn.Module):
         self.conv3 = ConvTranspose1d(in_channels=n_channels*2,out_channels=n_channels,kernel_size=4,stride=2,padding=1)
         self.activation3 = ReLU()
         self.lin2 = Linear(n_bins,n_bins)
-        self.activation4 = Sigmoid()
+        if distribution:
+            self.activation4 = Softmax(dim=2)
+        else:
+            self.activation4 = Sigmoid()
 
         self.layers = [self.lin, self.conv1, self.conv2, self.conv3, self.lin2]
 
@@ -175,7 +178,7 @@ class FFNNEncoderVAE(torch.nn.Module):
             layer.bias.data = biases[i]
 
 class FFNNDecoder(torch.nn.Module):
-    def __init__(self,n_bins=128,n_latent=3):
+    def __init__(self,n_bins=128,n_latent=3, distribution=False):
         super(FFNNDecoder, self).__init__()
 
         self.n_bins = n_bins
@@ -186,7 +189,10 @@ class FFNNDecoder(torch.nn.Module):
         self.activation1 = ReLU()
         self.activation2 = ReLU()
         self.activation3 = ReLU()
-        self.activation4 = Sigmoid()
+        if distribution:
+            self.activation4 = Softmax(dim=2)
+        else:
+            self.activation4 = Sigmoid()
 
         self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
         self.act = [self.activation1, self.activation2, self.activation3, self.activation4]
