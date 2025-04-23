@@ -14,22 +14,22 @@ from torch.utils.data import Dataset, DataLoader
 
 torch.manual_seed(0)
 
-num_epochs = 100
+num_epochs = 300
 batch_size = 10
-n_latent = 1
+n_latent = 3
+n_lag = 3 # default is 1 # TODO: multiple time inputs
 lr = 1e-3
 wd = 1e-3
 lr_sched = False
 do_early_stopping = True
 CNN = False
-n_lag = 1 # default is 1 # TODO: multiple time inputs
 tol = 1e-8
 w_recon = 1
 w_dx = 1
 w_dz = 1
 
 class VAEAutoregressor(torch.nn.Module):
-    def __init__(self,n_channels=2,n_bins=100,n_latent=10, CNN=True):
+    def __init__(self,n_channels=2,n_bins=100,n_latent=10, n_lag=1, CNN=True,):
         super(VAEAutoregressor, self).__init__()
 
         if CNN:
@@ -39,11 +39,15 @@ class VAEAutoregressor(torch.nn.Module):
         else:
             self.encoder = models.FFNNEncoderVAE(n_bins=n_bins, n_latent=n_latent)
             self.decoder = models.FFNNDecoder(n_bins=n_bins, n_latent=n_latent, distribution=True)
-        self.autoregressor = models.Autoregressive(n_bins=n_latent+1)
+        self.autoregressor = models.Autoregressive(n_bins=n_latent + 1, n_bins_in=n_latent * n_lag + 1)
 
     def forward(self, bin0, M):
-        latent0 = self.encoder(bin0)
-        latent0_M = torch.cat((latent0, M), dim=2)
+        latent0 = []
+        for t in range(n_lag):
+            latent0.append(self.encoder(bin0[:, t, :]).unsqueeze(1))
+        latent0 = torch.cat(latent0, dim=2)
+        #latent0 = self.encoder(bin0)
+        latent0_M = torch.cat([latent0, M], dim=2)
         latent1_M = self.autoregressor(latent0_M)
         latent1 = latent1_M[:, :, :-1]
         bin1 = self.decoder(latent1)
@@ -67,10 +71,19 @@ m_test = (m_test / m_scale).to_numpy()
 class NormedBinDataset1C(Dataset):
     def __init__(self, dmdlnr_normed, M, lag=1):
         self.nbin = dmdlnr_normed.shape[2]
-        self.bin0 = dmdlnr_normed.astype(np.float32)[:,:-1*lag,:].reshape([-1, 1, self.nbin])
-        self.bin1 = dmdlnr_normed.astype(np.float32)[:,lag:,:].reshape([-1, 1, self.nbin])
-        self.M    = M.astype(np.float32).reshape([-1, 1, 1])
-        self.lag  = lag
+        self.lag = lag
+        self.bin0 = [] #dmdlnr_normed.astype(np.float32)[:,:-1*lag,:].reshape([-1, 1, self.nbin])
+        self.bin1 = [] #dmdlnr_normed.astype(np.float32)[:,lag:,:].reshape([-1, 1, self.nbin])
+        self.M   = [] #M.astype(np.float32).reshape([-1, 1, 1])
+
+        for i in range(dmdlnr_normed.shape[1] - lag):
+            self.bin0.append(dmdlnr_normed[:, i:i+lag, :].astype(np.float32))
+            self.bin1.append(dmdlnr_normed[:, i+lag, :].astype(np.float32))
+            self.M.append(M[:, i+lag].astype(np.float32))
+
+        self.bin0 = np.array(self.bin0).reshape([-1, lag, self.nbin])
+        self.bin1 = np.array(self.bin1).reshape([-1, 1, self.nbin])
+        self.M = np.array(self.M).reshape([-1, 1, 1])
 
     def __len__(self):
         return int(self.bin0.shape[0])
@@ -79,7 +92,7 @@ class NormedBinDataset1C(Dataset):
         return self.bin0[idx, :], self.bin1[idx,:], self.M[idx]
 
 # Initialize the model
-model = VAEAutoregressor(n_channels=1, n_bins=n_bins, n_latent=n_latent, CNN=CNN)
+model = VAEAutoregressor(n_channels=1, n_bins=n_bins, n_latent=n_latent, n_lag=n_lag, CNN=CNN)
 
 # Loss function and optimizer
 criterion = torch.nn.MSELoss()
@@ -94,10 +107,10 @@ print(f"Total number of parameters: {total_params}")
 # Training loop
 # Convert data to batches
 #train_data = torch.utils.data.TensorDataset(inputs, outputs)
-train_data = NormedBinDataset1C(x_train, m_train)
+train_data = NormedBinDataset1C(x_train, m_train, lag=n_lag)
 train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
 #test_data = torch.utils.data.TensorDataset(test_inputs, test_outputs)
-test_data = NormedBinDataset1C(x_test, m_test)
+test_data = NormedBinDataset1C(x_test, m_test, lag=n_lag)
 test_loader = torch.utils.data.DataLoader(test_data, batch_size=x_test.shape[0], shuffle=True)
 
 losses = []
@@ -118,7 +131,7 @@ for epoch in range(num_epochs):
         # Forward pass
         pred_y = model(batch_X, batch_M)
         pred_z = model.encoder(batch_X)
-        pred_z1 = model.autoregressor(torch.cat((pred_z, batch_M), dim=2)) # note: can train AR to predict zero change in M, or just ignore M in training
+        pred_z1 = model.autoregressor(torch.cat((pred_z.reshape(-1, 1, n_latent * n_lag), batch_M), dim=2)) # note: can train AR to predict zero change in M, or just ignore M in training
         data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
         pred_x_recon = model.decoder(model.encoder(batch_X))
 
@@ -144,8 +157,7 @@ for epoch in range(num_epochs):
         # Forward pass
         pred_y = model(batch_X, batch_M)
         pred_z = model.encoder(batch_X)
-        pred_z1 = model.autoregressor(torch.cat((pred_z, batch_M),
-                                                dim=2))  # note: can train AR to predict zero change in M, or just ignore M in training
+        pred_z1 = model.autoregressor(torch.cat((pred_z.reshape(-1, 1, n_latent * n_lag), batch_M), dim=2))  # note: can train AR to predict zero change in M, or just ignore M in training
         data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
         pred_x_recon = model.decoder(model.encoder(batch_X))
 
@@ -201,7 +213,7 @@ plt.plot(dz_losses, label="Z: t -> t+1")
 plt.plot(recon_losses, label="Recon")
 
 plt.legend()
-plt.title("Training Loss")
+plt.title(f"Training Loss, lag {n_lag}")
 plt.xlabel("Epoch")
 plt.ylabel("Loss")
 plt.yscale('log')
@@ -233,18 +245,18 @@ plt.show()
 
 # Predictions: Multi time step
 r_bins_edges = ds_all['mass_bin']
-tplt = [0, 1, 2, 3, 5, 8, 12]
+tplt = [3, 5, 8, 12] #[0, 1, 2, 3, 5, 8, 12]
 
 (fig, ax) = plt.subplots(ncols=len(ids), nrows=len(tplt), figsize=(3 * len(ids), 2 * len(tplt)), sharey=True)
 
 for (i, id) in enumerate(test_ids):
-    x0 = x_test[id, 0, :]
+    x0 = x_test[id, :n_lag, :]
     m0 = m_test[id, 0]
     x_pred = np.zeros_like(x_test[id])
-    x_pred[0,:] = x0
-    for t in range(tplt[-1]):
-        x_pred[t+1,:] = model(
-            torch.Tensor(x_pred[t,:]).reshape(-1, 1, x_pred[t].shape[0]),
+    x_pred[:n_lag,:] = x0
+    for t in range(n_lag, x_test.shape[1]):
+        x_pred[t,:] = model(
+            torch.Tensor(x_pred[t-n_lag:t,:]).reshape(-1, n_lag, x_pred[t].shape[0]),
             torch.Tensor([m0]).reshape(1, 1, 1)
         ).detach().numpy()[0][0]
 
@@ -260,7 +272,7 @@ for (i, id) in enumerate(test_ids):
 for (j, t) in enumerate(tplt):
     ax[j][0].set_ylabel(f"dmdlnr at t={t}")
 ax[1][0].legend(['Data', 'Model'])
-plt.suptitle('VAE Autoregressive model: Multi time step; out of sample')
+plt.suptitle(f'VAE Autoregressive model, lag {n_lag}: Multi time step; out of sample')
 plt.show()
 
 
@@ -269,18 +281,19 @@ plt.show()
 colors = ['blue','orange','green','gray']
 time = np.linspace(0, x_test.shape[1] - 1, x_test.shape[1])
 for j in range(x_test.shape[0]):
-    x0 = x_test[j, 0, :]
+    x0 = x_test[j, :n_lag, :]
     mj = m_test[j, :]
-    z0 = model.encoder(torch.Tensor(x0).reshape(1, -1)).detach().numpy()[0]
+    z0 = np.array([model.encoder(torch.Tensor(x0[t]).reshape(1, -1)).detach().numpy()[0] for t in range(n_lag)])
     z_pred = np.zeros((x_test.shape[1], n_latent+1))
     z_enc = np.zeros((x_test.shape[1], n_latent+1))
     z_enc[:, -1] = mj
-    z_enc[0, :-1] = z0
-    z_pred[0, :-1] = z0
-    z_pred[0, -1] = mj[0]
-    for t in range(x_test.shape[1] - 1):
-        z_pred[t+1] = model.autoregressor(torch.Tensor(z_pred[t,:])).detach().numpy()
-        z_enc[t+1, :-1] = model.encoder(torch.Tensor(x_test[j, t+1, :]).reshape(1, -1)).detach().numpy()[0]
+    z_enc[:n_lag, :-1] = z0
+    z_pred[:n_lag, :-1] = z0
+    z_pred[:n_lag, -1] = mj[0]
+    for t in range(n_lag, x_test.shape[1]):
+        lagged_input = torch.cat((torch.Tensor(z_pred[t-n_lag:t, :-1]).reshape(n_lag * n_latent), torch.Tensor([mj[0]])))
+        z_pred[t, :] = model.autoregressor(lagged_input).detach().numpy()
+        z_enc[t, :-1] = model.encoder(torch.Tensor(x_test[j, t, :]).reshape(1, -1)).detach().numpy()[0]
 
     for i in range(n_latent+1):
         if i < n_latent:
@@ -298,6 +311,6 @@ ax[0][-1].set_title('mass (rescaled)')
 ax[0][0].set_ylabel('Data')
 ax[1][0].set_ylabel('Model')
 
-plt.suptitle('Autoregressive Z(t)')
+plt.suptitle(f'Autoregressive Z(t), lag {n_lag}')
 plt.tight_layout()
 plt.show()
