@@ -1,5 +1,6 @@
 import sys
 import os
+
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
@@ -17,7 +18,7 @@ torch.manual_seed(0)
 num_epochs = 10
 batch_size = 100
 n_latent = 3
-n_lag = 1 # default is 1
+n_lag = 1  # default is 1
 lr = 1e-3
 wd = 1e-3
 lr_sched = False
@@ -28,58 +29,87 @@ w_recon = 1
 w_dx = 1
 w_dz = 1
 
+
 class VAEAutoregressor(torch.nn.Module):
-    def __init__(self,n_channels=2,n_bins=100,n_latent=10, n_lag=1, CNN=True,):
+    def __init__(
+        self,
+        n_channels=2,
+        n_bins=100,
+        n_latent=10,
+        n_lag=1,
+        CNN=True,
+    ):
         super(VAEAutoregressor, self).__init__()
 
         if CNN:
-            self.encoder = models.CNNEncoderVAE(n_channels=n_channels, n_bins=n_bins, n_latent=n_latent)
-            self.decoder = models.CNNDecoder(n_channels=n_channels, n_bins=n_bins, n_latent=n_latent, distribution=True)
+            self.encoder = models.CNNEncoderVAE(
+                n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
+            )
+            self.decoder = models.CNNDecoder(
+                n_channels=n_channels,
+                n_bins=n_bins,
+                n_latent=n_latent,
+                distribution=True,
+            )
 
         else:
             self.encoder = models.FFNNEncoderVAE(n_bins=n_bins, n_latent=n_latent)
-            self.decoder = models.FFNNDecoder(n_bins=n_bins, n_latent=n_latent, distribution=True)
-        self.autoregressor = models.Autoregressive(n_bins=n_latent + 1, n_bins_in=n_latent * n_lag + 1)
+            self.decoder = models.FFNNDecoder(
+                n_bins=n_bins, n_latent=n_latent, distribution=True
+            )
+        self.autoregressor = models.Autoregressive(
+            n_bins=n_latent + 1, n_bins_in=n_latent * n_lag + 1
+        )
 
     def forward(self, bin0, M):
         latent0 = []
         for t in range(n_lag):
             latent0.append(self.encoder(bin0[:, t, :]).unsqueeze(1))
         latent0 = torch.cat(latent0, dim=2)
-        #latent0 = self.encoder(bin0)
+        # latent0 = self.encoder(bin0)
         latent0_M = torch.cat([latent0, M], dim=2)
         latent1_M = self.autoregressor(latent0_M)
         latent1 = latent1_M[:, :, :-1]
         bin1 = self.decoder(latent1)
         return bin1
 
+
 # Open dataset
-ds_all = xr.open_dataset('box64_train.nc')
-dlnr = np.diff(np.log(ds_all['mass_bin'].values)).mean()
-m_train = ds_all['dvdlnr'].sum(dim='mass_bin_idx')
-x_train = (ds_all['dvdlnr'] / m_train).transpose('run','time','mass_bin_idx').to_numpy()
+ds_all = xr.open_dataset("box64_train.nc")
+dlnr = np.diff(np.log(ds_all["mass_bin"].values)).mean()
+m_train = ds_all["dvdlnr"].sum(dim="mass_bin_idx")
+x_train = (
+    (ds_all["dvdlnr"] / m_train).transpose("run", "time", "mass_bin_idx").to_numpy()
+)
 m_scale = m_train.max()
 m_train = (m_train / m_scale).to_numpy()
 n_bins = x_train.shape[2]
 
-ds_test = xr.open_dataset('box64_test.nc')
-m_test = ds_test['dvdlnr'].sum(dim='mass_bin_idx')
-x_test = (ds_test['dvdlnr'] / m_test).transpose('run','time','mass_bin_idx').to_numpy()
+ds_test = xr.open_dataset("box64_test.nc")
+m_test = ds_test["dvdlnr"].sum(dim="mass_bin_idx")
+x_test = (
+    (ds_test["dvdlnr"] / m_test).transpose("run", "time", "mass_bin_idx").to_numpy()
+)
 m_test = (m_test / m_scale).to_numpy()
+
 
 # Create torch dataset
 class NormedBinDataset1C(Dataset):
     def __init__(self, dmdlnr_normed, M, lag=1):
         self.nbin = dmdlnr_normed.shape[2]
         self.lag = lag
-        self.bin0 = [] #dmdlnr_normed.astype(np.float32)[:,:-1*lag,:].reshape([-1, 1, self.nbin])
-        self.bin1 = [] #dmdlnr_normed.astype(np.float32)[:,lag:,:].reshape([-1, 1, self.nbin])
-        self.M   = [] #M.astype(np.float32).reshape([-1, 1, 1])
+        self.bin0 = (
+            []
+        )  # dmdlnr_normed.astype(np.float32)[:,:-1*lag,:].reshape([-1, 1, self.nbin])
+        self.bin1 = (
+            []
+        )  # dmdlnr_normed.astype(np.float32)[:,lag:,:].reshape([-1, 1, self.nbin])
+        self.M = []  # M.astype(np.float32).reshape([-1, 1, 1])
 
         for i in range(dmdlnr_normed.shape[1] - lag):
-            self.bin0.append(dmdlnr_normed[:, i:i+lag, :].astype(np.float32))
-            self.bin1.append(dmdlnr_normed[:, i+lag, :].astype(np.float32))
-            self.M.append(M[:, i+lag].astype(np.float32))
+            self.bin0.append(dmdlnr_normed[:, i : i + lag, :].astype(np.float32))
+            self.bin1.append(dmdlnr_normed[:, i + lag, :].astype(np.float32))
+            self.M.append(M[:, i + lag].astype(np.float32))
 
         self.bin0 = np.array(self.bin0).reshape([-1, lag, self.nbin])
         self.bin1 = np.array(self.bin1).reshape([-1, 1, self.nbin])
@@ -89,16 +119,19 @@ class NormedBinDataset1C(Dataset):
         return int(self.bin0.shape[0])
 
     def __getitem__(self, idx):
-        return self.bin0[idx, :], self.bin1[idx,:], self.M[idx]
+        return self.bin0[idx, :], self.bin1[idx, :], self.M[idx]
+
 
 # Initialize the model
-model = VAEAutoregressor(n_channels=1, n_bins=n_bins, n_latent=n_latent, n_lag=n_lag, CNN=CNN)
+model = VAEAutoregressor(
+    n_channels=1, n_bins=n_bins, n_latent=n_latent, n_lag=n_lag, CNN=CNN
+)
 
 # Loss function and optimizer
 criterion = torch.nn.MSELoss()
-divergence = torch.nn.KLDivLoss(reduction='batchmean', log_target=True)
+divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
-sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min')
+sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
 early_stopping = training.EarlyStopping(patience=20)
 
 total_params = sum(p.numel() for p in model.parameters())
@@ -106,12 +139,16 @@ print(f"Total number of parameters: {total_params}")
 
 # Training loop
 # Convert data to batches
-#train_data = torch.utils.data.TensorDataset(inputs, outputs)
+# train_data = torch.utils.data.TensorDataset(inputs, outputs)
 train_data = NormedBinDataset1C(x_train, m_train, lag=n_lag)
-train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, shuffle=True)
-#test_data = torch.utils.data.TensorDataset(test_inputs, test_outputs)
+train_loader = torch.utils.data.DataLoader(
+    train_data, batch_size=batch_size, shuffle=True
+)
+# test_data = torch.utils.data.TensorDataset(test_inputs, test_outputs)
 test_data = NormedBinDataset1C(x_test, m_test, lag=n_lag)
-test_loader = torch.utils.data.DataLoader(test_data, batch_size=x_test.shape[0], shuffle=True)
+test_loader = torch.utils.data.DataLoader(
+    test_data, batch_size=x_test.shape[0], shuffle=True
+)
 
 losses = []
 recon_losses = []
@@ -131,7 +168,9 @@ for epoch in range(num_epochs):
         # Forward pass
         pred_y = model(batch_X, batch_M)
         pred_z = model.encoder(batch_X)
-        pred_z1 = model.autoregressor(torch.cat((pred_z.reshape(-1, 1, n_latent * n_lag), batch_M), dim=2)) # note: can train AR to predict zero change in M, or just ignore M in training
+        pred_z1 = model.autoregressor(
+            torch.cat((pred_z.reshape(-1, 1, n_latent * n_lag), batch_M), dim=2)
+        )  # note: can train AR to predict zero change in M, or just ignore M in training
         data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
         pred_x_recon = model.decoder(model.encoder(batch_X))
 
@@ -150,14 +189,15 @@ for epoch in range(num_epochs):
     dx_losses.append(loss_dx.item())
     dz_losses.append(loss_dz.item())
 
-
     # test
     model.eval()
     for batch_X, batch_y, batch_M in test_loader:
         # Forward pass
         pred_y = model(batch_X, batch_M)
         pred_z = model.encoder(batch_X)
-        pred_z1 = model.autoregressor(torch.cat((pred_z.reshape(-1, 1, n_latent * n_lag), batch_M), dim=2))  # note: can train AR to predict zero change in M, or just ignore M in training
+        pred_z1 = model.autoregressor(
+            torch.cat((pred_z.reshape(-1, 1, n_latent * n_lag), batch_M), dim=2)
+        )  # note: can train AR to predict zero change in M, or just ignore M in training
         data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
         pred_x_recon = model.decoder(model.encoder(batch_X))
 
@@ -172,7 +212,9 @@ for epoch in range(num_epochs):
     test_dz_losses.append(loss_dz.item())
 
     if epoch % 1 == 0:
-        print(f"Epoch [{epoch}/{num_epochs}], Train Loss: {losses[-1]:.4f} |  Test Loss: {test_losses[-1]:.4f} | LR: {sched.get_last_lr()}")
+        print(
+            f"Epoch [{epoch}/{num_epochs}], Train Loss: {losses[-1]:.4f} |  Test Loss: {test_losses[-1]:.4f} | LR: {sched.get_last_lr()}"
+        )
 
     if lr_sched:
         sched.step(loss / len(test_loader))
@@ -189,35 +231,50 @@ if CNN:
 else:
     case_name = f"FFNN_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
 
-with open(output_directory + '/losses/' + case_name + '.pkl', 'wb') as pickle_file:
-    pkl.dump((losses,
+with open(output_directory + "/losses/" + case_name + ".pkl", "wb") as pickle_file:
+    pkl.dump(
+        (
+            losses,
             recon_losses,
-              dx_losses,
-              dz_losses,
-              test_losses,
+            dx_losses,
+            dz_losses,
+            test_losses,
             test_recon_losses,
             test_dx_losses,
-            test_dz_losses
-            ), pickle_file)
+            test_dz_losses,
+        ),
+        pickle_file,
+    )
 
 # vae model
-torch.save(model.state_dict(), output_directory + '/model/' + case_name + ".pth")
+torch.save(model.state_dict(), output_directory + "/model/" + case_name + ".pth")
 print(f"Saved model and losses as {case_name}")
 
 ############### PLOTS PLOTS PLOTS ###############
 # Plot training loss
-plotting.plot_losses(losses, test_losses=test_losses, sub_losses=[dx_losses, dz_losses, recon_losses],
-                     labels=["X: t -> t+1", "Z: t -> t+1", "Recon"], title=f"Training Loss, lag {n_lag}")
+plotting.plot_losses(
+    losses,
+    test_losses=test_losses,
+    sub_losses=[dx_losses, dz_losses, recon_losses],
+    labels=["X: t -> t+1", "Z: t -> t+1", "Recon"],
+    title=f"Training Loss, lag {n_lag}",
+)
 
 # Plot distributions: reconstruction
-r_bins_edges = ds_all['mass_bin']
+r_bins_edges = ds_all["mass_bin"]
 test_ids = [0, 20, 30, 40]
 plotting.plot_reconstructions(model, test_ids, x_test, r_bins_edges)
 
 # Predictions: Multi time step
-tplt = [3, 5, 8, 12] #[0, 1, 2, 3, 5, 8, 12]
+tplt = [3, 5, 8, 12]  # [0, 1, 2, 3, 5, 8, 12]
 plotting.plot_predictions_AE_AR(model, test_ids, tplt, x_test, m_test, r_bins_edges)
 
 # Plot trajectories of the latent variables
 plotting.plot_latent_trajectories_AR(n_latent, model, x_test, m_test)
-plotting.viz_3d_latent_space(model, x_test, ds_test['time'].to_numpy() / 1e9, "trained_models/vae_autoregressor_normed/plots", case_name)
+plotting.viz_3d_latent_space(
+    model,
+    x_test,
+    ds_test["time"].to_numpy() / 1e9,
+    "trained_models/vae_autoregressor_normed/plots",
+    case_name,
+)

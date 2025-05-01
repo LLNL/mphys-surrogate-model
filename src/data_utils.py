@@ -17,7 +17,8 @@ class BinDataset1C(Dataset):
 
     def __getitem__(self, idx):
         return self.bin0[idx, :]
-    
+
+
 class BinDataset2C(Dataset):
     def __init__(self, data):
         self.bin0 = data
@@ -27,6 +28,7 @@ class BinDataset2C(Dataset):
 
     def __getitem__(self, idx):
         return self.bin0[idx, :, :]
+
 
 class BinThermoDataset1C(Dataset):
     def __init__(self, dmdlnr, qv, T, dx, dqv_cond):
@@ -40,17 +42,26 @@ class BinThermoDataset1C(Dataset):
         return int(self.bin0.shape[0])
 
     def __getitem__(self, idx):
-        return self.bin0[idx, :], self.qv[idx], self.T[idx], self.dx[idx], self.dqv_cond[idx]
-    
+        return (
+            self.bin0[idx, :],
+            self.qv[idx],
+            self.T[idx],
+            self.dx[idx],
+            self.dqv_cond[idx],
+        )
+
+
 def normalize_data_1d(bin0):
     # data QC
-    N_threshold = [0.1 * 1e6,  1e13] #0.1 - 10,000 / cm^3
-    M_threshold = (1e-9, 1e16) #0.01 - 10 g / m^3
+    N_threshold = [0.1 * 1e6, 1e13]  # 0.1 - 10,000 / cm^3
+    M_threshold = (1e-9, 1e16)  # 0.01 - 10 g / m^3
     casemask = np.zeros(bin0.shape[0])
     case_idx = np.arange(0, bin0.shape[0], 1)
     binsums = np.sum(bin0, axis=2)
     for i in range(0, bin0.shape[0]):
-        if np.any(bin0[i, 0, :] > N_threshold[1]) or np.any(bin0[i, 1, :] > M_threshold[1]):
+        if np.any(bin0[i, 0, :] > N_threshold[1]) or np.any(
+            bin0[i, 1, :] > M_threshold[1]
+        ):
             casemask[i] = False
         elif binsums[i, 0] < N_threshold[0] or binsums[i, 1] < M_threshold[0]:
             casemask[i] = False
@@ -67,28 +78,45 @@ def normalize_data_1d(bin0):
 
     return (bin0, case_idx)
 
+
 def create_timeseries_dataloader(ds):
-    bs = ds['time_save_spec'].size
-    (data_loader, _, _, t_idx) = create_dataloader(None, bs, tvt_split=(100, 0, 0), shuffle=False, ds=ds, return_idx=True)
+    bs = ds["time_save_spec"].size
+    (data_loader, _, _, t_idx) = create_dataloader(
+        None, bs, tvt_split=(100, 0, 0), shuffle=False, ds=ds, return_idx=True
+    )
     return (data_loader, t_idx)
 
-def create_dataloader(filepath, bs, tvt_split = (80, 10, 10), shuffle=True, ds=None, return_idx=False, erf=False):
+
+def create_dataloader(
+    filepath,
+    bs,
+    tvt_split=(80, 10, 10),
+    shuffle=True,
+    ds=None,
+    return_idx=False,
+    erf=False,
+):
     if filepath is not None:
-        ds = xr.open_mfdataset(filepath + "*.nc", combine='nested', concat_dim='run')
-        r_bins_edges = np.logspace(np.log10(0.1 * 1e-6), np.log10(10 * 1e-3), 101, endpoint=True,)
+        ds = xr.open_mfdataset(filepath + "*.nc", combine="nested", concat_dim="run")
+        r_bins_edges = np.logspace(
+            np.log10(0.1 * 1e-6),
+            np.log10(10 * 1e-3),
+            101,
+            endpoint=True,
+        )
 
         # flatten the data
-        data = ds.stack(case=("run","time_save_spec","height"))
+        data = ds.stack(case=("run", "time_save_spec", "height"))
     else:
         assert ds is not None
         data = ds.stack(case=("time_save_spec",))
 
-    nc = data['case'].size
-    nb = data['wet_spectrum_bin_index'].size
+    nc = data["case"].size
+    nb = data["wet_spectrum_bin_index"].size
 
     bin0 = np.zeros((nc, 2, nb))
-    bin0[:, 0, :] = data['wet spectrum'].to_numpy().T
-    bin0[:, 1, :] = data['dvdlnr'].to_numpy().T
+    bin0[:, 0, :] = data["wet spectrum"].to_numpy().T
+    bin0[:, 1, :] = data["dvdlnr"].to_numpy().T
 
     # mean distributions
     (bin0, case_idx) = normalize_data_1d(bin0)
@@ -99,76 +127,104 @@ def create_dataloader(filepath, bs, tvt_split = (80, 10, 10), shuffle=True, ds=N
     # Test-train split
     assert sum(tvt_split) == 100
     assert tvt_split[0] > 0
-    idx = np.arange(0,bin0.shape[0])
+    idx = np.arange(0, bin0.shape[0])
     if shuffle:
         np.random.seed(42)
         np.random.shuffle(idx)
 
     # Train
-    trainidx = idx[0:int(tvt_split[0]/100 * bin0.shape[0])]
-    bin0_train = bin0[trainidx,:]
+    trainidx = idx[0 : int(tvt_split[0] / 100 * bin0.shape[0])]
+    bin0_train = bin0[trainidx, :]
     traindataset = BinDataset2C(bin0_train)
     train_dataloader = DataLoader(traindataset, batch_size=bs)
 
     # Validate
     if tvt_split[1] > 0:
-        validx = idx[int(tvt_split[0]/100 * bin0.shape[0]):int(sum(tvt_split[0:1])/100 * bin0.shape[0])]
-        bin0_val = bin0[validx,:]
+        validx = idx[
+            int(tvt_split[0] / 100 * bin0.shape[0]) : int(
+                sum(tvt_split[0:1]) / 100 * bin0.shape[0]
+            )
+        ]
+        bin0_val = bin0[validx, :]
         valdataset = BinDataset2C(bin0_val)
         val_dataloader = DataLoader(valdataset, batch_size=bs)
     else:
         val_dataloader = None
-    
+
     # Testing
     if tvt_split[2] > 0:
-        testidx = idx[int(sum(tvt_split[0:1])/100 * bin0.shape[0])]
-        bin0_test = bin0[testidx,:]
+        testidx = idx[int(sum(tvt_split[0:1]) / 100 * bin0.shape[0])]
+        bin0_test = bin0[testidx, :]
         testdataset = BinDataset2C(bin0_test)
         test_dataloader = DataLoader(testdataset, batch_size=bs)
     else:
         test_dataloader = None
-    
-    print("train ",int(tvt_split[0]/100 * bin0.shape[0]),"val ",int(tvt_split[1]/100 * bin0.shape[0]),"test ",int(tvt_split[2]/100 * bin0.shape[0]))
+
+    print(
+        "train ",
+        int(tvt_split[0] / 100 * bin0.shape[0]),
+        "val ",
+        int(tvt_split[1] / 100 * bin0.shape[0]),
+        "test ",
+        int(tvt_split[2] / 100 * bin0.shape[0]),
+    )
     if return_idx:
         return (train_dataloader, test_dataloader, val_dataloader, case_idx)
     else:
         return (train_dataloader, test_dataloader, val_dataloader)
+
 
 def find_last_nonzero_index_along_dim(data_array, dim):
     non_zero_indices = xr.apply_ufunc(
         lambda arr: np.nonzero(arr)[0][-1] if np.any(arr) else -1,
         data_array,
         input_core_dims=[[dim]],
-        vectorize=True
+        vectorize=True,
     )
     return non_zero_indices
 
-def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, shuffle_data=False, normx = True, batch_size=100, tvt_split = (80, 10, 10), ql_lim = 1e-4, rmax_lim = 20e-6):
+
+def create_erf_dataloader(
+    ds,
+    cnn=False,
+    shuffle_runs=True,
+    shuffle_data=False,
+    normx=True,
+    batch_size=100,
+    tvt_split=(80, 10, 10),
+    ql_lim=1e-4,
+    rmax_lim=20e-6,
+):
     ds = ds.stack(run=("x", "y", "z", "rst"))
     ds["ql"] = ds["qc"] + ds["qr"]
-    t = ds['t'].to_numpy()
+    t = ds["t"].to_numpy()
 
     # filter out areas where there isn't enough cloud
     ql_filter = ds["ql"].isel(t=0) >= ql_lim
     ql_filter = ql_filter.broadcast_like(ds["qc"])
-    r_filter = ds['radius_bin'][find_last_nonzero_index_along_dim(ds['dmdlnr'].isel(t=0), "radius_bin")] >= rmax_lim
-    r_filter = r_filter.broadcast_like(ds["qc"]).drop('radius_bin')
-    total_filter = (ql_filter & r_filter)
+    r_filter = (
+        ds["radius_bin"][
+            find_last_nonzero_index_along_dim(ds["dmdlnr"].isel(t=0), "radius_bin")
+        ]
+        >= rmax_lim
+    )
+    r_filter = r_filter.broadcast_like(ds["qc"]).drop("radius_bin")
+    total_filter = ql_filter & r_filter
     ds_filtered = ds.where(total_filter.broadcast_like(ds["qc"]), drop=True)
 
-    x = ds_filtered['dmdlnr'].transpose('run', 't', 'radius_bin').to_numpy()
+    x = ds_filtered["dmdlnr"].transpose("run", "t", "radius_bin").to_numpy()
     print(f"{x.shape[0]} runs with {x.shape[1]} timesteps each")
 
-    qv = ds_filtered['qv'].transpose('run', 't').to_numpy()
-    ql = ds_filtered['ql'].transpose('run', 't').to_numpy()
-    T = ds_filtered['temp'].transpose('run', 't').to_numpy()
+    qv = ds_filtered["qv"].transpose("run", "t").to_numpy()
+    ql = ds_filtered["ql"].transpose("run", "t").to_numpy()
+    T = ds_filtered["temp"].transpose("run", "t").to_numpy()
 
-    dt = (ds['t'].isel(t=1) - ds['t'].isel(t=0)).item()
+    dt = (ds["t"].isel(t=1) - ds["t"].isel(t=0)).item()
     dx = np.gradient(x, axis=1) / dt
     dql = np.gradient(ql, axis=1) / dt
 
     if normx:
-        #x_norm = np.max(x)
+        # x_norm = np.max(x)
         x_norm = np.percentile(x, 98)
         qv_range = (np.min(qv), np.max(qv))
         T_range = (np.min(T), np.max(T))
@@ -190,7 +246,7 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, shuffle_data=False, 
     T_data = T.copy()
 
     if shuffle_runs:
-        shuffle_idx = np.arange(len(ds_filtered['run']))
+        shuffle_idx = np.arange(len(ds_filtered["run"]))
         random.shuffle(shuffle_idx)
         x = x[shuffle_idx, :, :]
         dx = dx[shuffle_idx, :, :]
@@ -199,7 +255,7 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, shuffle_data=False, 
         T = T[shuffle_idx, :]
 
     if shuffle_data:
-        shuffle_idx = np.arange(len(ds_filtered['run']))
+        shuffle_idx = np.arange(len(ds_filtered["run"]))
         random.shuffle(shuffle_idx)
         x_data = x_data[shuffle_idx, :, :]
         dx_data = dx_data[shuffle_idx, :, :]
@@ -216,16 +272,22 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, shuffle_data=False, 
         T = T.reshape(T.shape[0] * T.shape[1], 1)
 
     # Train
-    id_train = int(tvt_split[0]/100 * x.shape[0])
-    traindataset = BinThermoDataset1C(x[0:id_train], qv[0:id_train],
-                                      T[0:id_train], dx[0:id_train], dqv[0:id_train])
+    id_train = int(tvt_split[0] / 100 * x.shape[0])
+    traindataset = BinThermoDataset1C(
+        x[0:id_train], qv[0:id_train], T[0:id_train], dx[0:id_train], dqv[0:id_train]
+    )
     train_dataloader = DataLoader(traindataset, batch_size=batch_size)
 
     # Validate
     if tvt_split[1] > 0:
-        id_val = int(sum(tvt_split[0:2])/100 * x.shape[0])
-        valdataset = BinThermoDataset1C(x[id_train:id_val], qv[id_train:id_val],
-                                          T[id_train:id_val], dx[id_train:id_val], dqv[id_train:id_val])
+        id_val = int(sum(tvt_split[0:2]) / 100 * x.shape[0])
+        valdataset = BinThermoDataset1C(
+            x[id_train:id_val],
+            qv[id_train:id_val],
+            T[id_train:id_val],
+            dx[id_train:id_val],
+            dqv[id_train:id_val],
+        )
         val_dataloader = DataLoader(valdataset, batch_size=batch_size)
     else:
         val_dataloader = None
@@ -240,7 +302,7 @@ def create_erf_dataloader(ds, cnn=False, shuffle_runs=True, shuffle_data=False, 
 
     data = (x_data, qv_data, T_data, dx_data, dqv_data, t)
     norms = (x_norm, qv_range, T_range)
-    data_loaders = (train_dataloader, val_dataloader)#, test_dataloader)
+    data_loaders = (train_dataloader, val_dataloader)  # , test_dataloader)
 
     return (data, norms, data_loaders)
 
@@ -257,11 +319,22 @@ class E2EDataset(Dataset):
     def __getitem__(self, idx):
         return (self.x[idx, :, :], self.dx[idx, :, :])
 
-def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx = True, batch_size=100, tvt_split = (80, 10, 10), condensation=False, seed=None):
-    one_sec = np.timedelta64(1, 's')
-    t = (ds['time'] / one_sec).to_numpy()
-    dt = int((ds['time'].isel(time=1) - ds['time'].isel(time=0)) / one_sec)
-    x = ds['dvdlnr'].transpose('run','time','mass_bin_idx').to_numpy()
+
+def create_e2e_dataloader(
+    ds,
+    cnn=False,
+    shuffle_runs=True,
+    normx=True,
+    normdx=True,
+    batch_size=100,
+    tvt_split=(80, 10, 10),
+    condensation=False,
+    seed=None,
+):
+    one_sec = np.timedelta64(1, "s")
+    t = (ds["time"] / one_sec).to_numpy()
+    dt = int((ds["time"].isel(time=1) - ds["time"].isel(time=0)) / one_sec)
+    x = ds["dvdlnr"].transpose("run", "time", "mass_bin_idx").to_numpy()
     if condensation:
         supersat = (ds["RH"] - 1) / 100
         temp = ds["T"]
@@ -272,7 +345,7 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
         x_norm = np.max(x)
     else:
         x_norm = 1.0
-    
+
     if normdx:
         dx_norm = np.max(dx)
         t_norm = x_norm / dx_norm
@@ -289,7 +362,7 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
     if shuffle_runs:
         if seed:
             random.seed(seed)
-        shuffle_idx = ds['run'].data
+        shuffle_idx = ds["run"].data
         random.shuffle(shuffle_idx)
         x = x[shuffle_idx, :, :]
         dx = dx[shuffle_idx, :, :]
@@ -301,24 +374,32 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
         dx = dx.reshape(x.shape)
 
     # Train
-    x_train = x[0:int(tvt_split[0]/100 * x.shape[0])]
-    dx_train = dx[0:int(tvt_split[0]/100 * x.shape[0])]
+    x_train = x[0 : int(tvt_split[0] / 100 * x.shape[0])]
+    dx_train = dx[0 : int(tvt_split[0] / 100 * x.shape[0])]
     traindataset = E2EDataset(x_train, dx_train)
     train_dataloader = DataLoader(traindataset, batch_size=batch_size)
 
     # Validate
     if tvt_split[1] > 0:
-        x_val = x[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:2])/100 * x.shape[0])]
-        dx_val = dx[int(tvt_split[0]/100 * x.shape[0]):int(sum(tvt_split[0:2])/100 * x.shape[0])]
+        x_val = x[
+            int(tvt_split[0] / 100 * x.shape[0]) : int(
+                sum(tvt_split[0:2]) / 100 * x.shape[0]
+            )
+        ]
+        dx_val = dx[
+            int(tvt_split[0] / 100 * x.shape[0]) : int(
+                sum(tvt_split[0:2]) / 100 * x.shape[0]
+            )
+        ]
         valdataset = E2EDataset(x_val, dx_val)
         val_dataloader = DataLoader(valdataset, batch_size=batch_size)
     else:
         val_dataloader = None
-    
+
     # Testing
     if tvt_split[2] > 0:
-        x_test = x[int(sum(tvt_split[0:2])/100 * x.shape[0]):]
-        dx_test = dx[int(sum(tvt_split[0:2])/100 * x.shape[0]):]
+        x_test = x[int(sum(tvt_split[0:2]) / 100 * x.shape[0]) :]
+        dx_test = dx[int(sum(tvt_split[0:2]) / 100 * x.shape[0]) :]
         testdataset = E2EDataset(x_test, dx_test)
         test_dataloader = DataLoader(testdataset, batch_size=batch_size)
     else:
@@ -329,6 +410,7 @@ def create_e2e_dataloader(ds, cnn=False, shuffle_runs=True, normx = True, normdx
     data_loaders = (train_dataloader, val_dataloader, test_dataloader)
 
     return (data, norms, data_loaders)
+
 
 def sindy_library_tensor(z, latent_dim, poly_order):
     # not implemented for order 2 and higher terms
@@ -342,7 +424,7 @@ def sindy_library_tensor(z, latent_dim, poly_order):
     idx += 1
     # i = 1:nl + 1 -> first order
     if poly_order >= 1:
-        new_library[:, :, idx:idx + latent_dim] = z
+        new_library[:, :, idx : idx + latent_dim] = z
 
     idx += latent_dim
     # second order
@@ -354,19 +436,25 @@ def sindy_library_tensor(z, latent_dim, poly_order):
 
     return new_library
 
+
 def library_size(n, poly_order):
     l = 0
     for k in range(poly_order + 1):
         l += int(binom(n + k - 1, k))
     return l
 
+
 """
 SINDy solutions
 """
+
+
 def first_order_dt(t, z, sindy_coeffs, poly_order, z_lim):
-# z has shape (n_latent)
+    # z has shape (n_latent)
     n_latent = z.size
-    library = sindy_library_tensor(torch.tensor(z).reshape(1, 1, n_latent), n_latent, poly_order)
+    library = sindy_library_tensor(
+        torch.tensor(z).reshape(1, 1, n_latent), n_latent, poly_order
+    )
     dz = torch.matmul(library, sindy_coeffs.T)[0][0].detach().numpy()
     for il in range(n_latent):
         if z[il] >= z_lim[il][1]:
@@ -376,9 +464,10 @@ def first_order_dt(t, z, sindy_coeffs, poly_order, z_lim):
 
     return dz
 
+
 def sindy_simulate(z0, T, sindy_coeffs, poly_order, z_lim):
-    f = lambda z,t : first_order_dt(t, z, sindy_coeffs, poly_order, z_lim)
-    #f = lambda t, z : first_order_dt(t, z, sindy_coeffs, poly_order, z_lim)
+    f = lambda z, t: first_order_dt(t, z, sindy_coeffs, poly_order, z_lim)
+    # f = lambda t, z : first_order_dt(t, z, sindy_coeffs, poly_order, z_lim)
 
     Z = odeint(f, z0, T)
     # sol = solve_ivp(
@@ -388,8 +477,9 @@ def sindy_simulate(z0, T, sindy_coeffs, poly_order, z_lim):
     # Z = sol.y.T
     return Z
 
+
 def bb_simulate(z0, T, dz_network, poly_order, z_lim):
-    def f(z,t):
+    def f(z, t):
         n_latent = z.size
         dz = dz_network(torch.Tensor(z)).detach().numpy()
         for il in range(n_latent):
@@ -401,6 +491,7 @@ def bb_simulate(z0, T, dz_network, poly_order, z_lim):
 
     Z = odeint(f, z0, T)
     return Z
+
 
 def calculate_autocorrelation(dsd_data, max_lag=10):
     # Create an empty array to store results
@@ -421,7 +512,9 @@ def calculate_autocorrelation(dsd_data, max_lag=10):
                     # Calculate correlation across the bin dimension
                     x = run_data[t]
                     # Normalize by subtracting mean and dividing by std
-                    x_norm = (x - np.mean(x)) / (np.std(x) + 1e-10)  # Adding small epsilon to avoid division by zero
+                    x_norm = (x - np.mean(x)) / (
+                        np.std(x) + 1e-10
+                    )  # Adding small epsilon to avoid division by zero
                     corr_sum += 1  # Perfect correlation with itself
                 autocorr[r, lag] = corr_sum / dsd_data.shape[1]
             else:
@@ -431,7 +524,7 @@ def calculate_autocorrelation(dsd_data, max_lag=10):
                 for t in range(dsd_data.shape[1] - lag):
                     # Get data for current time point and lagged time point
                     x1 = run_data[t]
-                    x2 = run_data[t+lag]
+                    x2 = run_data[t + lag]
 
                     # Normalize
                     x1_norm = (x1 - np.mean(x1)) / (np.std(x1) + 1e-10)

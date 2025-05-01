@@ -8,19 +8,19 @@ common_params = {
     "dt": 5 * si.s,
     "dz": 50 * si.m,
     "p0": 990 * si.hPa,
-    "kappa": .9,
-    "save_spec_and_attr_times": np.linspace(0, 60*si.minutes + 0, 361),
+    "kappa": 0.9,
+    "save_spec_and_attr_times": np.linspace(0, 60 * si.minutes + 0, 361),
 }
 
 output = {}
 settings = {}
 simulation = {}
 for rho_times_w in (
-    2 * si.kg/si.m**3 * si.m/si.s,
-    3 * si.kg/si.m**3 * si.m/si.s,
+    2 * si.kg / si.m**3 * si.m / si.s,
+    3 * si.kg / si.m**3 * si.m / si.s,
 ):
     for particles_per_volume_STP in (
-        50, 
+        50,
         100,
         200,
     ):
@@ -30,16 +30,18 @@ for rho_times_w in (
             settings[key] = Settings(
                 **common_params,
                 rho_times_w_1=rho_times_w,
-                particles_per_volume_STP = particles_per_volume_STP / si.cm**3,
+                particles_per_volume_STP=particles_per_volume_STP / si.cm**3,
             )
             settings[key].r_bins_edges = np.logspace(
-                np.log10(0.1 * si.um),
-                np.log10(10 * si.mm),
-                101,
-                endpoint=True
+                np.log10(0.1 * si.um), np.log10(10 * si.mm), 101, endpoint=True
             )
             simulation[key] = Simulation(settings[key])
             output[key] = simulation[key].run().products
-            nc_exporter = NetCDFExporter_1d(output[key], settings[key], simulation[key], "box_data_64/" + key + ".nc")
+            nc_exporter = NetCDFExporter_1d(
+                output[key],
+                settings[key],
+                simulation[key],
+                "box_data_64/" + key + ".nc",
+            )
             nc_exporter.run()
             print("saved")
