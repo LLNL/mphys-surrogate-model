@@ -29,7 +29,7 @@ torch.backends.cudnn.benchmark = True  # Used if inputs & model are constant, dr
 print(f"Using {device} device")
 
 params["device"] = device
-params["training_epochs"] = 100
+params["training_epochs"] = 2
 params["batch_size"] = 100
 params["learning_rate"] = 1e-3
 params["latent_dim"] = 3
@@ -285,12 +285,19 @@ plotting.plot_losses(
     ],
     labels=["dx/dt", "dz/dt", "Recon"],
     title=f"Training Loss",
+    saveas=output_directory + "/plots/" + case_name + "_losses.png",
 )
 
 # Plot distributions: reconstruction
 r_bins_edges = ds_all["mass_bin"]
 test_ids = [0, 20, 30, 40]
-plotting.plot_reconstructions(model, test_ids, x_test, r_bins_edges)
+plotting.plot_reconstructions(
+    model,
+    test_ids,
+    x_test,
+    r_bins_edges,
+    saveas=output_directory + "/plots/" + case_name + "_reconstructions.png",
+)
 
 # Predictions: Multi time step
 tplt = [3, 5, 8, 12]  # [0, 1, 2, 3, 5, 8, 12]
@@ -305,6 +312,7 @@ plotting.plot_predictions_AE_SINDy(
     x_train,
     m_train,
     r_bins_edges,
+    saveas=output_directory + "/plots/" + case_name + "_predictions.png",
 )
 
 
@@ -320,4 +328,8 @@ plotting.plot_latent_trajectories_SINDy(
     x_train,
     m_train,
     plt_dx=True,
+    saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
+)
+plotting.viz_3d_latent_space(
+    model, x_test, time, output_directory + "/plots", case_name
 )
