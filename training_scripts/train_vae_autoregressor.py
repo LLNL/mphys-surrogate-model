@@ -9,15 +9,15 @@ import xarray as xr
 import torch
 import pickle as pkl
 import uuid
-from src import data_utils as du, models, training
+from src import data_utils as du, models, training, plotting
 from torch.utils.data import Dataset, DataLoader
 
 torch.manual_seed(0)
 
-num_epochs = 300
-batch_size = 10
+num_epochs = 10
+batch_size = 100
 n_latent = 3
-n_lag = 3 # default is 1 # TODO: multiple time inputs
+n_lag = 1 # default is 1
 lr = 1e-3
 wd = 1e-3
 lr_sched = False
@@ -206,111 +206,18 @@ print(f"Saved model and losses as {case_name}")
 
 ############### PLOTS PLOTS PLOTS ###############
 # Plot training loss
-plt.plot(losses, label="total train")
-plt.plot(test_losses, label="total test", ls='--')
-plt.plot(dx_losses, label="X: t -> t+1")
-plt.plot(dz_losses, label="Z: t -> t+1")
-plt.plot(recon_losses, label="Recon")
-
-plt.legend()
-plt.title(f"Training Loss, lag {n_lag}")
-plt.xlabel("Epoch")
-plt.ylabel("Loss")
-plt.yscale('log')
-plt.show()
-
+plotting.plot_losses(losses, test_losses=test_losses, sub_losses=[dx_losses, dz_losses, recon_losses],
+                     labels=["X: t -> t+1", "Z: t -> t+1", "Recon"], title=f"Training Loss, lag {n_lag}")
 
 # Plot distributions: reconstruction
 r_bins_edges = ds_all['mass_bin']
-ids = [100, 500, 800, 1300]
 test_ids = [0, 20, 30, 40]
-
-(fig, ax) = plt.subplots(ncols=len(test_ids), nrows=2, figsize=(3 * len(test_ids), 6))
-for (i, id) in enumerate(test_ids):
-    ax[0][i].step(r_bins_edges, x_test[id, 0])
-    ax[1][i].step(r_bins_edges, x_test[id, -1])
-
-    ax[0][i].step(r_bins_edges, model.decoder(model.encoder(torch.Tensor(x_test[id, 0]).reshape(1, 1, -1))).detach().numpy()[0,0])
-    ax[1][i].step(r_bins_edges, model.decoder(model.encoder(torch.Tensor(x_test[id, -1]).reshape(1, 1, -1))).detach().numpy()[0,0])
-
-    ax[0][i].set_xscale('log')
-    ax[1][i].set_xscale('log')
-    ax[0][i].set_title(f'Run #{id}')
-
-ax[0][0].set_ylabel('t1')
-ax[0][0].legend(['Data', 'VAE Reconstruction'])
-plt.suptitle('Reconstruction Demo: Out of Sample')
-plt.show()
-
+plotting.plot_reconstructions(model, test_ids, x_test, r_bins_edges)
 
 # Predictions: Multi time step
-r_bins_edges = ds_all['mass_bin']
 tplt = [3, 5, 8, 12] #[0, 1, 2, 3, 5, 8, 12]
-
-(fig, ax) = plt.subplots(ncols=len(ids), nrows=len(tplt), figsize=(3 * len(ids), 2 * len(tplt)), sharey=True)
-
-for (i, id) in enumerate(test_ids):
-    x0 = x_test[id, :n_lag, :]
-    m0 = m_test[id, 0]
-    x_pred = np.zeros_like(x_test[id])
-    x_pred[:n_lag,:] = x0
-    for t in range(n_lag, x_test.shape[1]):
-        x_pred[t,:] = model(
-            torch.Tensor(x_pred[t-n_lag:t,:]).reshape(-1, n_lag, x_pred[t].shape[0]),
-            torch.Tensor([m0]).reshape(1, 1, 1)
-        ).detach().numpy()[0][0]
-
-    for (j, t) in enumerate(tplt):
-        ax[j][i].step(r_bins_edges, x_test[id, t, :])
-        ax[j][i].step(r_bins_edges, x_pred[t, :])
-
-        ax[j][i].set_xscale('log')
-        ax[j][i].set_xscale('log')
-    ax[0][i].set_title(f'Run #{id}')
-    ax[-1][i].set_xlabel('radius (um)')
-
-for (j, t) in enumerate(tplt):
-    ax[j][0].set_ylabel(f"dmdlnr at t={t}")
-ax[1][0].legend(['Data', 'Model'])
-plt.suptitle(f'VAE Autoregressive model, lag {n_lag}: Multi time step; out of sample')
-plt.show()
-
+plotting.plot_predictions_AE_AR(model, test_ids, tplt, x_test, m_test, r_bins_edges)
 
 # Plot trajectories of the latent variables
-(fig, ax) = plt.subplots(ncols=n_latent + 1, nrows=2, figsize=(12, 6), sharey=False, sharex=True)
-colors = ['blue','orange','green','gray']
-time = np.linspace(0, x_test.shape[1] - 1, x_test.shape[1])
-for j in range(x_test.shape[0]):
-    x0 = x_test[j, :n_lag, :]
-    mj = m_test[j, :]
-    z0 = np.array([model.encoder(torch.Tensor(x0[t]).reshape(1, -1)).detach().numpy()[0] for t in range(n_lag)])
-    z_pred = np.zeros((x_test.shape[1], n_latent+1))
-    z_enc = np.zeros((x_test.shape[1], n_latent+1))
-    z_enc[:, -1] = mj
-    z_enc[:n_lag, :-1] = z0
-    z_pred[:n_lag, :-1] = z0
-    z_pred[:n_lag, -1] = mj[0]
-    for t in range(n_lag, x_test.shape[1]):
-        lagged_input = torch.cat((torch.Tensor(z_pred[t-n_lag:t, :-1]).reshape(n_lag * n_latent), torch.Tensor([mj[0]])))
-        z_pred[t, :] = model.autoregressor(lagged_input).detach().numpy()
-        z_enc[t, :-1] = model.encoder(torch.Tensor(x_test[j, t, :]).reshape(1, -1)).detach().numpy()[0]
-
-    for i in range(n_latent+1):
-        if i < n_latent:
-            labeli = f'z{i}'
-        else:
-            labeli = 'M / dlnr'
-        ax[0][i].plot(time, z_enc[:, i], label=labeli, color = colors[i], alpha=0.5, lw=0.5)
-        ax[1][i].plot(time, z_pred[:,i], label=labeli, color = colors[i], alpha=0.5, lw=0.5)
-        ax[0][i].set_xlabel('Elapsed time')
-
-for i in range(n_latent):
-    ax[0][i].set_title(f'z{i+1}')
-    ax[0][i].set_xlim([0, x_test.shape[1] - 1])
-ax[0][-1].set_title('mass (rescaled)')
-ax[0][0].set_ylabel('Data')
-ax[1][0].set_ylabel('Model')
-
-plt.suptitle(f'Autoregressive Z(t), lag {n_lag}')
-plt.tight_layout()
-plt.show()
+plotting.plot_latent_trajectories_AR(n_latent, model, x_test, m_test)
+plotting.viz_3d_latent_space(model, x_test, ds_test['time'].to_numpy() / 1e9, "trained_models/vae_autoregressor_normed/plots", case_name)

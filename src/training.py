@@ -563,7 +563,8 @@ def loss_fn_e2e(x_data,
         if cnn:
             gradient_x = torch.func.vmap(torch.func.jacrev(autoencoder_network.encoder, chunk_size=20), chunk_size=20)(xx)[:,0,:,:,0,:]
         else:
-            gradient_x = torch.func.vmap(torch.func.vmap(torch.func.jacrev(autoencoder_network.encoder, chunk_size=20), chunk_size=20), chunk_size=20)(xx)
+            gradient_x = torch.func.vmap(torch.func.vmap(torch.func.jacrev(autoencoder_network.encoder, chunk_size=20),
+                                                         chunk_size=20), chunk_size=20)(xx)
         
         dz = torch.einsum('abcd, abd->abc', gradient_x, dx)
         del gradient_x

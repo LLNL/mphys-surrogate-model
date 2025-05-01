@@ -10,16 +10,16 @@ import pickle as pkl
 import uuid
 import tracemalloc
 
-#filepath = "data/box64.nc" # PySDM
-filepath = "../data/erf_col_noadv_coal2048.nc"
+filepath = "data/box64_train.nc" # PySDM
+#filepath = "../data/erf_col_noadv_coal2048.nc"
 
 params = {}
 # set up the device
 device = torch.device(
 	"cuda"
 	if torch.cuda.is_available()
-	# else "mps"
-	# if torch.backends.mps.is_available()
+	else "mps"
+	if torch.backends.mps.is_available()
 	else "cpu"
     )
 torch.backends.cudnn.benchmark = (
@@ -28,7 +28,7 @@ torch.backends.cudnn.benchmark = (
 print(f"Using {device} device")
 
 params["device"] = device
-params["batch_size"] = 100
+params["batch_size"] = 10
 params['latent_dim'] = 3
 params['poly_order'] = 2 # = "BB" for FFNN dzdt version
 params["tracemalloc"] = True
@@ -43,13 +43,12 @@ params["learning_rate"] = 1e-3
 params["CNN"] = True #if sys.argv[4] == "CNN" else False
 params["patience"] = 50
 #params["layers"] = (10, 20, 10) # only used for the Black-Box dzdt
-params["erf_data"] = True
+params["erf_data"] = False
 print(params)
 
 ds_all = xr.open_dataset(filepath)
 
 params['input_dim'] = len(ds_all['radius_bin'])
-
 
 if params["erf_data"]:
     (data, norms, data_loaders) = du.create_erf_dataloader(ds_all, cnn=True, batch_size=params["batch_size"])

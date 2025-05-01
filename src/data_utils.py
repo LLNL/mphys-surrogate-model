@@ -4,7 +4,7 @@ import xarray as xr
 import torch
 import random
 from scipy.special import binom
-from scipy.integrate import odeint
+from scipy.integrate import odeint, solve_ivp
 
 
 # Utilities for training CNN on 1-channel and 2-channel data from 1d KiD runs
@@ -378,8 +378,14 @@ def first_order_dt(t, z, sindy_coeffs, poly_order, z_lim):
 
 def sindy_simulate(z0, T, sindy_coeffs, poly_order, z_lim):
     f = lambda z,t : first_order_dt(t, z, sindy_coeffs, poly_order, z_lim)
+    #f = lambda t, z : first_order_dt(t, z, sindy_coeffs, poly_order, z_lim)
 
     Z = odeint(f, z0, T)
+    # sol = solve_ivp(
+    #     fun=f, t_span=(0, T[-1]), y0=z0,
+    #     method='LSODA', t_eval=T
+    # )
+    # Z = sol.y.T
     return Z
 
 def bb_simulate(z0, T, dz_network, poly_order, z_lim):

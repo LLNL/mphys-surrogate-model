@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torch.nn import Conv1d, ConvTranspose1d
 from torch.nn import Linear, ReLU, Sigmoid, ConstantPad1d, Identity, ELU, Tanh, Softmax
+from src import data_utils as du
 
 """
 Convolutional NN Autoencoder; can operate on multiple channels of input (such as number and mass densities)
@@ -190,7 +191,7 @@ class FFNNDecoder(torch.nn.Module):
         self.activation2 = ReLU()
         self.activation3 = ReLU()
         if distribution:
-            self.activation4 = Softmax(dim=2)
+            self.activation4 = Softmax(dim=-1)
         else:
             self.activation4 = Sigmoid()
 
@@ -245,6 +246,23 @@ class FFNNAutoEncoder(torch.nn.Module):
                 torch.nn.init.kaiming_uniform_(layer.weight, nonlinearity='relu')
                 torch.nn.init.uniform_(layer.bias)
 
+"""
+Pseudo-SINDy network for time derivatives
+"""
+class SINDyDeriv(torch.nn.Module):
+    def __init__(self, n_latent=10, poly_order=2):
+        super(SINDyDeriv, self).__init__()
+        self.library_size = du.library_size(n_latent, poly_order)
+        self.n_latent = n_latent
+        self.poly_order = poly_order
+
+        self.sindy_coeffs = torch.nn.Linear(self.library_size, self.n_latent, bias=False)
+
+    def forward(self, z, M):
+        latent = torch.cat([z, M], dim=-1)
+        library = du.sindy_library_tensor(latent, self.n_latent, self.poly_order)
+        dldt = self.sindy_coeffs(library)
+        return dldt
 
 """
 Black-box network for predicting time derivatives
@@ -365,6 +383,7 @@ class VAEAutoregressor(torch.nn.Module):
         next_latent = self.autoregressor(latent)
         next_x = self.decoder(next_latent)
         return next_x
+
     
 """
 Utility functions
