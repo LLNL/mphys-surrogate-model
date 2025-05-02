@@ -13,7 +13,7 @@ import uuid
 from src import data_utils as du, models, training, plotting
 from torch.utils.data import Dataset, DataLoader
 
-torch.manual_seed(0)
+#torch.manual_seed(0)
 tol = 1e-8
 
 params = {}
@@ -29,14 +29,14 @@ torch.backends.cudnn.benchmark = True  # Used if inputs & model are constant, dr
 print(f"Using {device} device")
 
 params["device"] = device
-params["training_epochs"] = 2
+params["training_epochs"] = 500
 params["batch_size"] = 100
-params["learning_rate"] = 1e-3
+params["learning_rate"] = 5e-4
 params["latent_dim"] = 3
 params["poly_order"] = 2  # = "BB" for FFNN dzdt version
 params["loss_weight_recon"] = 1e0
-params["loss_weight_sindy_z"] = 1e2
-params["loss_weight_sindy_x"] = 1e6
+params["loss_weight_sindy_z"] = 1e1
+params["loss_weight_sindy_x"] = 1e5
 params["CNN"] = False
 params["patience"] = 50
 # params["layers"] = (10, 20, 10) # only used for the Black-Box dzdt
