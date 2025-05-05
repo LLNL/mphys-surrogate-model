@@ -15,7 +15,7 @@ from torch.utils.data import Dataset, DataLoader
 
 torch.manual_seed(10)
 
-num_epochs = 100
+num_epochs = 1
 batch_size = 10
 n_latent = 2
 n_lag = 1  # default is 1
@@ -258,19 +258,40 @@ plotting.plot_losses(
     sub_losses=[dx_losses, dz_losses, recon_losses],
     labels=["X: t -> t+1", "Z: t -> t+1", "Recon"],
     title=f"Training Loss, lag {n_lag}",
+    saveas=output_directory + "/plots/" + case_name + "_losses.png",
 )
 
 # Plot distributions: reconstruction
 r_bins_edges = ds_all["mass_bin"]
 test_ids = [0, 20, 30, 40]
-plotting.plot_reconstructions(model, test_ids, x_test, r_bins_edges)
+plotting.plot_reconstructions(
+    model,
+    test_ids,
+    x_test,
+    r_bins_edges,
+    saveas=output_directory + "/plots/" + case_name + "_reconstructions.png",
+)
 
 # Predictions: Multi time step
 tplt = [3, 5, 8, 12]  # [0, 1, 2, 3, 5, 8, 12]
-plotting.plot_predictions_AE_AR(model, test_ids, tplt, x_test, m_test, r_bins_edges)
+plotting.plot_predictions_AE_AR(
+    model,
+    test_ids,
+    tplt,
+    x_test,
+    m_test,
+    r_bins_edges,
+    saveas=output_directory + "/plots/" + case_name + "_predictions.png",
+)
 
 # Plot trajectories of the latent variables
-plotting.plot_latent_trajectories_AR(n_latent, model, x_test, m_test)
+plotting.plot_latent_trajectories_AR(
+    n_latent,
+    model,
+    x_test,
+    m_test,
+    saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
+)
 plotting.viz_3d_latent_space(
     model,
     x_test,

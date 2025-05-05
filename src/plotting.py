@@ -322,14 +322,23 @@ def viz_3d_latent_space(model, x_test, time, output_directory, case_name):
     # Plot latent space
     pio.renderers.default = "browser"
     lsnp_data = lsn.reshape((-1, lsn.shape[-1]))
+    x = lsnp_data[:, 0]
+    if lsnp_data.shape[1] < 2:
+        y = lsnp_data[:, 0] * 0.0
+    else:
+        y = lsnp_data[:, 1]
+        if lsnp_data.shape[1] < 3:
+            z = lsnp_data[:, 0] * 0.0
+        else:
+            z = lsnp_data[:, 2]
     color_values = (np.ones(lsn.shape[:2]) * time).ravel()
     tp_data = np.tile(np.arange(lsn.shape[1]), (lsn.shape[0], 1)).ravel()
     fig = go.Figure(
         data=[
             go.Scatter3d(
-                x=lsnp_data[:, 0],
-                y=lsnp_data[:, 1],
-                z=lsnp_data[:, 2],
+                x=x,
+                y=y,
+                z=z,
                 mode="markers",
                 name="",
                 marker=dict(
