@@ -13,7 +13,7 @@ import uuid
 from src import data_utils as du, models, training, plotting
 from torch.utils.data import Dataset, DataLoader
 
-#torch.manual_seed(0)
+# torch.manual_seed(0)
 tol = 1e-8
 
 params = {}
@@ -33,19 +33,20 @@ params["training_epochs"] = 500
 params["batch_size"] = 100
 params["learning_rate"] = 5e-4
 params["latent_dim"] = 3
-params["poly_order"] = 2  # = "BB" for FFNN dzdt version
+params["poly_order"] = "BB"  # = "BB" for FFNN dzdt version
 params["loss_weight_recon"] = 1e0
 params["loss_weight_sindy_z"] = 1e1
 params["loss_weight_sindy_x"] = 1e5
 params["CNN"] = False
 params["patience"] = 50
-# params["layers"] = (10, 20, 10) # only used for the Black-Box dzdt
+params["layers"] = (10, 20, 10)  # only used for the Black-Box dzdt
 print(params)
 
 
 class AESINDy(torch.nn.Module):
     def __init__(self, n_channels=1, n_bins=100, n_latent=10, poly_order=2, CNN=True):
         super(AESINDy, self).__init__()
+        self.poly_order = poly_order
 
         if CNN:
             self.encoder = models.CNNEncoderVAE(
@@ -63,8 +64,12 @@ class AESINDy(torch.nn.Module):
             self.decoder = models.FFNNDecoder(
                 n_bins=n_bins, n_latent=n_latent, distribution=True
             )
-
-        self.dzdt = models.SINDyDeriv(n_latent=n_latent + 1, poly_order=poly_order)
+        if poly_order == "BB":
+            self.dzdt = models.LatentSpaceDerivatives(
+                n_latent=n_latent + 1, layer_size=params["layers"]
+            )
+        else:
+            self.dzdt = models.SINDyDeriv(n_latent=n_latent + 1, poly_order=poly_order)
 
     def forward(self, bin0, M):
         z0 = self.encoder(bin0)
@@ -99,9 +104,14 @@ class NormedBinDatasetSINDy(Dataset):
         self.nbin = dmdlnr_normed.shape[2]
         self.t = time
         self.dt = self.t[1] - self.t[0]
-        self.x = dmdlnr_normed.reshape(-1, 1, self.nbin)
-        self.dx = np.gradient(dmdlnr_normed, axis=1).reshape(-1, 1, self.nbin) / self.dt
-        self.M = M.reshape(-1, 1, 1)
+        self.x = dmdlnr_normed.reshape(-1, 1, self.nbin).astype(np.float32)
+        self.dx = (
+            np.gradient(dmdlnr_normed, axis=1)
+            .reshape(-1, 1, self.nbin)
+            .astype(np.float32)
+            / self.dt
+        )
+        self.M = M.reshape(-1, 1, 1).astype(np.float32)
 
     def __len__(self):
         return int(self.x.shape[0])
@@ -253,7 +263,10 @@ for epoch in range(params["training_epochs"]):
 
 # SAVE
 output_directory = "../trained_models/ae_sindy_normed"
-prefix = "CNN"
+if params["CNN"]:
+    prefix = "CNN"
+else:
+    prefix = "FFNN"
 case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}-{}_{}".format(
     params["latent_dim"],
     params["poly_order"],

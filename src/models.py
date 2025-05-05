@@ -359,7 +359,8 @@ class LatentSpaceDerivatives(torch.nn.Module):
 
         self.initialize_weights()
 
-    def forward(self, x):
+    def forward(self, z, M):
+        x = torch.cat([z, M], dim=-1)
         x = self.layer1(x)
         x = self.activation1(x)
         x = self.layer2(x)

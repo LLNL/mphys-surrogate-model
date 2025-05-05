@@ -13,13 +13,13 @@ import uuid
 from src import data_utils as du, models, training, plotting
 from torch.utils.data import Dataset, DataLoader
 
-torch.manual_seed(0)
+torch.manual_seed(10)
 
-num_epochs = 10
-batch_size = 100
-n_latent = 3
+num_epochs = 100
+batch_size = 10
+n_latent = 2
 n_lag = 1  # default is 1
-lr = 1e-3
+lr = 5e-4
 wd = 1e-3
 lr_sched = False
 do_early_stopping = True
@@ -40,7 +40,7 @@ class VAEAutoregressor(torch.nn.Module):
         CNN=True,
     ):
         super(VAEAutoregressor, self).__init__()
-
+        self.n_lag = n_lag
         if CNN:
             self.encoder = models.CNNEncoderVAE(
                 n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
@@ -63,7 +63,7 @@ class VAEAutoregressor(torch.nn.Module):
 
     def forward(self, bin0, M):
         latent0 = []
-        for t in range(n_lag):
+        for t in range(self.n_lag):
             latent0.append(self.encoder(bin0[:, t, :]).unsqueeze(1))
         latent0 = torch.cat(latent0, dim=2)
         # latent0 = self.encoder(bin0)

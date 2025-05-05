@@ -32,29 +32,25 @@ def plot_losses(
         plt.show()
 
 
-def plot_reconstructions(model, test_ids, x_test, r_bins_edges, saveas=None):
+def plot_reconstructions(
+    model, test_ids, x_test, r_bins_edges, t_plt=[0, -1], saveas=None
+):
     (fig, ax) = plt.subplots(
-        ncols=len(test_ids), nrows=2, figsize=(3 * len(test_ids), 6)
+        ncols=len(test_ids), nrows=len(t_plt), figsize=(3 * len(test_ids), 6)
     )
     for i, id in enumerate(test_ids):
-        ax[0][i].step(r_bins_edges, x_test[id, 0])
-        ax[1][i].step(r_bins_edges, x_test[id, -1])
+        for j, t in enumerate(t_plt):
+            ax[j][i].step(r_bins_edges, x_test[id, t])
+            ax[j][i].step(
+                r_bins_edges,
+                model.decoder(
+                    model.encoder(torch.Tensor(x_test[id, t]).reshape(1, 1, -1))
+                )
+                .detach()
+                .numpy()[0, 0],
+            )
 
-        ax[0][i].step(
-            r_bins_edges,
-            model.decoder(model.encoder(torch.Tensor(x_test[id, 0]).reshape(1, 1, -1)))
-            .detach()
-            .numpy()[0, 0],
-        )
-        ax[1][i].step(
-            r_bins_edges,
-            model.decoder(model.encoder(torch.Tensor(x_test[id, -1]).reshape(1, 1, -1)))
-            .detach()
-            .numpy()[0, 0],
-        )
-
-        ax[0][i].set_xscale("log")
-        ax[1][i].set_xscale("log")
+            ax[j][i].set_xscale("log")
         ax[0][i].set_title(f"Run #{id}")
 
     ax[0][0].legend(["Data", "VAE Reconstruction"])
