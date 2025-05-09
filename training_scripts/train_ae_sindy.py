@@ -167,24 +167,9 @@ for epoch in range(params["training_epochs"]):
         pred_x_recon = model.decoder(model.encoder(batch_x))
         z = model.encoder(batch_x)
         zz = z.clone().detach().requires_grad_()
-        if params["CNN"]:
-            grad_enc_x = torch.func.vmap(
-                torch.func.jacrev(model.encoder, chunk_size=20), chunk_size=20
-            )(batch_x)[:, 0, :, :, 0, :]
-            grad_dec_z = torch.func.vmap(
-                torch.func.jacrev(model.decoder, chunk_size=20), chunk_size=20
-            )(zz)[:, 0, :, :, 0, :]
-        else:
-            grad_enc_x = torch.func.vmap(
-                torch.func.jacrev(model.encoder, chunk_size=20), chunk_size=20
-            )(batch_x)[:, :, :, 0, :]
-            grad_dec_z = torch.func.vmap(
-                torch.func.jacrev(model.decoder, chunk_size=20), chunk_size=20
-            )(zz)[:, :, :, 0, :]
-
-        dz = torch.einsum("abcd, abd->abc", grad_enc_x, batch_dx)
         pred_dz = model.dzdt(z, batch_M)[:, :, :-1]
-        pred_dx = torch.einsum("abcd, abd->abc", grad_dec_z, pred_dz)
+        _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
+        _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
 
         loss_recon = divergence(torch.log(pred_x_recon + tol), torch.log(batch_x + tol))
         loss_dx = criterion(pred_dx, batch_dx)
@@ -213,24 +198,9 @@ for epoch in range(params["training_epochs"]):
         pred_x_recon = model.decoder(model.encoder(batch_x))
         z = model.encoder(batch_x)
         zz = z.clone().detach().requires_grad_()
-        if params["CNN"]:
-            grad_enc_x = torch.func.vmap(
-                torch.func.jacrev(model.encoder, chunk_size=20), chunk_size=20
-            )(batch_x)[:, 0, :, :, 0, :]
-            grad_dec_z = torch.func.vmap(
-                torch.func.jacrev(model.decoder, chunk_size=20), chunk_size=20
-            )(zz)[:, 0, :, :, 0, :]
-        else:
-            grad_enc_x = torch.func.vmap(
-                torch.func.jacrev(model.encoder, chunk_size=20), chunk_size=20
-            )(batch_x)[:, :, :, 0, :]
-            grad_dec_z = torch.func.vmap(
-                torch.func.jacrev(model.decoder, chunk_size=20), chunk_size=20
-            )(zz)[:, :, :, 0, :]
-
-        dz = torch.einsum("abcd, abd->abc", grad_enc_x, batch_dx)
         pred_dz = model.dzdt(z, batch_M)[:, :, :-1]
-        pred_dx = torch.einsum("abcd, abd->abc", grad_dec_z, pred_dz)
+        _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
+        _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
 
         loss_recon = divergence(torch.log(pred_x_recon + tol), torch.log(batch_x + tol))
         loss_dx = criterion(pred_dx, batch_dx)
