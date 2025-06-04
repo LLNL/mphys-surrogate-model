@@ -53,7 +53,7 @@ class VAEAutoregressor(torch.nn.Module):
             )
 
         else:
-            self.encoder = models.FFNNEncoderVAE(n_bins=n_bins, n_latent=n_latent)
+            self.encoder = models.FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
             self.decoder = models.FFNNDecoder(
                 n_bins=n_bins, n_latent=n_latent, distribution=True
             )

@@ -316,7 +316,7 @@ def plot_predictions_AE_SINDy(
 
 
 def viz_3d_latent_space(model, x_test, time, output_directory, case_name):
-    # Save latent space
+    # get latent space
     lsn = model.encoder(torch.tensor(x_test)).detach().numpy()
 
     # Plot latent space

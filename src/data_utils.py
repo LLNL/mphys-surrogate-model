@@ -7,6 +7,27 @@ from scipy.special import binom
 from scipy.integrate import odeint, solve_ivp
 
 
+# Create torch dataset
+class NormedBinDatasetSINDy(Dataset):
+    def __init__(self, dmdlnr_normed, dsd_time, M):
+        self.nbin = dmdlnr_normed.shape[2]
+        self.t = dsd_time
+        self.dt = self.t[1] - self.t[0]
+        self.x = dmdlnr_normed.reshape(-1, 1, self.nbin).astype(np.float32)
+        self.dx = np.gradient(dmdlnr_normed, axis=1).reshape(-1, 1, self.nbin).astype(
+            np.float32
+        ) / self.dt.astype(np.float32)
+        lambda1 = np.linalg.norm(self.x) ** 2 / np.linalg.norm(self.dx) ** 2
+        print(f"Suggested norms: {lambda1}, {lambda1 / 100}")
+        self.M = M.reshape(-1, 1, 1).astype(np.float32)
+
+    def __len__(self):
+        return int(self.x.shape[0])
+
+    def __getitem__(self, idx):
+        return self.x[idx, :], self.dx[idx, :], self.M[idx]
+
+
 # Utilities for training CNN on 1-channel and 2-channel data from 1d KiD runs
 class BinDataset1C(Dataset):
     def __init__(self, data):
@@ -417,8 +438,8 @@ def sindy_library_tensor(z, latent_dim, poly_order):
     library_dim = library_size(latent_dim, poly_order)
     new_library = torch.zeros(z.shape[0], z.shape[1], library_dim)
 
-    idx = 0
     # i = 0: constant
+    idx = 0
     new_library[:, :, idx] = 1.0
 
     idx += 1
@@ -445,7 +466,7 @@ def library_size(n, poly_order):
 
 
 """
-SINDy solutions
+ODE solutions
 """
 
 

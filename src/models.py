@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torch import nn
 from torch.nn import Conv1d, ConvTranspose1d
 from torch.nn import Linear, ReLU, Sigmoid, ConstantPad1d, Identity, ELU, Tanh, Softmax
 from src import data_utils as du
@@ -181,9 +182,9 @@ Feed-forward neural network autoencoder
 """
 
 
-class FFNNEncoderVAE(torch.nn.Module):
-    def __init__(self, n_bins=127, n_latent=3):
-        super(FFNNEncoderVAE, self).__init__()
+class FFNNEncoder(torch.nn.Module):
+    def __init__(self, n_bins=64, n_latent=3):
+        super(FFNNEncoder, self).__init__()
         self.n_bins = n_bins
         self.layer1 = Linear(n_bins, int(n_bins / 2))
         self.activation1 = ReLU()
@@ -193,6 +194,8 @@ class FFNNEncoderVAE(torch.nn.Module):
         self.activation3 = ReLU()
         self.layer4 = Linear(int(n_bins / 8), n_latent)
         self.activation4 = Identity()
+
+        self.apply(self.init_weights)
 
         self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
         self.act = [
@@ -213,6 +216,12 @@ class FFNNEncoderVAE(torch.nn.Module):
         x = self.activation4(x)
 
         return x
+
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            if m.bias is not None:
+                torch.nn.init.zeros_(m.bias)
 
     def get_weights(self):
         weights = []
@@ -230,7 +239,7 @@ class FFNNEncoderVAE(torch.nn.Module):
 
 
 class FFNNDecoder(torch.nn.Module):
-    def __init__(self, n_bins=128, n_latent=3, distribution=False):
+    def __init__(self, n_bins=64, n_latent=3, distribution=True):
         super(FFNNDecoder, self).__init__()
 
         self.n_bins = n_bins
@@ -245,6 +254,8 @@ class FFNNDecoder(torch.nn.Module):
             self.activation4 = Softmax(dim=-1)
         else:
             self.activation4 = Sigmoid()
+
+        self.apply(self.init_weights)
 
         self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
         self.act = [
@@ -265,6 +276,12 @@ class FFNNDecoder(torch.nn.Module):
         x = self.activation4(x)
 
         return x
+
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            if m.bias is not None:
+                torch.nn.init.zeros_(m.bias)
 
     def get_weights(self):
         weights = []
@@ -285,7 +302,7 @@ class FFNNAutoEncoder(torch.nn.Module):
     def __init__(self, n_bins=100, n_latent=10):
         super(FFNNAutoEncoder, self).__init__()
 
-        self.encoder = FFNNEncoderVAE(n_bins=n_bins, n_latent=n_latent)
+        self.encoder = FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
         self.decoder = FFNNDecoder(n_bins=n_bins, n_latent=n_latent)
 
         self.initialize_weights()
@@ -319,11 +336,19 @@ class SINDyDeriv(torch.nn.Module):
             self.library_size, self.n_latent, bias=False
         )
 
+        self.apply(self.init_weights)
+
     def forward(self, z, M):
         latent = torch.cat([z, M], dim=-1)
         library = du.sindy_library_tensor(latent, self.n_latent, self.poly_order)
         dldt = self.sindy_coeffs(library)
         return dldt
+
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.ones_(m.weight)
+            if m.bias is not None:
+                torch.nn.init.zeros_(m.bias)
 
 
 """
@@ -456,7 +481,7 @@ class VAEAutoregressor(torch.nn.Module):
             )
 
         else:
-            self.encoder = FFNNEncoderVAE(n_bins=n_bins, n_latent=n_latent)
+            self.encoder = FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
             self.decoder = FFNNDecoder(n_bins=n_bins, n_latent=n_latent)
         self.autoregressor = Autoregressive(n_bins=n_latent)
 
