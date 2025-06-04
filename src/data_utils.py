@@ -8,7 +8,7 @@ from scipy.integrate import odeint, solve_ivp
 
 
 # Create torch dataset
-class NormedBinDatasetSINDy(Dataset):
+class NormedBinDatasetDzDt(Dataset):
     def __init__(self, dmdlnr_normed, dsd_time, M):
         self.nbin = dmdlnr_normed.shape[2]
         self.t = dsd_time
@@ -26,6 +26,35 @@ class NormedBinDatasetSINDy(Dataset):
 
     def __getitem__(self, idx):
         return self.x[idx, :], self.dx[idx, :], self.M[idx]
+
+
+# Create torch dataset
+class NormedBinDatasetAR(Dataset):
+    def __init__(self, dmdlnr_normed, M, lag=1):
+        self.nbin = dmdlnr_normed.shape[2]
+        self.lag = lag
+        self.bin0 = (
+            []
+        )  # dmdlnr_normed.astype(np.float32)[:,:-1*lag,:].reshape([-1, 1, self.nbin])
+        self.bin1 = (
+            []
+        )  # dmdlnr_normed.astype(np.float32)[:,lag:,:].reshape([-1, 1, self.nbin])
+        self.M = []  # M.astype(np.float32).reshape([-1, 1, 1])
+
+        for i in range(dmdlnr_normed.shape[1] - lag):
+            self.bin0.append(dmdlnr_normed[:, i : i + lag, :].astype(np.float32))
+            self.bin1.append(dmdlnr_normed[:, i + lag, :].astype(np.float32))
+            self.M.append(M[:, i + lag].astype(np.float32))
+
+        self.bin0 = np.array(self.bin0).reshape([-1, lag, self.nbin])
+        self.bin1 = np.array(self.bin1).reshape([-1, 1, self.nbin])
+        self.M = np.array(self.M).reshape([-1, 1, 1])
+
+    def __len__(self):
+        return int(self.bin0.shape[0])
+
+    def __getitem__(self, idx):
+        return self.bin0[idx, :], self.bin1[idx, :], self.M[idx]
 
 
 # Utilities for training CNN on 1-channel and 2-channel data from 1d KiD runs

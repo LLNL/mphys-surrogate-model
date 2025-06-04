@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 
 params = {
     "random_seed": 1,
-    "num_epochs": 1,
+    "num_epochs": 10,
     "batch_size": 128,
     "learning_rate": 1e-3,
     "latent_dim": 3,
@@ -26,27 +26,12 @@ params = {
     "wd": 1e-3,
     "lambda1_factor": 0.5,
     "layer_size": (20, 20, 10),
-    "tol": 1e-8,
-    # "lambda3_sparsity": 0.0, TODO: sequential thresholding
     "CNN": False,
     "print_frequency": 1,
 }
 
 torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
-
-# params["training_epochs"] = 1
-# params["batch_size"] = 100
-# params["learning_rate"] = 5e-4
-# params["latent_dim"] = 3
-# params["poly_order"] = 2 #TODO: create separate script for BB version
-# params["loss_weight_recon"] = 1e0
-# params["loss_weight_sindy_z"] = 1e1
-# params["loss_weight_sindy_x"] = 1e5
-# params["CNN"] = False
-# params["patience"] = 50
-# params["layers"] = (10, 20, 10)  # TODO: (see above) only used for the Black-Box dzdt
-# print(params)
 
 
 class AENNdzdt(torch.nn.Module):
@@ -116,9 +101,9 @@ if __name__ == "__main__":
     )
     m_test = (m_test / m_scale).to_numpy()
 
-    train_data = du.NormedBinDatasetSINDy(x_train, dsd_time, m_train)
+    train_data = du.NormedBinDatasetDzDt(x_train, dsd_time, m_train)
     train_loader = DataLoader(train_data, batch_size=params["batch_size"], shuffle=True)
-    test_data = du.NormedBinDatasetSINDy(x_test, dsd_time, m_test)
+    test_data = du.NormedBinDatasetDzDt(x_test, dsd_time, m_test)
     test_loader = DataLoader(test_data, batch_size=x_test.shape[0], shuffle=True)
 
     # Initialize the model
@@ -248,14 +233,14 @@ if __name__ == "__main__":
         epoch_end_time = time.time()
         if epoch % params["print_frequency"] == 0:
             print(
-                f"Epoch [{epoch}/{params['num_epochs']}], Train Loss: {losses[-1]:.4f} | "
-                f"Test Loss: {test_losses[-1]:.4f} | LR: {sched.get_last_lr()}"
+                f"Epoch [{epoch}/{params['num_epochs']}], Train Loss: {losses[epoch]:.4f} | "
+                f"Test Loss: {test_losses[epoch]:.4f} | LR: {sched.get_last_lr()}"
                 f"| Epoch Time: {epoch_end_time - epoch_start_time} s"
             )
             print(
-                f"Recon: {params['loss_weight_recon'] * recon_losses[-1]:.4f} | "
-                f"dx: {params['loss_weight_sindy_x'] * dx_losses[-1]:.4f} | "
-                f"dz: {params['loss_weight_sindy_z'] * dz_losses[-1]:.4f} | "
+                f"Recon: {params['loss_weight_recon'] * recon_losses[epoch]:.4f} | "
+                f"dx: {params['loss_weight_sindy_x'] * dx_losses[epoch]:.4f} | "
+                f"dz: {params['loss_weight_sindy_z'] * dz_losses[epoch]:.4f} | "
             )
 
         # early stopping

@@ -1,55 +1,56 @@
 import sys
 import os
+import time
+import copy
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
 import numpy as np
-import matplotlib.pyplot as plt
 import xarray as xr
 import torch
 import pickle as pkl
 import uuid
 from src import data_utils as du, models, training, plotting
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 
-torch.manual_seed(10)
+params = {
+    "random_seed": 1,
+    "num_epochs": 10,
+    "batch_size": 128,
+    "learning_rate": 1e-3,
+    "latent_dim": 3,
+    "n_lag": 1,
+    "w_recon": 1,
+    "w_dx": 1,
+    "w_dz": 1,
+    "lr_sched": True,
+    "patience": 50,
+    "tol": 1e-8,
+    "wd": 1e-3,
+    "lambda1_factor": 0.5,
+    "layer_size": (20, 20, 10),
+    "CNN": False,
+    "print_frequency": 1,
+}
 
-num_epochs = 1
-batch_size = 10
-n_latent = 2
-n_lag = 1  # default is 1
-lr = 5e-4
-wd = 1e-3
-lr_sched = False
-do_early_stopping = True
-CNN = False
-tol = 1e-8
-w_recon = 1
-w_dx = 1
-w_dz = 1
+torch.manual_seed(params["random_seed"])
+np.random.seed(params["random_seed"])
 
 
-class VAEAutoregressor(torch.nn.Module):
+class AEAutoregressor(torch.nn.Module):
     def __init__(
-        self,
-        n_channels=2,
-        n_bins=100,
-        n_latent=10,
-        n_lag=1,
-        CNN=True,
+        self, n_channels=2, n_bins=100, n_latent=10, layer_size=None, n_lag=1, CNN=False
     ):
-        super(VAEAutoregressor, self).__init__()
+        super(AEAutoregressor, self).__init__()
+
         self.n_lag = n_lag
         if CNN:
             self.encoder = models.CNNEncoder(
                 n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
             )
             self.decoder = models.CNNDecoder(
-                n_channels=n_channels,
-                n_bins=n_bins,
-                n_latent=n_latent,
-                distribution=True,
+                n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
             )
 
         else:
@@ -58,7 +59,9 @@ class VAEAutoregressor(torch.nn.Module):
                 n_bins=n_bins, n_latent=n_latent, distribution=True
             )
         self.autoregressor = models.Autoregressive(
-            n_bins=n_latent + 1, n_bins_in=n_latent * n_lag + 1
+            n_bins=n_latent + 1,
+            n_bins_in=n_latent * self.n_lag + 1,
+            layer_size=layer_size,
         )
 
     def forward(self, bin0, M):
@@ -66,7 +69,6 @@ class VAEAutoregressor(torch.nn.Module):
         for t in range(self.n_lag):
             latent0.append(self.encoder(bin0[:, t, :]).unsqueeze(1))
         latent0 = torch.cat(latent0, dim=2)
-        # latent0 = self.encoder(bin0)
         latent0_M = torch.cat([latent0, M], dim=2)
         latent1_M = self.autoregressor(latent0_M)
         latent1 = latent1_M[:, :, :-1]
@@ -74,228 +76,270 @@ class VAEAutoregressor(torch.nn.Module):
         return bin1
 
 
-# Open dataset
-ds_all = xr.open_dataset("box64_train.nc")
-dlnr = np.diff(np.log(ds_all["mass_bin"].values)).mean()
-m_train = ds_all["dvdlnr"].sum(dim="mass_bin_idx")
-x_train = (
-    (ds_all["dvdlnr"] / m_train).transpose("run", "time", "mass_bin_idx").to_numpy()
-)
-m_scale = m_train.max()
-m_train = (m_train / m_scale).to_numpy()
-n_bins = x_train.shape[2]
+if __name__ == "__main__":
+    # Set device
+    device = torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
+    # torch.backends.cudnn.benchmark = True
+    print(f"Using {device} device")
 
-ds_test = xr.open_dataset("box64_test.nc")
-m_test = ds_test["dvdlnr"].sum(dim="mass_bin_idx")
-x_test = (
-    (ds_test["dvdlnr"] / m_test).transpose("run", "time", "mass_bin_idx").to_numpy()
-)
-m_test = (m_test / m_scale).to_numpy()
+    start_time = time.time()
+    # Open dataset
+    ds_all = xr.open_dataset("../data/box64_train.nc")
+    dlnr = np.diff(np.log(ds_all["mass_bin"].values)).mean()
+    m_train = ds_all["dvdlnr"].sum(dim="mass_bin_idx")
+    x_train = (
+        (ds_all["dvdlnr"] / m_train).transpose("run", "time", "mass_bin_idx").to_numpy()
+    )
+    m_scale = m_train.max()
+    m_train = (m_train / m_scale).to_numpy()
+    n_bins = x_train.shape[2]
+    dsd_time = (ds_all["time"] / np.timedelta64(1, "s")).to_numpy()
 
+    ds_test = xr.open_dataset("../data/box64_test.nc")
+    m_test = ds_test["dvdlnr"].sum(dim="mass_bin_idx")
+    x_test = (
+        (ds_test["dvdlnr"] / m_test).transpose("run", "time", "mass_bin_idx").to_numpy()
+    )
+    m_test = (m_test / m_scale).to_numpy()
 
-# Create torch dataset
-class NormedBinDataset1C(Dataset):
-    def __init__(self, dmdlnr_normed, M, lag=1):
-        self.nbin = dmdlnr_normed.shape[2]
-        self.lag = lag
-        self.bin0 = (
-            []
-        )  # dmdlnr_normed.astype(np.float32)[:,:-1*lag,:].reshape([-1, 1, self.nbin])
-        self.bin1 = (
-            []
-        )  # dmdlnr_normed.astype(np.float32)[:,lag:,:].reshape([-1, 1, self.nbin])
-        self.M = []  # M.astype(np.float32).reshape([-1, 1, 1])
+    train_data = du.NormedBinDatasetAR(x_train, m_train, lag=params["n_lag"])
+    train_loader = torch.utils.data.DataLoader(
+        train_data, batch_size=params["batch_size"], shuffle=True
+    )
+    # test_data = torch.utils.data.TensorDataset(test_inputs, test_outputs)
+    test_data = du.NormedBinDatasetAR(x_test, m_test, lag=params["n_lag"])
+    test_loader = torch.utils.data.DataLoader(
+        test_data, batch_size=x_test.shape[0], shuffle=True
+    )
 
-        for i in range(dmdlnr_normed.shape[1] - lag):
-            self.bin0.append(dmdlnr_normed[:, i : i + lag, :].astype(np.float32))
-            self.bin1.append(dmdlnr_normed[:, i + lag, :].astype(np.float32))
-            self.M.append(M[:, i + lag].astype(np.float32))
+    # Initialize the model
+    model = AEAutoregressor(
+        n_channels=1,
+        n_bins=n_bins,
+        n_latent=params["latent_dim"],
+        n_lag=params["n_lag"],
+        CNN=params["CNN"],
+    )
 
-        self.bin0 = np.array(self.bin0).reshape([-1, lag, self.nbin])
-        self.bin1 = np.array(self.bin1).reshape([-1, 1, self.nbin])
-        self.M = np.array(self.M).reshape([-1, 1, 1])
+    # Loss function and optimizer
+    criterion = torch.nn.MSELoss()
+    divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
+    )
+    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
+    early_stopping = training.EarlyStopping(patience=params["patience"])
 
-    def __len__(self):
-        return int(self.bin0.shape[0])
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Total number of parameters: {total_params}")
 
-    def __getitem__(self, idx):
-        return self.bin0[idx, :], self.bin1[idx, :], self.M[idx]
+    # Set up loss storage
+    losses = np.zeros(params["num_epochs"]) * np.nan
+    recon_losses = np.zeros(params["num_epochs"]) * np.nan
+    dx_losses = np.zeros(params["num_epochs"]) * np.nan
+    dz_losses = np.zeros(params["num_epochs"]) * np.nan
 
+    test_losses = np.zeros(params["num_epochs"]) * np.nan
+    test_recon_losses = np.zeros(params["num_epochs"]) * np.nan
+    test_dx_losses = np.zeros(params["num_epochs"]) * np.nan
+    test_dz_losses = np.zeros(params["num_epochs"]) * np.nan
+    best_test_loss = float("inf")
 
-# Initialize the model
-model = VAEAutoregressor(
-    n_channels=1, n_bins=n_bins, n_latent=n_latent, n_lag=n_lag, CNN=CNN
-)
+    for epoch in range(params["num_epochs"]):
+        # Train
+        epoch_start_time = time.time()
+        model.train()
+        for batch_X, batch_y, batch_M in train_loader:
+            pred_y = model(batch_X, batch_M)
+            pred_z = model.encoder(batch_X)
+            pred_z1 = model.autoregressor(
+                torch.cat(
+                    (
+                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
+                        batch_M,
+                    ),
+                    dim=2,
+                )
+            )  # note: can train AR to predict zero change in M, or just ignore M in training
+            data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
+            pred_x_recon = model.decoder(model.encoder(batch_X))
 
-# Loss function and optimizer
-criterion = torch.nn.MSELoss()
-divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
-optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
-sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-early_stopping = training.EarlyStopping(patience=20)
+            loss_dx = divergence(
+                torch.log(pred_y + params["tol"]), torch.log(batch_y + params["tol"])
+            )
+            loss_dz = criterion(pred_z1, data_z1)
+            loss_recon = divergence(
+                torch.log(pred_x_recon + params["tol"]),
+                torch.log(batch_X + params["tol"]),
+            )
 
-total_params = sum(p.numel() for p in model.parameters())
-print(f"Total number of parameters: {total_params}")
+            loss = loss_recon + params["w_dx"] * loss_dx + params["w_dz"] * loss_dz
 
-# Training loop
-# Convert data to batches
-# train_data = torch.utils.data.TensorDataset(inputs, outputs)
-train_data = NormedBinDataset1C(x_train, m_train, lag=n_lag)
-train_loader = torch.utils.data.DataLoader(
-    train_data, batch_size=batch_size, shuffle=True
-)
-# test_data = torch.utils.data.TensorDataset(test_inputs, test_outputs)
-test_data = NormedBinDataset1C(x_test, m_test, lag=n_lag)
-test_loader = torch.utils.data.DataLoader(
-    test_data, batch_size=x_test.shape[0], shuffle=True
-)
+            # Backward pass and optimization
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward(retain_graph=True)
+            optimizer.step()
 
-losses = []
-recon_losses = []
-dx_losses = []
-dz_losses = []
+        # Save train losses
+        losses[epoch] = loss.item()
+        recon_losses[epoch] = loss_recon.item()
+        dx_losses[epoch] = loss_dx.item()
+        dz_losses[epoch] = loss_dz.item()
 
-test_losses = []
-test_recon_losses = []
-test_dx_losses = []
-test_dz_losses = []
+        # test
+        model.eval()
+        for batch_X, batch_y, batch_M in test_loader:
+            # Forward pass
+            pred_y = model(batch_X, batch_M)
+            pred_z = model.encoder(batch_X)
+            pred_z1 = model.autoregressor(
+                torch.cat(
+                    (
+                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
+                        batch_M,
+                    ),
+                    dim=2,
+                )
+            )  # note: can train AR to predict zero change in M, or just ignore M in training
+            data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
+            pred_x_recon = model.decoder(model.encoder(batch_X))
 
+            loss_dx = divergence(
+                torch.log(pred_y + params["tol"]), torch.log(batch_y + params["tol"])
+            )
+            loss_dz = criterion(pred_z1, data_z1)
+            loss_recon = divergence(
+                torch.log(pred_x_recon + params["tol"]),
+                torch.log(batch_X + params["tol"]),
+            )
+            loss = params["w_dx"] * loss_dx + loss_recon + params["w_dz"] * loss_dz
 
-for epoch in range(num_epochs):
-    # train
-    model.train()
-    for batch_X, batch_y, batch_M in train_loader:
-        # Forward pass
-        pred_y = model(batch_X, batch_M)
-        pred_z = model.encoder(batch_X)
-        pred_z1 = model.autoregressor(
-            torch.cat((pred_z.reshape(-1, 1, n_latent * n_lag), batch_M), dim=2)
-        )  # note: can train AR to predict zero change in M, or just ignore M in training
-        data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
-        pred_x_recon = model.decoder(model.encoder(batch_X))
+        # Save test losses
+        test_losses[epoch] = loss.item()
+        test_recon_losses[epoch] = loss_recon.item()
+        test_dx_losses[epoch] = loss_dx.item()
+        test_dz_losses[epoch] = loss_dz.item()
 
-        loss_dx = divergence(torch.log(pred_y + tol), torch.log(batch_y + tol))
-        loss_dz = criterion(pred_z1, data_z1)
-        loss_recon = divergence(torch.log(pred_x_recon + tol), torch.log(batch_X + tol))
-        loss = w_dx * loss_dx + w_recon * loss_recon + w_dz * loss_dz
+        # Save good model
+        if loss < best_test_loss:
+            best_test_loss = loss
+            best_model = copy.deepcopy(model)
 
-        # Backward pass and optimization
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        # Update learning rate schedule
+        if params["lr_sched"]:
+            if isinstance(sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                sched.step(loss)
+            else:
+                sched.step()
 
-    losses.append(loss.item())
-    recon_losses.append(loss_recon.item())
-    dx_losses.append(loss_dx.item())
-    dz_losses.append(loss_dz.item())
+        # print progress
+        epoch_end_time = time.time()
+        if epoch % params["print_frequency"] == 0:
+            print(
+                f"Epoch [{epoch}/{params['num_epochs']}], Train Loss: {losses[epoch]:.4f} | "
+                f"Test Loss: {test_losses[epoch]:.4f} | LR: {sched.get_last_lr()}"
+                f"| Epoch Time: {epoch_end_time - epoch_start_time} s"
+            )
+            print(
+                f"Recon: {recon_losses[epoch]:.4f} | "
+                f"dx: {params['w_dx'] * dx_losses[epoch]:.4f} | "
+                f"dz: {params['w_dz'] * dz_losses[epoch]:.4f} | "
+            )
 
-    # test
-    model.eval()
-    for batch_X, batch_y, batch_M in test_loader:
-        # Forward pass
-        pred_y = model(batch_X, batch_M)
-        pred_z = model.encoder(batch_X)
-        pred_z1 = model.autoregressor(
-            torch.cat((pred_z.reshape(-1, 1, n_latent * n_lag), batch_M), dim=2)
-        )  # note: can train AR to predict zero change in M, or just ignore M in training
-        data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
-        pred_x_recon = model.decoder(model.encoder(batch_X))
-
-        loss_dx = divergence(torch.log(pred_y + tol), torch.log(batch_y + tol))
-        loss_dz = criterion(pred_z1, data_z1)
-        loss_recon = divergence(torch.log(pred_x_recon + tol), torch.log(batch_X + tol))
-        loss = w_dx * loss_dx + w_recon * loss_recon + w_dz * loss_dz
-
-    test_losses.append(loss.item())
-    test_recon_losses.append(loss_recon.item())
-    test_dx_losses.append(loss_dx.item())
-    test_dz_losses.append(loss_dz.item())
-
-    if epoch % 1 == 0:
-        print(
-            f"Epoch [{epoch}/{num_epochs}], Train Loss: {losses[-1]:.4f} |  Test Loss: {test_losses[-1]:.4f} | LR: {sched.get_last_lr()}"
-        )
-
-    if lr_sched:
-        sched.step(loss / len(test_loader))
-    if do_early_stopping:
+        # early stopping
         early_stopping(loss)
         if early_stopping.early_stop:
             print("Training stopped early.")
             break
 
-# Export/save
-output_directory = "trained_models/vae_autoregressor_normed"
-if CNN:
-    case_name = f"CNN_AdamW_L2_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
-else:
-    case_name = f"FFNN_lr{lr}_bs{batch_size}_ne{num_epochs}_" + uuid.uuid4().hex
+    # SAVE
+    best_model.eval()
+    output_directory = "../trained_models/ae_ar_normed"
+    id = uuid.uuid4().hex
+    if params["CNN"]:
+        prefix = "CNN"
+    else:
+        prefix = "FFNN"
+    case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}_{}".format(
+        params["latent_dim"],
+        params["layer_size"],
+        params["num_epochs"],
+        params["learning_rate"],
+        params["batch_size"],
+        params["w_dx"],
+        params["w_dz"],
+        id,
+    )
+    with open(output_directory + "/losses/" + case_name + ".pkl", "wb") as pickle_file:
+        pkl.dump(
+            (
+                losses,
+                recon_losses,
+                dx_losses,
+                dz_losses,
+                test_losses,
+                test_recon_losses,
+                test_dx_losses,
+                test_dz_losses,
+            ),
+            pickle_file,
+        )
+    torch.save(
+        best_model.state_dict(), output_directory + "/model/" + case_name + ".pth"
+    )
+    print(f"Saved model and losses as {case_name}")
 
-with open(output_directory + "/losses/" + case_name + ".pkl", "wb") as pickle_file:
-    pkl.dump(
-        (
-            losses,
-            recon_losses,
-            dx_losses,
-            dz_losses,
-            test_losses,
-            test_recon_losses,
-            test_dx_losses,
-            test_dz_losses,
-        ),
-        pickle_file,
+    ############### PLOTS PLOTS PLOTS ###############
+    plotting.plot_losses(
+        losses,
+        test_losses=test_losses,
+        sub_losses=[dx_losses, dz_losses, recon_losses],
+        labels=["X: t -> t+1", "Z: t -> t+1", "Recon"],
+        title=f"Training Loss, lag {params['n_lag']}",
+        saveas=output_directory + "/plots/" + case_name + "_losses.png",
     )
 
-# vae model
-torch.save(model.state_dict(), output_directory + "/model/" + case_name + ".pth")
-print(f"Saved model and losses as {case_name}")
+    # Plot distributions: reconstruction
+    r_bins_edges = ds_all["mass_bin"]
+    test_ids = [0, 20, 30, 40]
+    plotting.plot_reconstructions(
+        model,
+        test_ids,
+        x_test,
+        r_bins_edges,
+        saveas=output_directory + "/plots/" + case_name + "_reconstructions.png",
+    )
 
-############### PLOTS PLOTS PLOTS ###############
-# Plot training loss
-plotting.plot_losses(
-    losses,
-    test_losses=test_losses,
-    sub_losses=[dx_losses, dz_losses, recon_losses],
-    labels=["X: t -> t+1", "Z: t -> t+1", "Recon"],
-    title=f"Training Loss, lag {n_lag}",
-    saveas=output_directory + "/plots/" + case_name + "_losses.png",
-)
+    # Predictions: Multi time step
+    tplt = [3, 5, 8, 12]  # [0, 1, 2, 3, 5, 8, 12]
+    plotting.plot_predictions_AE_AR(
+        model,
+        test_ids,
+        tplt,
+        x_test,
+        m_test,
+        r_bins_edges,
+        # saveas=output_directory + "/plots/" + case_name + "_predictions.png",
+    )
 
-# Plot distributions: reconstruction
-r_bins_edges = ds_all["mass_bin"]
-test_ids = [0, 20, 30, 40]
-plotting.plot_reconstructions(
-    model,
-    test_ids,
-    x_test,
-    r_bins_edges,
-    saveas=output_directory + "/plots/" + case_name + "_reconstructions.png",
-)
-
-# Predictions: Multi time step
-tplt = [3, 5, 8, 12]  # [0, 1, 2, 3, 5, 8, 12]
-plotting.plot_predictions_AE_AR(
-    model,
-    test_ids,
-    tplt,
-    x_test,
-    m_test,
-    r_bins_edges,
-    saveas=output_directory + "/plots/" + case_name + "_predictions.png",
-)
-
-# Plot trajectories of the latent variables
-plotting.plot_latent_trajectories_AR(
-    n_latent,
-    model,
-    x_test,
-    m_test,
-    saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
-)
-plotting.viz_3d_latent_space(
-    model,
-    x_test,
-    ds_test["time"].to_numpy() / 1e9,
-    "trained_models/vae_autoregressor_normed/plots",
-    case_name,
-)
+    # Plot trajectories of the latent variables
+    plotting.plot_latent_trajectories_AR(
+        params["latent_dim"],
+        model,
+        x_test,
+        m_test,
+        # saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
+    )
+    plotting.viz_3d_latent_space(
+        model,
+        x_test,
+        ds_test["time"].to_numpy() / 1e9,
+        output_directory + "/plots/",
+        case_name,
+    )

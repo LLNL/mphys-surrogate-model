@@ -447,7 +447,7 @@ class Autoregressive(torch.nn.Module):
             self.activation4,
         ]
 
-        self.initialize_weights()
+        self.apply(self.init_weights)
 
     def forward(self, x):
         x = self.layer1(x)
@@ -461,34 +461,11 @@ class Autoregressive(torch.nn.Module):
 
         return x
 
-    def initialize_weights(self):
-        for layer in self.layers:
-            torch.nn.init.xavier_normal_(layer.weight)
-            torch.nn.init.normal_(layer.bias)
-
-
-class VAEAutoregressor(torch.nn.Module):
-    def __init__(self, n_channels=2, n_bins=100, n_latent=10, CNN=True):
-        super(VAEAutoregressor, self).__init__()
-
-        if CNN:
-            self.encoder = CNNEncoder(
-                n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
-            )
-            self.decoder = CNNDecoder(
-                n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
-            )
-
-        else:
-            self.encoder = FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
-            self.decoder = FFNNDecoder(n_bins=n_bins, n_latent=n_latent)
-        self.autoregressor = Autoregressive(n_bins=n_latent)
-
-    def forward(self, x):
-        latent = self.encoder(x)
-        next_latent = self.autoregressor(latent)
-        next_x = self.decoder(next_latent)
-        return next_x
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.ones_(m.weight)
+            if m.bias is not None:
+                torch.nn.init.zeros_(m.bias)
 
 
 """
