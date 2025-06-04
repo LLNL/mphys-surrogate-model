@@ -29,7 +29,7 @@ torch.backends.cudnn.benchmark = True  # Used if inputs & model are constant, dr
 print(f"Using {device} device")
 
 params["device"] = device
-params["training_epochs"] = 500
+params["training_epochs"] = 1
 params["batch_size"] = 100
 params["learning_rate"] = 5e-4
 params["latent_dim"] = 3
@@ -111,6 +111,8 @@ class NormedBinDatasetSINDy(Dataset):
             .astype(np.float32)
             / self.dt
         )
+        lambda1 = np.linalg.norm(self.x) ** 2 / np.linalg.norm(self.dx) ** 2
+        print(f"Suggested norms: {lambda1}, {lambda1 / 100}")
         self.M = M.reshape(-1, 1, 1).astype(np.float32)
 
     def __len__(self):
