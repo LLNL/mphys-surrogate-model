@@ -436,6 +436,10 @@ def create_e2e_dataloader(
 def sindy_library_tensor(z, latent_dim, poly_order):
     # not implemented for order 2 and higher terms
     library_dim = library_size(latent_dim, poly_order)
+    if len(z.shape) == 1:
+        z = z.unsqueeze(0)
+    if len(z.shape) == 2:
+        z = z.unsqueeze(1)
     new_library = torch.zeros(z.shape[0], z.shape[1], library_dim)
 
     # i = 0: constant
@@ -455,6 +459,8 @@ def sindy_library_tensor(z, latent_dim, poly_order):
                 new_library[:, :, idx] = z[:, :, i] * z[:, :, j]
                 idx += 1
 
+    if z.shape[0] == 1:
+        new_library = new_library.squeeze()
     return new_library
 
 
@@ -488,18 +494,11 @@ def first_order_dt(t, z, sindy_coeffs, poly_order, z_lim):
 
 def sindy_simulate(z0, T, sindy_coeffs, poly_order, z_lim):
     f = lambda z, t: first_order_dt(t, z, sindy_coeffs, poly_order, z_lim)
-    # f = lambda t, z : first_order_dt(t, z, sindy_coeffs, poly_order, z_lim)
-
     Z = odeint(f, z0, T)
-    # sol = solve_ivp(
-    #     fun=f, t_span=(0, T[-1]), y0=z0,
-    #     method='LSODA', t_eval=T
-    # )
-    # Z = sol.y.T
     return Z
 
 
-def bb_simulate(z0, T, dz_network, poly_order, z_lim):
+def simulate(z0, T, dz_network, z_lim):
     def f(z, t):
         n_latent = z.size
         dz = dz_network(torch.Tensor(z)).detach().numpy()

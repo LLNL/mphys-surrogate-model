@@ -254,7 +254,7 @@ def train_network_e2e_bb(
             n_bins=params["input_dim"], n_latent=params["latent_dim"]
         )
 
-    derivative_network = models.LatentSpaceDerivatives(
+    derivative_network = models.NNDerivatives(
         n_latent=params["latent_dim"], layer_size=params["layers"]
     )
 

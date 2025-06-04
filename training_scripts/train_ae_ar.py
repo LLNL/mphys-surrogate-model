@@ -42,7 +42,7 @@ class VAEAutoregressor(torch.nn.Module):
         super(VAEAutoregressor, self).__init__()
         self.n_lag = n_lag
         if CNN:
-            self.encoder = models.CNNEncoderVAE(
+            self.encoder = models.CNNEncoder(
                 n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
             )
             self.decoder = models.CNNDecoder(

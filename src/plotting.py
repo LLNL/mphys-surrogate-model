@@ -1,9 +1,15 @@
+import os
+import sys
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
 from src import data_utils as du
 import plotly.graph_objects as go
 import plotly.io as pio
+
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(project_root)
+from src import models
 
 
 def plot_losses(
@@ -174,9 +180,8 @@ def plot_latent_trajectories_AR(n_latent, model, x_test, m_test, n_lag=1, saveas
         plt.show()
 
 
-def plot_latent_trajectories_SINDy(
+def plot_latent_trajectories_dzdt(
     n_latent,
-    poly_order,
     model,
     x_test,
     m_test,
@@ -202,7 +207,6 @@ def plot_latent_trajectories_SINDy(
     zlim[-1][1] = m_train.max()
 
     # compute all else
-    sindy_coeffs = model.dzdt.sindy_coeffs.weight
     z_encoded = model.encoder(torch.Tensor(x_test)).detach().numpy()
     dz_encoded = np.gradient(z_encoded, axis=1) / dt
     for j in range(x_test.shape[0]):
@@ -216,17 +220,15 @@ def plot_latent_trajectories_SINDy(
                     torch.Tensor(m_test[j]).reshape(1, -1, 1),
                 )
                 .detach()
-                .numpy()[0]
-            )
+                .numpy()
+            ).squeeze()
             title = "dz/dt"
         else:
             latents_data = np.concatenate(
                 [z_encoded[j], m_test[j].reshape(-1, 1)], axis=-1
             )
             z0 = np.concatenate((z_encoded[j, 0, :], np.array([m_test[j, 0]])), axis=-1)
-            latents_pred = du.sindy_simulate(
-                z0, time, sindy_coeffs.float(), poly_order, zlim
-            )
+            latents_pred = du.simulate(z0, time, model.dzdt, zlim).squeeze()
             title = "Z(t)"
 
         for i in range(n_latent + 1):
@@ -238,7 +240,9 @@ def plot_latent_trajectories_SINDy(
                 color = colors[-1]
             ax[0][i].plot(time, latents_data[:, i], color=color, alpha=0.5, lw=0.5)
             ax[0][i].set_title(labeli)
-            ax[1][i].plot(time, latents_pred[:, i], color=color, alpha=0.5, lw=0.5)
+            ax[1][i].plot(
+                time, latents_pred[:, i].squeeze(), color=color, alpha=0.5, lw=0.5
+            )
             ax[1][i].set_xlabel("Elapsed time")
     for i in range(n_latent + 1):
         if not plt_dx:
@@ -255,11 +259,10 @@ def plot_latent_trajectories_SINDy(
         plt.show()
 
 
-def plot_predictions_AE_SINDy(
+def plot_predictions_dzdt(
     test_ids,
     tplt,
     n_latent,
-    poly_order,
     model,
     x_test,
     m_test,
@@ -285,14 +288,15 @@ def plot_predictions_AE_SINDy(
     zlim[-1][1] = m_train.max()
 
     # compute all else
-    sindy_coeffs = model.dzdt.sindy_coeffs.weight
     z_encoded = model.encoder(torch.Tensor(x_test)).detach().numpy()
-
     for i, id in enumerate(test_ids):
         z0 = np.concatenate((z_encoded[id, 0, :], np.array([m_test[id, 0]])), axis=-1)
-        latents_pred = du.sindy_simulate(
-            z0, tplt, sindy_coeffs.float(), poly_order, zlim
-        )
+        # if isinstance(model.dzdt, models.SINDyDeriv):
+        #     latents_pred = du.sindy_simulate(
+        #         z0, tplt, model.dzdt.sindy_coeffs.weight.float(), model.dzdt.poly_order, zlim
+        #     )
+        # elif isinstance(model.dzdt, models.NNDerivatives):
+        latents_pred = du.simulate(z0, tplt, model.dzdt, zlim)
         x_pred = model.decoder(torch.Tensor(latents_pred[:, :-1])).detach().numpy()
 
         for j, t in enumerate(tplt):

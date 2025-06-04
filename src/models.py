@@ -10,9 +10,9 @@ Convolutional NN Autoencoder; can operate on multiple channels of input (such as
 """
 
 
-class CNNEncoderVAE(torch.nn.Module):
+class CNNEncoder(torch.nn.Module):
     def __init__(self, n_channels=2, n_bins=35, n_latent=10):
-        super(CNNEncoderVAE, self).__init__()
+        super(CNNEncoder, self).__init__()
         self.n_bins = n_bins
         self.n_channels = n_channels
         self.conv1 = Conv1d(
@@ -162,7 +162,7 @@ class CNNAutoEncoder(torch.nn.Module):
     def __init__(self, n_channels=2, n_bins=100, n_latent=10):
         super(CNNAutoEncoder, self).__init__()
 
-        self.encoder = CNNEncoderVAE(
+        self.encoder = CNNEncoder(
             n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
         )
         self.decoder = CNNDecoder(
@@ -305,19 +305,11 @@ class FFNNAutoEncoder(torch.nn.Module):
         self.encoder = FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
         self.decoder = FFNNDecoder(n_bins=n_bins, n_latent=n_latent)
 
-        self.initialize_weights()
-
     def forward(self, x):
         latent = self.encoder(x)
         reconstruction = self.decoder(latent)
 
         return reconstruction
-
-    def initialize_weights(self):
-        for network in (self.encoder, self.decoder):
-            for layer in network.layers:
-                torch.nn.init.kaiming_uniform_(layer.weight, nonlinearity="relu")
-                torch.nn.init.uniform_(layer.bias)
 
 
 """
@@ -338,8 +330,11 @@ class SINDyDeriv(torch.nn.Module):
 
         self.apply(self.init_weights)
 
-    def forward(self, z, M):
-        latent = torch.cat([z, M], dim=-1)
+    def forward(self, z, M=None):
+        if M is not None:
+            latent = torch.cat([z, M], dim=-1)
+        else:
+            latent = z
         library = du.sindy_library_tensor(latent, self.n_latent, self.poly_order)
         dldt = self.sindy_coeffs(library)
         return dldt
@@ -356,9 +351,9 @@ Black-box network for predicting time derivatives
 """
 
 
-class LatentSpaceDerivatives(torch.nn.Module):
+class NNDerivatives(torch.nn.Module):
     def __init__(self, n_latent=3, layer_size=None):
-        super(LatentSpaceDerivatives, self).__init__()
+        super(NNDerivatives, self).__init__()
         self.n_latent = n_latent
         if layer_size is None:
             layer_size = (n_latent, n_latent, n_latent)
@@ -382,10 +377,13 @@ class LatentSpaceDerivatives(torch.nn.Module):
             self.activation4,
         ]
 
-        self.initialize_weights()
+        self.apply(self.init_weights)
 
-    def forward(self, z, M):
-        x = torch.cat([z, M], dim=-1)
+    def forward(self, z, M=None):
+        if M is not None:
+            x = torch.cat([z, M], dim=-1)
+        else:
+            x = z
         x = self.layer1(x)
         x = self.activation1(x)
         x = self.layer2(x)
@@ -411,10 +409,11 @@ class LatentSpaceDerivatives(torch.nn.Module):
             layer.weight.data = weights[i]
             layer.bias.data = biases[i]
 
-    def initialize_weights(self):
-        for layer in self.layers:
-            torch.nn.init.kaiming_uniform_(layer.weight, nonlinearity="relu")
-            torch.nn.init.uniform_(layer.bias)
+    def init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            if m.bias is not None:
+                torch.nn.init.zeros_(m.bias)
 
 
 """
@@ -473,7 +472,7 @@ class VAEAutoregressor(torch.nn.Module):
         super(VAEAutoregressor, self).__init__()
 
         if CNN:
-            self.encoder = CNNEncoderVAE(
+            self.encoder = CNNEncoder(
                 n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
             )
             self.decoder = CNNDecoder(
