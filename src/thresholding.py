@@ -76,12 +76,8 @@ class AdaptiveThresholdAnalyzer:
 
         if self.method == "bimodal_gmm":
             return self._gmm_threshold(coeffs_nonzero, analysis)
-        elif self.method == "percentile_gap":
-            return self._percentile_gap_threshold(coeffs_nonzero, analysis)
         elif self.method == "knee_detection":
             return self._knee_detection_threshold(coeffs_nonzero, analysis)
-        elif self.method == "statistical_outlier":
-            return self._statistical_outlier_threshold(coeffs_nonzero, analysis)
         else:
             raise ValueError(f"Unknown thresholding method: {self.method}")
 
@@ -121,44 +117,6 @@ class AdaptiveThresholdAnalyzer:
 
         return None, analysis
 
-    def _percentile_gap_threshold(self, coeffs, analysis):
-        """Find largest gap in coefficient distribution"""
-        sorted_coeffs = np.sort(coeffs)
-
-        # Compute gaps between adjacent coefficients (in log space for better scaling)
-        log_coeffs = np.log10(sorted_coeffs + 1e-12)
-        gaps = np.diff(log_coeffs)
-
-        # Find percentiles to avoid outliers
-        percentiles = np.linspace(10, 90, 81)
-        gap_percentiles = []
-
-        for p in percentiles:
-            idx = int(len(gaps) * p / 100)
-            if idx < len(gaps):
-                gap_percentiles.append(gaps[idx])
-
-        # Find largest gap
-        max_gap_idx = np.argmax(gaps)
-        max_gap = gaps[max_gap_idx]
-        median_gap = np.median(gaps)
-
-        analysis.update(
-            {
-                "max_gap": max_gap,
-                "median_gap": median_gap,
-                "gap_ratio": max_gap / (median_gap + 1e-12),
-            }
-        )
-
-        # Threshold if gap is significantly larger than typical
-        if max_gap > 3 * median_gap and max_gap > 0.5:
-            threshold = sorted_coeffs[max_gap_idx]
-            analysis["threshold_method"] = "percentile_gap"
-            return threshold, analysis
-
-        return None, analysis
-
     def _knee_detection_threshold(self, coeffs, analysis):
         """Detect knee/elbow in sorted coefficient curve"""
         sorted_coeffs = np.sort(coeffs)[::-1]  # Descending order
@@ -189,39 +147,6 @@ class AdaptiveThresholdAnalyzer:
                     "knee_idx": knee_idx,
                     "knee_value": threshold,
                     "threshold_method": "knee_detection",
-                }
-            )
-            return threshold, analysis
-
-        return None, analysis
-
-    def _statistical_outlier_threshold(self, coeffs, analysis):
-        """Use statistical tests to identify noise vs signal"""
-        log_coeffs = np.log10(coeffs + 1e-12)
-
-        # Compute statistics
-        mean_log = np.mean(log_coeffs)
-        std_log = np.std(log_coeffs)
-
-        # Use modified Z-score with median for robustness
-        median_log = np.median(log_coeffs)
-        mad = np.median(np.abs(log_coeffs - median_log))  # Median Absolute Deviation
-        modified_z_scores = 0.6745 * (log_coeffs - median_log) / (mad + 1e-12)
-
-        # Threshold based on statistical significance
-        # Coefficients with |modified_z_score| < 2 might be noise
-        noise_mask = np.abs(modified_z_scores) < 2.0
-
-        if np.sum(noise_mask) > 0.1 * len(coeffs):  # At least 10% identified as noise
-            threshold = np.max(coeffs[noise_mask])
-            analysis.update(
-                {
-                    "mean_log": mean_log,
-                    "std_log": std_log,
-                    "median_log": median_log,
-                    "mad": mad,
-                    "noise_fraction": np.sum(noise_mask) / len(coeffs),
-                    "threshold_method": "statistical_outlier",
                 }
             )
             return threshold, analysis

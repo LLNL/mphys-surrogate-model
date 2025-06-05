@@ -28,7 +28,7 @@ params = {
     "lambda1_factor": 0.5,
     "CNN": False,
     "print_frequency": 1,
-    "sequential_threshold_method": "bimdoal_gmm",  # None, bimodal_gmm, percentile_gap, knee_detection, statistical_outlier
+    "sequential_threshold_method": "bimdoal_gmm",  # None, bimodal_gmm, knee_detection
     "sequential_thresholding_interval": 10,  # None
 }
 
