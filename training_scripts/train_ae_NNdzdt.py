@@ -15,8 +15,8 @@ from src import data_utils as du, models, training, plotting
 from torch.utils.data import DataLoader
 
 params = {
-    "random_seed": 1,
-    "num_epochs": 10,
+    "random_seed": 10,
+    "num_epochs": 20,
     "batch_size": 128,
     "learning_rate": 1e-3,
     "latent_dim": 3,
@@ -327,6 +327,7 @@ if __name__ == "__main__":
         tplt,
         params["latent_dim"],
         model,
+        dsd_time,
         x_test,
         m_test,
         x_train,

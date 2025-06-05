@@ -470,7 +470,7 @@ class Autoregressive(torch.nn.Module):
 
     def init_weights(self, m):
         if isinstance(m, nn.Linear):
-            torch.nn.init.ones_(m.weight)
+            torch.nn.init.xavier_uniform_(m.weight)
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias)
 

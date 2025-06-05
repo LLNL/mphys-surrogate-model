@@ -15,8 +15,8 @@ from src import data_utils as du, models, training, plotting
 from torch.utils.data import DataLoader
 
 params = {
-    "random_seed": 1,
-    "num_epochs": 10,
+    "random_seed": 10,
+    "num_epochs": 30,
     "batch_size": 128,
     "learning_rate": 1e-3,
     "latent_dim": 3,
@@ -28,7 +28,6 @@ params = {
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "lambda1_factor": 0.5,
     "layer_size": (20, 20, 10),
     "CNN": False,
     "print_frequency": 1,
@@ -299,7 +298,11 @@ if __name__ == "__main__":
     plotting.plot_losses(
         losses,
         test_losses=test_losses,
-        sub_losses=[dx_losses, dz_losses, recon_losses],
+        sub_losses=[
+            params["w_dx"] * dx_losses,
+            params["w_dz"] * dz_losses,
+            params["w_recon"] * recon_losses,
+        ],
         labels=["X: t -> t+1", "Z: t -> t+1", "Recon"],
         title=f"Training Loss, lag {params['n_lag']}",
         saveas=output_directory + "/plots/" + case_name + "_losses.png",
@@ -307,7 +310,7 @@ if __name__ == "__main__":
 
     # Plot distributions: reconstruction
     r_bins_edges = ds_all["mass_bin"]
-    test_ids = [0, 20, 30, 40]
+    test_ids = [0, 10, 20, 25]
     plotting.plot_reconstructions(
         model,
         test_ids,
