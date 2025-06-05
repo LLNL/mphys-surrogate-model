@@ -20,13 +20,12 @@ params = {
     "batch_size": 128,
     "learning_rate": 1e-3,
     "latent_dim": 3,
-    "poly_order": 3,
     "lr_sched": True,
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
     "lambda1_factor": 0.5,
-    # "lambda3_sparsity": 0.0, TODO: sequential thresholding
+    "layer_size": (20, 20, 10),
     "CNN": False,
     "print_frequency": 1,
 }
@@ -35,10 +34,12 @@ torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
 
 
-class AESINDy(torch.nn.Module):
-    def __init__(self, n_channels=1, n_bins=100, n_latent=10, poly_order=2, CNN=False):
-        super(AESINDy, self).__init__()
-        self.poly_order = poly_order
+class AENNdzdt(torch.nn.Module):
+    def __init__(
+        self, n_channels=1, n_bins=100, n_latent=10, layer_size=(10, 10, 10), CNN=False
+    ):
+        super(AENNdzdt, self).__init__()
+        self.layer_size = layer_size
 
         if CNN:
             self.encoder = models.CNNEncoder(
@@ -57,7 +58,9 @@ class AESINDy(torch.nn.Module):
             self.decoder = models.FFNNDecoder(
                 n_bins=n_bins, n_latent=n_latent, distribution=True
             )
-        self.dzdt = models.SINDyDeriv(n_latent=n_latent + 1, poly_order=poly_order)
+        self.dzdt = models.NNDerivatives(
+            n_latent=n_latent + 1, layer_size=self.layer_size
+        )
 
     def forward(self, bin0, M):
         z0 = self.encoder(bin0)
@@ -104,11 +107,11 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_data, batch_size=x_test.shape[0], shuffle=True)
 
     # Initialize the model
-    model = AESINDy(
+    model = AENNdzdt(
         n_channels=1,
         n_bins=n_bins,
         n_latent=params["latent_dim"],
-        poly_order=params["poly_order"],
+        layer_size=params["layer_size"],
         CNN=params["CNN"],
     )
 
@@ -130,8 +133,7 @@ if __name__ == "__main__":
     xxl2 = np.linalg.norm(xx, ord=2, axis=1) ** 2
     dxl2 = np.linalg.norm(dx, ord=2, axis=1) ** 2
     lambda1 = xxl2.sum() / dxl2.sum() * params["lambda1_factor"]
-    lambda2 = lambda1 / 1e2  # 2 orders of magnitude smaller
-    print(f"lambda: 1.0, {lambda1}, {lambda2}")
+    lambda2 = lambda1 / 100  # 2 orders of magnitude smaller
     params["loss_weight_recon"] = 1.0
     params["loss_weight_sindy_x"] = lambda1
     params["loss_weight_sindy_z"] = lambda2
@@ -249,15 +251,15 @@ if __name__ == "__main__":
 
     # SAVE
     best_model.eval()
-    output_directory = "../trained_models/ae_sindy_normed"
+    output_directory = "../trained_models/ae_bb_normed"
     id = uuid.uuid4().hex
     if params["CNN"]:
         prefix = "CNN"
     else:
         prefix = "FFNN"
-    case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}-{}_{}".format(
+    case_name = prefix + "_latent{}_layers{}_tr{}_lr{}_bs{}_weights{}-{}-{}_{}".format(
         params["latent_dim"],
-        params["poly_order"],
+        params["layer_size"],
         params["num_epochs"],
         params["learning_rate"],
         params["batch_size"],

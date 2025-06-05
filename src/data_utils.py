@@ -5,6 +5,55 @@ import torch
 import random
 from scipy.special import binom
 from scipy.integrate import odeint, solve_ivp
+from itertools import combinations_with_replacement
+
+
+# Create torch dataset
+class NormedBinDatasetDzDt(Dataset):
+    def __init__(self, dmdlnr_normed, dsd_time, M):
+        self.nbin = dmdlnr_normed.shape[2]
+        self.t = dsd_time
+        self.dt = self.t[1] - self.t[0]
+        self.x = dmdlnr_normed.reshape(-1, 1, self.nbin).astype(np.float32)
+        self.dx = np.gradient(dmdlnr_normed, axis=1).reshape(-1, 1, self.nbin).astype(
+            np.float32
+        ) / self.dt.astype(np.float32)
+        self.M = M.reshape(-1, 1, 1).astype(np.float32)
+
+    def __len__(self):
+        return int(self.x.shape[0])
+
+    def __getitem__(self, idx):
+        return self.x[idx, :], self.dx[idx, :], self.M[idx]
+
+
+# Create torch dataset
+class NormedBinDatasetAR(Dataset):
+    def __init__(self, dmdlnr_normed, M, lag=1):
+        self.nbin = dmdlnr_normed.shape[2]
+        self.lag = lag
+        self.bin0 = (
+            []
+        )  # dmdlnr_normed.astype(np.float32)[:,:-1*lag,:].reshape([-1, 1, self.nbin])
+        self.bin1 = (
+            []
+        )  # dmdlnr_normed.astype(np.float32)[:,lag:,:].reshape([-1, 1, self.nbin])
+        self.M = []  # M.astype(np.float32).reshape([-1, 1, 1])
+
+        for i in range(dmdlnr_normed.shape[1] - lag):
+            self.bin0.append(dmdlnr_normed[:, i : i + lag, :].astype(np.float32))
+            self.bin1.append(dmdlnr_normed[:, i + lag, :].astype(np.float32))
+            self.M.append(M[:, i + lag].astype(np.float32))
+
+        self.bin0 = np.array(self.bin0).reshape([-1, lag, self.nbin])
+        self.bin1 = np.array(self.bin1).reshape([-1, 1, self.nbin])
+        self.M = np.array(self.M).reshape([-1, 1, 1])
+
+    def __len__(self):
+        return int(self.bin0.shape[0])
+
+    def __getitem__(self, idx):
+        return self.bin0[idx, :], self.bin1[idx, :], self.M[idx]
 
 
 # Utilities for training CNN on 1-channel and 2-channel data from 1d KiD runs
@@ -413,12 +462,15 @@ def create_e2e_dataloader(
 
 
 def sindy_library_tensor(z, latent_dim, poly_order):
-    # not implemented for order 2 and higher terms
     library_dim = library_size(latent_dim, poly_order)
+    if len(z.shape) == 1:
+        z = z.unsqueeze(0)
+    if len(z.shape) == 2:
+        z = z.unsqueeze(1)
     new_library = torch.zeros(z.shape[0], z.shape[1], library_dim)
 
-    idx = 0
     # i = 0: constant
+    idx = 0
     new_library[:, :, idx] = 1.0
 
     idx += 1
@@ -434,6 +486,17 @@ def sindy_library_tensor(z, latent_dim, poly_order):
                 new_library[:, :, idx] = z[:, :, i] * z[:, :, j]
                 idx += 1
 
+    # third order+
+    for order in range(3, poly_order + 1):
+        for idxs in combinations_with_replacement(range(latent_dim), order):
+            term = z[:, :, idxs[0]]
+            for i in idxs[1:]:
+                term = term * z[:, :, i]
+            new_library[:, :, idx] = term
+            idx += 1
+
+    if z.shape[0] == 1:
+        new_library = new_library.squeeze()
     return new_library
 
 
@@ -445,7 +508,7 @@ def library_size(n, poly_order):
 
 
 """
-SINDy solutions
+ODE solutions
 """
 
 
@@ -467,18 +530,11 @@ def first_order_dt(t, z, sindy_coeffs, poly_order, z_lim):
 
 def sindy_simulate(z0, T, sindy_coeffs, poly_order, z_lim):
     f = lambda z, t: first_order_dt(t, z, sindy_coeffs, poly_order, z_lim)
-    # f = lambda t, z : first_order_dt(t, z, sindy_coeffs, poly_order, z_lim)
-
     Z = odeint(f, z0, T)
-    # sol = solve_ivp(
-    #     fun=f, t_span=(0, T[-1]), y0=z0,
-    #     method='LSODA', t_eval=T
-    # )
-    # Z = sol.y.T
     return Z
 
 
-def bb_simulate(z0, T, dz_network, poly_order, z_lim):
+def simulate(z0, T, dz_network, z_lim):
     def f(z, t):
         n_latent = z.size
         dz = dz_network(torch.Tensor(z)).detach().numpy()
