@@ -5,6 +5,7 @@ import torch
 import random
 from scipy.special import binom
 from scipy.integrate import odeint, solve_ivp
+from itertools import combinations_with_replacement
 
 
 # Create torch dataset
@@ -17,8 +18,6 @@ class NormedBinDatasetDzDt(Dataset):
         self.dx = np.gradient(dmdlnr_normed, axis=1).reshape(-1, 1, self.nbin).astype(
             np.float32
         ) / self.dt.astype(np.float32)
-        lambda1 = np.linalg.norm(self.x) ** 2 / np.linalg.norm(self.dx) ** 2
-        print(f"Suggested norms: {lambda1}, {lambda1 / 100}")
         self.M = M.reshape(-1, 1, 1).astype(np.float32)
 
     def __len__(self):
@@ -463,7 +462,6 @@ def create_e2e_dataloader(
 
 
 def sindy_library_tensor(z, latent_dim, poly_order):
-    # not implemented for order 2 and higher terms
     library_dim = library_size(latent_dim, poly_order)
     if len(z.shape) == 1:
         z = z.unsqueeze(0)
@@ -487,6 +485,15 @@ def sindy_library_tensor(z, latent_dim, poly_order):
             for j in range(i, latent_dim):
                 new_library[:, :, idx] = z[:, :, i] * z[:, :, j]
                 idx += 1
+
+    # third order+
+    for order in range(3, poly_order + 1):
+        for idxs in combinations_with_replacement(range(latent_dim), order):
+            term = z[:, :, idxs[0]]
+            for i in idxs[1:]:
+                term = term * z[:, :, i]
+            new_library[:, :, idx] = term
+            idx += 1
 
     if z.shape[0] == 1:
         new_library = new_library.squeeze()

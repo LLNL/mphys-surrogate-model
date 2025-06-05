@@ -244,10 +244,10 @@ def plot_latent_trajectories_dzdt(
                 time, latents_pred[:, i].squeeze(), color=color, alpha=0.5, lw=0.5
             )
             ax[1][i].set_xlabel("Elapsed time")
-    for i in range(n_latent + 1):
-        if not plt_dx:
-            ax[0][i].set_ylim([zlim[i][0], zlim[i][1]])
-            ax[1][i].set_ylim([zlim[i][0], zlim[i][1]])
+    # for i in range(n_latent + 1):
+    #     if not plt_dx:
+    #         ax[0][i].set_ylim([zlim[i][0], zlim[i][1]])
+    #         ax[1][i].set_ylim([zlim[i][0], zlim[i][1]])
 
     ax[0][0].set_ylabel("Data")
     ax[1][0].set_ylabel("Prediction")
@@ -264,6 +264,7 @@ def plot_predictions_dzdt(
     tplt,
     n_latent,
     model,
+    dsd_time,
     x_test,
     m_test,
     x_train,
@@ -296,7 +297,7 @@ def plot_predictions_dzdt(
         #         z0, tplt, model.dzdt.sindy_coeffs.weight.float(), model.dzdt.poly_order, zlim
         #     )
         # elif isinstance(model.dzdt, models.NNDerivatives):
-        latents_pred = du.simulate(z0, tplt, model.dzdt, zlim)
+        latents_pred = du.simulate(z0, dsd_time[tplt], model.dzdt, zlim)
         x_pred = model.decoder(torch.Tensor(latents_pred[:, :-1])).detach().numpy()
 
         for j, t in enumerate(tplt):
