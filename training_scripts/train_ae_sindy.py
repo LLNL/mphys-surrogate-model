@@ -16,19 +16,20 @@ from torch.utils.data import DataLoader
 
 params = {
     "random_seed": 10,
-    "num_epochs": 20,
+    "num_epochs": 30,
     "batch_size": 128,
     "learning_rate": 1e-3,
     "latent_dim": 3,
-    "poly_order": 3,
+    "poly_order": 2,
     "lr_sched": True,
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
     "lambda1_factor": 0.5,
-    # "lambda3_sparsity": 0.0, TODO: sequential thresholding
     "CNN": False,
     "print_frequency": 1,
+    "sequential_thresholding_interval": 10,  # None
+    "sequential_thresholding_min": 0.01,  # None
 }
 
 torch.manual_seed(params["random_seed"])
@@ -36,7 +37,15 @@ np.random.seed(params["random_seed"])
 
 
 class AESINDy(torch.nn.Module):
-    def __init__(self, n_channels=1, n_bins=100, n_latent=10, poly_order=2, CNN=False):
+    def __init__(
+        self,
+        n_channels=1,
+        n_bins=100,
+        n_latent=10,
+        poly_order=2,
+        CNN=False,
+        sequential_thresholding=False,
+    ):
         super(AESINDy, self).__init__()
         self.poly_order = poly_order
 
@@ -57,7 +66,11 @@ class AESINDy(torch.nn.Module):
             self.decoder = models.FFNNDecoder(
                 n_bins=n_bins, n_latent=n_latent, distribution=True
             )
-        self.dzdt = models.SINDyDeriv(n_latent=n_latent + 1, poly_order=poly_order)
+        self.dzdt = models.SINDyDeriv(
+            n_latent=n_latent + 1,
+            poly_order=poly_order,
+            use_thresholds=sequential_thresholding,
+        )
 
     def forward(self, bin0, M):
         z0 = self.encoder(bin0)
@@ -110,6 +123,9 @@ if __name__ == "__main__":
         n_latent=params["latent_dim"],
         poly_order=params["poly_order"],
         CNN=params["CNN"],
+        sequential_thresholding=True
+        if params["sequential_thresholding_interval"] is not None
+        else False,
     )
 
     # Loss function and optimizer
@@ -149,6 +165,18 @@ if __name__ == "__main__":
     best_test_loss = float("inf")
 
     for epoch in range(params["num_epochs"]):
+        # sequential thresholding
+        if params["sequential_thresholding_interval"] is not None:
+            if epoch >= 1 and epoch % params["sequential_thresholding_interval"] == 0:
+                model.eval()
+                coeffs = model.dzdt.sindy_coeffs.weight.data
+                current_mask = model.dzdt.thresholds
+                mask = torch.abs(coeffs) >= params["sequential_thresholding_min"]
+                new_mask = torch.mul(mask, current_mask)
+                model.dzdt.thresholds = new_mask
+                n_active = np.sum(new_mask.cpu().numpy())
+                print(f"Active coeffs = {n_active}")
+
         # Train
         epoch_start_time = time.time()
         model.train()

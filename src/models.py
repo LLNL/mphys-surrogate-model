@@ -318,7 +318,7 @@ Pseudo-SINDy network for time derivatives
 
 
 class SINDyDeriv(torch.nn.Module):
-    def __init__(self, n_latent=10, poly_order=2):
+    def __init__(self, n_latent=10, poly_order=2, use_thresholds=False):
         super(SINDyDeriv, self).__init__()
         self.library_size = du.library_size(n_latent, poly_order)
         self.n_latent = n_latent
@@ -327,6 +327,9 @@ class SINDyDeriv(torch.nn.Module):
         self.sindy_coeffs = torch.nn.Linear(
             self.library_size, self.n_latent, bias=False
         )
+        self.use_thresholds = use_thresholds
+        if use_thresholds:
+            self.thresholds = torch.ones_like(self.sindy_coeffs.weight.data, dtype=bool)
 
         self.apply(self.init_weights)
 
@@ -336,6 +339,10 @@ class SINDyDeriv(torch.nn.Module):
         else:
             latent = z
         library = du.sindy_library_tensor(latent, self.n_latent, self.poly_order)
+        if self.use_thresholds:
+            self.sindy_coeffs.weight.data = (
+                self.sindy_coeffs.weight.data * self.thresholds
+            )
         dldt = self.sindy_coeffs(library)
         return dldt
 
