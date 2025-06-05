@@ -13,6 +13,8 @@ import pickle as pkl
 import uuid
 from src import data_utils as du, models, training, plotting
 from torch.utils.data import DataLoader
+import seaborn as sns
+from matplotlib import pyplot as plt
 
 params = {
     "random_seed": 10,
@@ -28,8 +30,9 @@ params = {
     "lambda1_factor": 0.5,
     "CNN": False,
     "print_frequency": 1,
-    "sequential_thresholding_interval": 10,  # None
-    "sequential_thresholding_min": 0.01,  # None
+    "sequential_threshold_method": "Base",  # Base, Outlier, ...
+    "sequential_thresholding_interval": 5,  # None
+    "sequential_thresholding_min": None,  # None
 }
 
 torch.manual_seed(params["random_seed"])
@@ -168,14 +171,17 @@ if __name__ == "__main__":
         # sequential thresholding
         if params["sequential_thresholding_interval"] is not None:
             if epoch >= 1 and epoch % params["sequential_thresholding_interval"] == 0:
-                model.eval()
                 coeffs = model.dzdt.sindy_coeffs.weight.data
-                current_mask = model.dzdt.thresholds
-                mask = torch.abs(coeffs) >= params["sequential_thresholding_min"]
-                new_mask = torch.mul(mask, current_mask)
-                model.dzdt.thresholds = new_mask
-                n_active = np.sum(new_mask.cpu().numpy())
-                print(f"Active coeffs = {n_active}")
+                if params["sequential_thresholding_min"] is not None:
+                    model.eval()
+                    current_mask = model.dzdt.thresholds
+                    mask = torch.abs(coeffs) >= params["sequential_thresholding_min"]
+                    new_mask = torch.mul(mask, current_mask)
+                    model.dzdt.thresholds = new_mask
+                    n_active = np.sum(new_mask.cpu().numpy())
+                    print(f"Active coeffs = {n_active}")
+                sns.histplot(np.abs(coeffs.flatten()), label=f"Epoch {epoch}")
+                # sns.histplot(np.abs((coeffs * model.dzdt.thresholds).flatten()))
 
         # Train
         epoch_start_time = time.time()
@@ -274,6 +280,10 @@ if __name__ == "__main__":
         if early_stopping.early_stop:
             print("Training stopped early.")
             break
+
+    plt.legend()
+    plt.title(f"SINDy Coefficients")
+    plt.show()
 
     # SAVE
     best_model.eval()
