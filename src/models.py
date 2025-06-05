@@ -329,7 +329,7 @@ class SINDyDeriv(torch.nn.Module):
         )
         self.use_thresholds = use_thresholds
         if use_thresholds:
-            self.thresholds = torch.ones_like(self.sindy_coeffs.weight.data, dtype=bool)
+            self.mask = torch.ones_like(self.sindy_coeffs.weight.data, dtype=bool)
 
         self.apply(self.init_weights)
 
@@ -340,9 +340,7 @@ class SINDyDeriv(torch.nn.Module):
             latent = z
         library = du.sindy_library_tensor(latent, self.n_latent, self.poly_order)
         if self.use_thresholds:
-            self.sindy_coeffs.weight.data = (
-                self.sindy_coeffs.weight.data * self.thresholds
-            )
+            self.sindy_coeffs.weight.data = self.sindy_coeffs.weight.data * self.mask
         dldt = self.sindy_coeffs(library)
         return dldt
 
@@ -351,6 +349,13 @@ class SINDyDeriv(torch.nn.Module):
             torch.nn.init.zeros_(m.weight)
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias)
+
+    def get_coeffs(self):
+        return self.sindy_coeffs.weight.data * self.mask
+
+    def update_mask(self, new_mask):
+        self.mask = self.mask * new_mask
+        self.sindy_coeffs.weight.data = self.mask * self.sindy_coeffs.weight.data
 
 
 """

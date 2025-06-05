@@ -11,10 +11,8 @@ import xarray as xr
 import torch
 import pickle as pkl
 import uuid
-from src import data_utils as du, models, training, plotting
+from src import data_utils as du, models, training, plotting, thresholding
 from torch.utils.data import DataLoader
-import seaborn as sns
-from matplotlib import pyplot as plt
 
 params = {
     "random_seed": 10,
@@ -22,7 +20,7 @@ params = {
     "batch_size": 128,
     "learning_rate": 1e-3,
     "latent_dim": 3,
-    "poly_order": 2,
+    "poly_order": 3,
     "lr_sched": True,
     "patience": 50,
     "tol": 1e-8,
@@ -30,9 +28,8 @@ params = {
     "lambda1_factor": 0.5,
     "CNN": False,
     "print_frequency": 1,
-    "sequential_threshold_method": "Base",  # Base, Outlier, ...
-    "sequential_thresholding_interval": 5,  # None
-    "sequential_thresholding_min": None,  # None
+    "sequential_threshold_method": "bimdoal_gmm",  # None, bimodal_gmm, percentile_gap, knee_detection, statistical_outlier
+    "sequential_thresholding_interval": 10,  # None
 }
 
 torch.manual_seed(params["random_seed"])
@@ -137,11 +134,22 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
     )
+    if params["sequential_threshold_method"] is not None:
+        thresholder = thresholding.AdaptiveSequentialThresholdingSINDy(
+            model.dzdt,
+            thresholding.AdaptiveThresholdAnalyzer(
+                method=params["sequential_threshold_method"],
+                min_epochs_between=params["sequential_thresholding_interval"],
+            ),
+        )
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
     early_stopping = training.EarlyStopping(patience=params["patience"])
 
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Total number of parameters: {total_params}")
+    total_coeffs = sum(p.numel() for p in model.dzdt.parameters())
+    print(
+        f"Total number of parameters: {total_params}, {total_coeffs} are SINDy coefficients"
+    )
 
     # Compute & set weights based on Champion et al recs
     xx = np.squeeze(train_data.x)
@@ -160,6 +168,7 @@ if __name__ == "__main__":
     recon_losses = np.zeros(params["num_epochs"]) * np.nan
     dx_losses = np.zeros(params["num_epochs"]) * np.nan
     dz_losses = np.zeros(params["num_epochs"]) * np.nan
+    threshold_events = []
 
     test_losses = np.zeros(params["num_epochs"]) * np.nan
     test_recon_losses = np.zeros(params["num_epochs"]) * np.nan
@@ -168,21 +177,6 @@ if __name__ == "__main__":
     best_test_loss = float("inf")
 
     for epoch in range(params["num_epochs"]):
-        # sequential thresholding
-        if params["sequential_thresholding_interval"] is not None:
-            if epoch >= 1 and epoch % params["sequential_thresholding_interval"] == 0:
-                coeffs = model.dzdt.sindy_coeffs.weight.data
-                if params["sequential_thresholding_min"] is not None:
-                    model.eval()
-                    current_mask = model.dzdt.thresholds
-                    mask = torch.abs(coeffs) >= params["sequential_thresholding_min"]
-                    new_mask = torch.mul(mask, current_mask)
-                    model.dzdt.thresholds = new_mask
-                    n_active = np.sum(new_mask.cpu().numpy())
-                    print(f"Active coeffs = {n_active}")
-                sns.histplot(np.abs(coeffs.flatten()), label=f"Epoch {epoch}")
-                # sns.histplot(np.abs((coeffs * model.dzdt.thresholds).flatten()))
-
         # Train
         epoch_start_time = time.time()
         model.train()
@@ -212,6 +206,26 @@ if __name__ == "__main__":
             optimizer.zero_grad(set_to_none=True)
             loss.backward(retain_graph=True)
             optimizer.step()
+
+        # Check for adaptive thresholding
+        if params["sequential_threshold_method"] is not None:
+            (
+                thresholded,
+                threshold,
+                n_active,
+                analysis,
+            ) = thresholder.maybe_apply_threshold(epoch, loss.item())
+        else:
+            thresholded = False
+
+        if thresholded:
+            print(
+                f"Epoch {epoch}: Applied {analysis.get('threshold_method', 'unknown')} "
+                f"thresholding with threshold={threshold:.6f}, "
+                f"active coefficients={n_active} / {total_coeffs}"
+            )
+            threshold_events.append(epoch)
+            coeffs = model.dzdt.get_coeffs()
 
         # Save train losses
         losses[epoch] = loss.item()
@@ -280,10 +294,6 @@ if __name__ == "__main__":
         if early_stopping.early_stop:
             print("Training stopped early.")
             break
-
-    plt.legend()
-    plt.title(f"SINDy Coefficients")
-    plt.show()
 
     # SAVE
     best_model.eval()
