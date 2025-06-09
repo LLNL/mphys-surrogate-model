@@ -337,9 +337,18 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------------------------------------------------------
     # Save and plot
     # ------------------------------------------------------------------------------------------------------------------
+    # Set up result specific directory
     best_model.eval()
-    output_directory = "../trained_models/ae_ar_normed"
-    id = uuid.uuid4().hex
+    tpsp_out_dir = Path("../trained_models/ae_ar_normed")
+    id = str(uuid.uuid4().hex)
+    if not tpsp_out_dir.exists():
+        tpsp_out_dir.mkdir(parents=True, exist_ok=True)
+    if not (tpsp_loss_dir := tpsp_out_dir / "losses").exists():
+        tpsp_loss_dir.mkdir(parents=True, exist_ok=True)
+    if not (tpsp_mod_dir := tpsp_out_dir / "models").exists():
+        tpsp_mod_dir.mkdir(parents=True, exist_ok=True)
+    if not (tpsp_plot_dir := tpsp_out_dir / "plots").exists():
+        tpsp_plot_dir.mkdir(parents=True, exist_ok=True)
     case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}_{}".format(
         params["latent_dim"],
         params["layer_size"],
@@ -350,7 +359,9 @@ if __name__ == "__main__":
         params["w_dz"],
         id,
     )
-    with open(output_directory + "/losses/" + case_name + ".pkl", "wb") as pickle_file:
+
+    # Save losses
+    with open(tpsp_loss_dir / (case_name + ".pkl"), "wb") as pickle_file:
         pkl.dump(
             (
                 losses,
@@ -366,13 +377,11 @@ if __name__ == "__main__":
         )
 
     # Save model
-    torch.save(
-        best_model.state_dict(), output_directory + "/model/" + case_name + ".pth"
-    )
+    torch.save(best_model.state_dict(), tpsp_mod_dir / (case_name + ".pth"))
     print(f"Saved model and losses as {case_name}")
 
     # Loss plot
-    plotting.plot_losses(
+    fig = plotting.plot_losses(
         losses,
         test_losses=test_losses,
         sub_losses=[
@@ -382,43 +391,44 @@ if __name__ == "__main__":
         ],
         labels=["X: t -> t+1", "Z: t -> t+1", "Recon"],
         title=f"Training Loss, lag {params['n_lag']}",
-        saveas=output_directory + "/plots/" + case_name + "_losses.png",
+        saveas=tpsp_plot_dir / (case_name + "_losses.png"),
     )
 
     # Plot distributions: reconstruction
-    plotting.plot_reconstructions(
+    fig = plotting.plot_reconstructions(
         model,
         test_ids,
         x_test,
         r_bins_edges,
-        saveas=output_directory + "/plots/" + case_name + "_reconstructions.png",
+        saveas=tpsp_plot_dir / (case_name + "_reconstructions.png"),
     )
 
-    # Predictions: Multi time step
-    plotting.plot_predictions_AE_AR(
-        model,
-        test_ids,
-        dsd_time,
-        tplt,
-        x_test,
-        m_test,
-        r_bins_edges,
-        # saveas=output_directory + "/plots/" + case_name + "_predictions.png",
-    )
+    # # Predictions: Multi time step
+    # fig = plotting.plot_predictions_AE_AR(
+    #     model,
+    #     test_ids,
+    #     dsd_time,
+    #     tplt,
+    #     x_test,
+    #     m_test,
+    #     r_bins_edges,
+    #     saveas=tpsp_plot_dir / (case_name + "_predictions.png"),
+    # )
 
     # Plot trajectories of the latent variables
-    plotting.plot_latent_trajectories_AR(
+    fig = plotting.plot_latent_trajectories_AR(
         params["latent_dim"],
         model,
         dsd_time,
         x_test,
         m_test,
-        # saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
+        saveas=tpsp_plot_dir / (case_name + "_trajectories.png"),
     )
-    plotting.viz_3d_latent_space(
+
+    # Plot latent space
+    fig = plotting.viz_3d_latent_space(
         model,
         x_test,
         dsd_time,
-        output_directory + "/plots/",
-        case_name,
+        saveas=tpsp_plot_dir / (case_name + "_latent_space.html"),
     )

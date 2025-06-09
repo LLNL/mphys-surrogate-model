@@ -20,30 +20,44 @@ def plot_losses(
     title="Training Loss",
     saveas=None,
 ):
-    plt.plot(losses, label="total train")
+    # Set up figure
+    fig, ax = plt.subplots(1, 1, figsize=(34, 13), layout="constrained")
+
+    # Plot losses
+    ax.plot(losses, label="total train")
     if test_losses is not None:
-        plt.plot(test_losses, label="total test", ls="--")
+        ax.plot(test_losses, label="total test", ls="--")
     if sub_losses is not None:
         for j, loss in enumerate(sub_losses):
-            plt.plot(loss, label=labels[j])
+            ax.plot(loss, label=labels[j])
 
-    plt.legend()
-    plt.title(title)
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.yscale("log")
+    # Accoutrements
+    ax.legend()
+    ax.set_title(title)
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Loss")
+    ax.set_yscale("log")
+
+    # Optional save
     if saveas is not None:
-        plt.savefig(saveas)
-    else:
-        plt.show()
+        fig.savefig(saveas)
+
+    # Return fig for further manipulation
+    return fig
 
 
 def plot_reconstructions(
     model, test_ids, x_test, r_bins_edges, t_plt=[0, -1], saveas=None
 ):
+    # Set up figure
     (fig, ax) = plt.subplots(
-        ncols=len(test_ids), nrows=len(t_plt), figsize=(3 * len(test_ids), 6)
+        nrows=len(t_plt),
+        ncols=len(test_ids),
+        figsize=(3 * len(test_ids), 13),
+        layout="constrained",
     )
+
+    # Plot reconstruction for each test ID for multiple times
     for i, id in enumerate(test_ids):
         for j, t in enumerate(t_plt):
             ax[j][i].step(r_bins_edges, x_test[id, t])
@@ -59,24 +73,31 @@ def plot_reconstructions(
             ax[j][i].set_xscale("log")
         ax[0][i].set_title(f"Run #{id}")
 
+    # Accoutrements
     ax[0][0].legend(["Data", "VAE Reconstruction"])
-    plt.suptitle("Reconstruction Demo: Out of Sample")
+    fig.suptitle("Reconstruction Demo: Out of Sample")
+
+    # Optional save
     if saveas is not None:
-        plt.savefig(saveas)
-    else:
-        plt.show()
+        fig.savefig(saveas)
+
+    # Return fig for further manipulation
+    return fig
 
 
 def plot_predictions_AE_AR(
     model, test_ids, dsd_time, tplt, x_test, m_test, r_bins_edges, n_lag=1, saveas=None
 ):
+    # Set up figure
     (fig, ax) = plt.subplots(
-        ncols=len(test_ids),
         nrows=len(tplt),
+        ncols=len(test_ids),
         figsize=(3 * len(test_ids), 2 * len(tplt)),
         sharey=True,
+        layout="constrained",
     )
 
+    # Plot predictions for AE-AR model for multiple time steps
     for i, id in enumerate(test_ids):
         x0 = x_test[id, :n_lag, :]
         m0 = m_test[id, 0]
@@ -103,25 +124,37 @@ def plot_predictions_AE_AR(
         ax[0][i].set_title(f"Run #{id}")
         ax[-1][i].set_xlabel("radius (um)")
 
+    # Accoutrements
     for j, t in enumerate(tplt):
         ax[j][0].set_ylabel(f"dmdlnr at t={dsd_time[t]}")
     ax[1][0].legend(["Data", "Model"])
-    plt.suptitle(
+    fig.suptitle(
         f"VAE Autoregressive model, lag {n_lag}: Multi time step; out of sample"
     )
+
+    # Optional save
     if saveas is not None:
-        plt.savefig(saveas)
-    else:
-        plt.show()
+        fig.savefig(saveas)
+
+    # Return fig for further manipulation
+    return fig
 
 
 def plot_latent_trajectories_AR(
     n_latent, model, dsd_time, x_test, m_test, n_lag=1, saveas=None
 ):
+    # Set up figure
     (fig, ax) = plt.subplots(
-        ncols=n_latent + 1, nrows=2, figsize=(12, 6), sharey=False, sharex=True
+        nrows=2,
+        ncols=n_latent + 1,
+        figsize=(12, 6),
+        sharey=False,
+        sharex=True,
+        layout="constrained",
     )
     colors = ["blue", "orange", "green", "pink", "purple", "gray"]
+
+    # Plot trajectories for AR model
     for j in range(x_test.shape[0]):
         x0 = x_test[j, :n_lag, :]
         mj = m_test[j, :]
@@ -166,19 +199,21 @@ def plot_latent_trajectories_AR(
             )
             ax[0][i].set_xlabel("Elapsed time")
 
+    # Accoutrements
     for i in range(n_latent):
         ax[0][i].set_title(f"z{i + 1}")
         ax[0][i].set_xlim([0, dsd_time.max()])
     ax[0][-1].set_title("mass (rescaled)")
     ax[0][0].set_ylabel("Data")
     ax[1][0].set_ylabel("Model")
+    fig.suptitle(f"Autoregressive Z(t), lag {n_lag}")
 
-    plt.suptitle(f"Autoregressive Z(t), lag {n_lag}")
-    plt.tight_layout()
+    # Optional save
     if saveas is not None:
-        plt.savefig(saveas)
-    else:
-        plt.show()
+        fig.savefig(saveas)
+
+    # Return fig for further manipulation
+    return fig
 
 
 def plot_latent_trajectories_dzdt(
@@ -321,7 +356,7 @@ def plot_predictions_dzdt(
         plt.show()
 
 
-def viz_3d_latent_space(model, x_test, time, output_directory, case_name):
+def viz_3d_latent_space(model, x_test, time, saveas=None):
     # get latent space
     lsn = model.encoder(torch.tensor(x_test.astype(np.float32))).detach().numpy()
 
@@ -376,4 +411,10 @@ def viz_3d_latent_space(model, x_test, time, output_directory, case_name):
         ),
         margin=dict(l=0, r=0, b=0, t=30),
     )
-    fig.write_html(output_directory + "/" + case_name + "_latent_space.html")
+
+    # Optional save
+    if saveas is not None:
+        fig.write_html(saveas)
+
+    # Return fig for further manipulation
+    return fig
