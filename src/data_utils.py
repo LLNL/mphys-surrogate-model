@@ -9,7 +9,7 @@ from itertools import combinations_with_replacement
 
 
 def open_box_dataset():
-    ds_all = xr.open_dataset("../data/box64_train.nc")
+    ds_all = xr.open_dataset("../data/box64_train.nc", decode_timedelta=True)
     r_bins_edges = ds_all["mass_bin"]
     m_train = ds_all["dvdlnr"].sum(dim="mass_bin_idx")
     x_train = (
@@ -20,7 +20,7 @@ def open_box_dataset():
     n_bins = x_train.shape[2]
     dsd_time = (ds_all["time"] / np.timedelta64(1, "s")).to_numpy()
 
-    ds_test = xr.open_dataset("../data/box64_test.nc")
+    ds_test = xr.open_dataset("../data/box64_test.nc", decode_timedelta=True)
     m_test = ds_test["dvdlnr"].sum(dim="mass_bin_idx")
     x_test = (
         (ds_test["dvdlnr"] / m_test).transpose("run", "time", "mass_bin_idx").to_numpy()

@@ -2,20 +2,19 @@ import sys
 import os
 import time
 import copy
+from pathlib import Path
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
 import numpy as np
-import xarray as xr
 import torch
 import pickle as pkl
 import uuid
 from src import data_utils as du, models, training, plotting
-from torch.utils.data import DataLoader
 
 params = {
-    "data_src": "erf",
+    "data_src": "box",
     "random_seed": 10,
     "num_epochs": 5,
     "batch_size": 512,
@@ -44,6 +43,9 @@ else:
     prefix = params["data_src"] + "_FFNN"
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Model
+# ----------------------------------------------------------------------------------------------------------------------
 class AEAutoregressor(torch.nn.Module):
     def __init__(
         self, n_channels=2, n_bins=100, n_latent=10, layer_size=None, n_lag=1, CNN=False
@@ -82,17 +84,177 @@ class AEAutoregressor(torch.nn.Module):
         return bin1
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Training function
+# ----------------------------------------------------------------------------------------------------------------------
+def train_and_eval(
+    n_epochs,
+    model,
+    train_loader,
+    test_loader,
+    optimizer,
+    scheduler,
+    early_stopping,
+    print_flag=False,
+):
+    # Set up loss storage and other vars
+    losses = np.zeros(n_epochs) * np.nan
+    recon_losses = np.zeros(n_epochs) * np.nan
+    dx_losses = np.zeros(n_epochs) * np.nan
+    dz_losses = np.zeros(n_epochs) * np.nan
+    test_losses = np.zeros(n_epochs) * np.nan
+    test_recon_losses = np.zeros(n_epochs) * np.nan
+    test_dx_losses = np.zeros(n_epochs) * np.nan
+    test_dz_losses = np.zeros(n_epochs) * np.nan
+    best_test_loss = float("inf")
+    best_model = None
+
+    for epoch in range(n_epochs):
+        # Train
+        epoch_start_time = time.time()
+        model.train()
+        for batch_X, batch_y, batch_M in train_loader:
+            # Forward pass
+            pred_y = model(batch_X, batch_M)  # DSD pred t+1
+            pred_z = model.encoder(batch_X)  # Latent pred
+            pred_z1 = model.autoregressor(
+                torch.cat(
+                    (
+                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
+                        batch_M,
+                    ),
+                    dim=2,
+                )
+            )  # Latent t+1 pred
+            data_z1 = torch.cat(
+                (model.encoder(batch_y), batch_M), dim=2
+            )  # Latent t+1 "actual"
+            pred_x_recon = model.decoder(model.encoder(batch_X))  # DSD pred t+0
+
+            # Calculate train loss
+            loss_dz = criterion(pred_z1, data_z1)
+            loss_dx = divergence(
+                torch.log(pred_y + params["tol"]),
+                torch.log(batch_y + params["tol"]),
+            )
+            loss_recon = divergence(
+                torch.log(pred_x_recon + params["tol"]),
+                torch.log(batch_X + params["tol"]),
+            )
+            loss = (
+                params["w_dx"] * loss_dx
+                + params["w_recon"] * loss_recon
+                + params["w_dz"] * loss_dz
+            )
+
+            # Backward pass and optimization
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward(retain_graph=True)
+            optimizer.step()
+
+        # Save train losses
+        losses[epoch] = loss.item()
+        recon_losses[epoch] = loss_recon.item()
+        dx_losses[epoch] = loss_dx.item()
+        dz_losses[epoch] = loss_dz.item()
+
+        # Test
+        model.eval()
+        for batch_X, batch_y, batch_M in test_loader:
+            # Forward pass
+            pred_y = model(batch_X, batch_M)  # DSD pred t+1
+            pred_z = model.encoder(batch_X)  # Latent pred
+            pred_z1 = model.autoregressor(
+                torch.cat(
+                    (
+                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
+                        batch_M,
+                    ),
+                    dim=2,
+                )
+            )  # Latent t+1 pred
+            data_z1 = torch.cat(
+                (model.encoder(batch_y), batch_M), dim=2
+            )  # Latent t+1 "actual"
+            pred_x_recon = model.decoder(model.encoder(batch_X))  # DSD pred t+0
+
+            # Calculate test loss
+            loss_dz = criterion(pred_z1, data_z1)
+            loss_dx = divergence(
+                torch.log(pred_y + params["tol"]),
+                torch.log(batch_y + params["tol"]),
+            )
+            loss_recon = divergence(
+                torch.log(pred_x_recon + params["tol"]),
+                torch.log(batch_X + params["tol"]),
+            )
+
+            loss = (
+                params["w_dx"] * loss_dx
+                + params["w_recon"] * loss_recon
+                + params["w_dz"] * loss_dz
+            )
+
+        # Save test losses
+        test_losses[epoch] = loss.item()
+        test_recon_losses[epoch] = loss_recon.item()
+        test_dx_losses[epoch] = loss_dx.item()
+        test_dz_losses[epoch] = loss_dz.item()
+
+        # Save good model
+        if loss < best_test_loss:
+            best_test_loss = loss
+            best_model = copy.deepcopy(model)
+
+        # Update learning rate schedule
+        if params["lr_sched"]:
+            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                scheduler.step(loss)
+            else:
+                scheduler.step()
+
+        # Print
+        epoch_end_time = time.time()
+        if epoch % 1 == 0:
+            if print_flag:
+                print(
+                    f"Epoch {epoch}/{n_epochs} | Train Loss: {losses[epoch]:.4f} | Test Loss: {test_losses[epoch]:.4f} | LR: {scheduler.get_last_lr()[0]:.4e} | Epoch Time: {epoch_end_time - epoch_start_time} s"
+                )
+
+        # Early stopping
+        early_stopping(loss)
+        if early_stopping.early_stop:
+            if print_flag:
+                print("Training stopped early.")
+            break
+
+    return (
+        best_model,
+        losses,
+        recon_losses,
+        dx_losses,
+        dz_losses,
+        test_losses,
+        test_recon_losses,
+        test_dx_losses,
+        test_dz_losses,
+    )
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Main
+# ----------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     # Set device
     device = torch.device(
         "cuda"
         if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
+        else "mps" if torch.backends.mps.is_available() else "cpu"
     )
     # torch.backends.cudnn.benchmark = True
-    print(f"Using {device} device")
+    print(
+        f"Using {device} device"
+    )  # TODO: while device code is here, I don't think the device is actually being used
 
     start_time = time.time()
     # Open dataset
@@ -123,7 +285,6 @@ if __name__ == "__main__":
     train_loader = torch.utils.data.DataLoader(
         train_data, batch_size=params["batch_size"], shuffle=True
     )
-    # test_data = torch.utils.data.TensorDataset(test_inputs, test_outputs)
     test_data = du.NormedBinDatasetAR(x_test, m_test, lag=params["n_lag"])
     test_loader = torch.utils.data.DataLoader(
         test_data, batch_size=x_test.shape[0], shuffle=True
@@ -150,126 +311,32 @@ if __name__ == "__main__":
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total number of parameters: {total_params}")
 
-    # Set up loss storage
-    losses = np.zeros(params["num_epochs"]) * np.nan
-    recon_losses = np.zeros(params["num_epochs"]) * np.nan
-    dx_losses = np.zeros(params["num_epochs"]) * np.nan
-    dz_losses = np.zeros(params["num_epochs"]) * np.nan
+    # Training loop
+    # ----------------------------------------------------------------------------------
+    (
+        best_model,
+        losses,
+        recon_losses,
+        dx_losses,
+        dz_losses,
+        test_losses,
+        test_recon_losses,
+        test_dx_losses,
+        test_dz_losses,
+    ) = train_and_eval(
+        params["num_epochs"],
+        model,
+        train_loader,
+        test_loader,
+        optimizer,
+        sched,
+        early_stopping,
+        print_flag=True,
+    )
 
-    test_losses = np.zeros(params["num_epochs"]) * np.nan
-    test_recon_losses = np.zeros(params["num_epochs"]) * np.nan
-    test_dx_losses = np.zeros(params["num_epochs"]) * np.nan
-    test_dz_losses = np.zeros(params["num_epochs"]) * np.nan
-    best_test_loss = float("inf")
-
-    for epoch in range(params["num_epochs"]):
-        # Train
-        epoch_start_time = time.time()
-        model.train()
-        for batch_X, batch_y, batch_M in train_loader:
-            pred_y = model(batch_X, batch_M)
-            pred_z = model.encoder(batch_X)
-            pred_z1 = model.autoregressor(
-                torch.cat(
-                    (
-                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
-                        batch_M,
-                    ),
-                    dim=2,
-                )
-            )  # note: can train AR to predict zero change in M, or just ignore M in training
-            data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
-            pred_x_recon = model.decoder(model.encoder(batch_X))
-
-            loss_dx = divergence(
-                torch.log(pred_y + params["tol"]), torch.log(batch_y + params["tol"])
-            )
-            loss_dz = criterion(pred_z1, data_z1)
-            loss_recon = divergence(
-                torch.log(pred_x_recon + params["tol"]),
-                torch.log(batch_X + params["tol"]),
-            )
-
-            loss = loss_recon + params["w_dx"] * loss_dx + params["w_dz"] * loss_dz
-
-            # Backward pass and optimization
-            optimizer.zero_grad(set_to_none=True)
-            loss.backward(retain_graph=True)
-            optimizer.step()
-
-        # Save train losses
-        losses[epoch] = loss.item()
-        recon_losses[epoch] = loss_recon.item()
-        dx_losses[epoch] = loss_dx.item()
-        dz_losses[epoch] = loss_dz.item()
-
-        # test
-        model.eval()
-        for batch_X, batch_y, batch_M in test_loader:
-            # Forward pass
-            pred_y = model(batch_X, batch_M)
-            pred_z = model.encoder(batch_X)
-            pred_z1 = model.autoregressor(
-                torch.cat(
-                    (
-                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
-                        batch_M,
-                    ),
-                    dim=2,
-                )
-            )  # note: can train AR to predict zero change in M, or just ignore M in training
-            data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
-            pred_x_recon = model.decoder(model.encoder(batch_X))
-
-            loss_dx = divergence(
-                torch.log(pred_y + params["tol"]), torch.log(batch_y + params["tol"])
-            )
-            loss_dz = criterion(pred_z1, data_z1)
-            loss_recon = divergence(
-                torch.log(pred_x_recon + params["tol"]),
-                torch.log(batch_X + params["tol"]),
-            )
-            loss = params["w_dx"] * loss_dx + loss_recon + params["w_dz"] * loss_dz
-
-        # Save test losses
-        test_losses[epoch] = loss.item()
-        test_recon_losses[epoch] = loss_recon.item()
-        test_dx_losses[epoch] = loss_dx.item()
-        test_dz_losses[epoch] = loss_dz.item()
-
-        # Save good model
-        if loss < best_test_loss:
-            best_test_loss = loss
-            best_model = copy.deepcopy(model)
-
-        # Update learning rate schedule
-        if params["lr_sched"]:
-            if isinstance(sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                sched.step(loss)
-            else:
-                sched.step()
-
-        # print progress
-        epoch_end_time = time.time()
-        if epoch % params["print_frequency"] == 0:
-            print(
-                f"Epoch [{epoch}/{params['num_epochs']}], Train Loss: {losses[epoch]:.4f} | "
-                f"Test Loss: {test_losses[epoch]:.4f} | LR: {sched.get_last_lr()}"
-                f"| Epoch Time: {epoch_end_time - epoch_start_time} s"
-            )
-            print(
-                f"Recon: {recon_losses[epoch]:.4f} | "
-                f"dx: {params['w_dx'] * dx_losses[epoch]:.4f} | "
-                f"dz: {params['w_dz'] * dz_losses[epoch]:.4f} | "
-            )
-
-        # early stopping
-        early_stopping(loss)
-        if early_stopping.early_stop:
-            print("Training stopped early.")
-            break
-
-    # SAVE
+    # ------------------------------------------------------------------------------------------------------------------
+    # Save and plot
+    # ------------------------------------------------------------------------------------------------------------------
     best_model.eval()
     output_directory = "../trained_models/ae_ar_normed"
     id = uuid.uuid4().hex
@@ -297,12 +364,14 @@ if __name__ == "__main__":
             ),
             pickle_file,
         )
+
+    # Save model
     torch.save(
         best_model.state_dict(), output_directory + "/model/" + case_name + ".pth"
     )
     print(f"Saved model and losses as {case_name}")
 
-    ############### PLOTS PLOTS PLOTS ###############
+    # Loss plot
     plotting.plot_losses(
         losses,
         test_losses=test_losses,
