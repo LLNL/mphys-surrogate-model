@@ -17,8 +17,8 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "erf",
     "random_seed": 10,
-    "num_epochs": 5,
-    "batch_size": 512,
+    "num_epochs": 30,
+    "batch_size": 256,
     "learning_rate": 1e-3,
     "latent_dim": 3,
     "n_lag": 1,
@@ -36,7 +36,7 @@ params = {
 
 torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
-test_ids = [0, 10, 20, 25]
+test_ids = [0, 10, 20, 30]
 tplt = [0, 30, -1]
 if params["CNN"]:
     prefix = params["data_src"] + "_CNN"
@@ -80,6 +80,164 @@ class AEAutoregressor(torch.nn.Module):
         latent1 = latent1_M[:, :, :-1]
         bin1 = self.decoder(latent1)
         return bin1
+
+
+def train_model(
+    params,
+    model,
+    train_loader,
+    test_loader,
+    divergence,
+    criterion,
+    optimizer,
+    early_stopping,
+    sched=None,
+):
+    # Set up loss storage
+    losses = np.zeros(params["num_epochs"]) * np.nan
+    recon_losses = np.zeros(params["num_epochs"]) * np.nan
+    dx_losses = np.zeros(params["num_epochs"]) * np.nan
+    dz_losses = np.zeros(params["num_epochs"]) * np.nan
+
+    test_losses = np.zeros(params["num_epochs"]) * np.nan
+    test_recon_losses = np.zeros(params["num_epochs"]) * np.nan
+    test_dx_losses = np.zeros(params["num_epochs"]) * np.nan
+    test_dz_losses = np.zeros(params["num_epochs"]) * np.nan
+    best_test_loss = float("inf")
+
+    for epoch in range(params["num_epochs"]):
+        # Train
+        epoch_start_time = time.time()
+        model.train()
+        mean_epoch_loss = [0, 0, 0, 0]
+        for batch_X, batch_y, batch_M in train_loader:
+            pred_y = model(batch_X, batch_M)
+            pred_z = model.encoder(batch_X)
+            pred_z1 = model.autoregressor(
+                torch.cat(
+                    (
+                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
+                        batch_M,
+                    ),
+                    dim=2,
+                )
+            )  # note: can train AR to predict zero change in M, or just ignore M in training
+            data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
+            pred_x_recon = model.decoder(model.encoder(batch_X))
+
+            loss_dx = divergence(
+                torch.log(pred_y + params["tol"]), torch.log(batch_y + params["tol"])
+            )
+            loss_dz = criterion(pred_z1, data_z1)
+            loss_recon = divergence(
+                torch.log(pred_x_recon + params["tol"]),
+                torch.log(batch_X + params["tol"]),
+            )
+
+            loss = (
+                params["w_recon"] * loss_recon
+                + params["w_dx"] * loss_dx
+                + params["w_dz"] * loss_dz
+            )
+
+            # Backward pass and optimization
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward(retain_graph=True)
+            optimizer.step()
+
+            mean_epoch_loss[0] += loss.item()
+            mean_epoch_loss[1] += loss_recon.item()
+            mean_epoch_loss[2] += loss_dx.item()
+            mean_epoch_loss[3] += loss_dz.item()
+
+        # Save train losses
+        losses[epoch] = mean_epoch_loss[0] / len(train_loader)  # loss.item()
+        recon_losses[epoch] = mean_epoch_loss[1] / len(
+            train_loader
+        )  # loss_recon.item()
+        dx_losses[epoch] = mean_epoch_loss[2] / len(train_loader)  # loss_dx.item()
+        dz_losses[epoch] = mean_epoch_loss[3] / len(train_loader)  # loss_dz.item()
+
+        # test
+        model.eval()
+        for batch_X, batch_y, batch_M in test_loader:
+            # Forward pass
+            pred_y = model(batch_X, batch_M)
+            pred_z = model.encoder(batch_X)
+            pred_z1 = model.autoregressor(
+                torch.cat(
+                    (
+                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
+                        batch_M,
+                    ),
+                    dim=2,
+                )
+            )  # note: can train AR to predict zero change in M, or just ignore M in training
+            data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
+            pred_x_recon = model.decoder(model.encoder(batch_X))
+
+            loss_dx = divergence(
+                torch.log(pred_y + params["tol"]), torch.log(batch_y + params["tol"])
+            )
+            loss_dz = criterion(pred_z1, data_z1)
+            loss_recon = divergence(
+                torch.log(pred_x_recon + params["tol"]),
+                torch.log(batch_X + params["tol"]),
+            )
+            loss = (
+                params["w_dx"] * loss_dx
+                + params["w_recon"] * loss_recon
+                + params["w_dz"] * loss_dz
+            )
+
+        # Save test losses
+        test_losses[epoch] = loss.item()
+        test_recon_losses[epoch] = loss_recon.item()
+        test_dx_losses[epoch] = loss_dx.item()
+        test_dz_losses[epoch] = loss_dz.item()
+
+        # Save good model
+        if loss < best_test_loss:
+            best_test_loss = loss
+            best_model = copy.deepcopy(model)
+
+        # Update learning rate schedule
+        if params["lr_sched"]:
+            if isinstance(sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                sched.step(loss)
+            else:
+                sched.step()
+
+        # print progress
+        epoch_end_time = time.time()
+        if epoch % params["print_frequency"] == 0:
+            print(
+                f"Epoch [{epoch}/{params['num_epochs']}], Train Loss: {losses[epoch]:.4f} | "
+                f"Test Loss: {test_losses[epoch]:.4f} | LR: {sched.get_last_lr()}"
+                f"| Epoch Time: {epoch_end_time - epoch_start_time} s"
+            )
+            print(
+                f"Recon: {params['w_recon'] * recon_losses[epoch]:.4f} | "
+                f"dx: {params['w_dx'] * dx_losses[epoch]:.4f} | "
+                f"dz: {params['w_dz'] * dz_losses[epoch]:.4f} | "
+            )
+
+        # early stopping
+        early_stopping(loss)
+        if early_stopping.early_stop:
+            print("Training stopped early.")
+            break
+
+    return best_model, (
+        losses,
+        recon_losses,
+        dx_losses,
+        dz_losses,
+        test_losses,
+        test_recon_losses,
+        test_dx_losses,
+        test_dz_losses,
+    )
 
 
 if __name__ == "__main__":
@@ -126,7 +284,7 @@ if __name__ == "__main__":
     # test_data = torch.utils.data.TensorDataset(test_inputs, test_outputs)
     test_data = du.NormedBinDatasetAR(x_test, m_test, lag=params["n_lag"])
     test_loader = torch.utils.data.DataLoader(
-        test_data, batch_size=x_test.shape[0], shuffle=True
+        test_data, batch_size=len(test_data), shuffle=True
     )
 
     # Initialize the model
@@ -150,124 +308,26 @@ if __name__ == "__main__":
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total number of parameters: {total_params}")
 
-    # Set up loss storage
-    losses = np.zeros(params["num_epochs"]) * np.nan
-    recon_losses = np.zeros(params["num_epochs"]) * np.nan
-    dx_losses = np.zeros(params["num_epochs"]) * np.nan
-    dz_losses = np.zeros(params["num_epochs"]) * np.nan
-
-    test_losses = np.zeros(params["num_epochs"]) * np.nan
-    test_recon_losses = np.zeros(params["num_epochs"]) * np.nan
-    test_dx_losses = np.zeros(params["num_epochs"]) * np.nan
-    test_dz_losses = np.zeros(params["num_epochs"]) * np.nan
-    best_test_loss = float("inf")
-
-    for epoch in range(params["num_epochs"]):
-        # Train
-        epoch_start_time = time.time()
-        model.train()
-        for batch_X, batch_y, batch_M in train_loader:
-            pred_y = model(batch_X, batch_M)
-            pred_z = model.encoder(batch_X)
-            pred_z1 = model.autoregressor(
-                torch.cat(
-                    (
-                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
-                        batch_M,
-                    ),
-                    dim=2,
-                )
-            )  # note: can train AR to predict zero change in M, or just ignore M in training
-            data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
-            pred_x_recon = model.decoder(model.encoder(batch_X))
-
-            loss_dx = divergence(
-                torch.log(pred_y + params["tol"]), torch.log(batch_y + params["tol"])
-            )
-            loss_dz = criterion(pred_z1, data_z1)
-            loss_recon = divergence(
-                torch.log(pred_x_recon + params["tol"]),
-                torch.log(batch_X + params["tol"]),
-            )
-
-            loss = loss_recon + params["w_dx"] * loss_dx + params["w_dz"] * loss_dz
-
-            # Backward pass and optimization
-            optimizer.zero_grad(set_to_none=True)
-            loss.backward(retain_graph=True)
-            optimizer.step()
-
-        # Save train losses
-        losses[epoch] = loss.item()
-        recon_losses[epoch] = loss_recon.item()
-        dx_losses[epoch] = loss_dx.item()
-        dz_losses[epoch] = loss_dz.item()
-
-        # test
-        model.eval()
-        for batch_X, batch_y, batch_M in test_loader:
-            # Forward pass
-            pred_y = model(batch_X, batch_M)
-            pred_z = model.encoder(batch_X)
-            pred_z1 = model.autoregressor(
-                torch.cat(
-                    (
-                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
-                        batch_M,
-                    ),
-                    dim=2,
-                )
-            )  # note: can train AR to predict zero change in M, or just ignore M in training
-            data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
-            pred_x_recon = model.decoder(model.encoder(batch_X))
-
-            loss_dx = divergence(
-                torch.log(pred_y + params["tol"]), torch.log(batch_y + params["tol"])
-            )
-            loss_dz = criterion(pred_z1, data_z1)
-            loss_recon = divergence(
-                torch.log(pred_x_recon + params["tol"]),
-                torch.log(batch_X + params["tol"]),
-            )
-            loss = params["w_dx"] * loss_dx + loss_recon + params["w_dz"] * loss_dz
-
-        # Save test losses
-        test_losses[epoch] = loss.item()
-        test_recon_losses[epoch] = loss_recon.item()
-        test_dx_losses[epoch] = loss_dx.item()
-        test_dz_losses[epoch] = loss_dz.item()
-
-        # Save good model
-        if loss < best_test_loss:
-            best_test_loss = loss
-            best_model = copy.deepcopy(model)
-
-        # Update learning rate schedule
-        if params["lr_sched"]:
-            if isinstance(sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                sched.step(loss)
-            else:
-                sched.step()
-
-        # print progress
-        epoch_end_time = time.time()
-        if epoch % params["print_frequency"] == 0:
-            print(
-                f"Epoch [{epoch}/{params['num_epochs']}], Train Loss: {losses[epoch]:.4f} | "
-                f"Test Loss: {test_losses[epoch]:.4f} | LR: {sched.get_last_lr()}"
-                f"| Epoch Time: {epoch_end_time - epoch_start_time} s"
-            )
-            print(
-                f"Recon: {recon_losses[epoch]:.4f} | "
-                f"dx: {params['w_dx'] * dx_losses[epoch]:.4f} | "
-                f"dz: {params['w_dz'] * dz_losses[epoch]:.4f} | "
-            )
-
-        # early stopping
-        early_stopping(loss)
-        if early_stopping.early_stop:
-            print("Training stopped early.")
-            break
+    best_model, (
+        losses,
+        recon_losses,
+        dx_losses,
+        dz_losses,
+        test_losses,
+        test_recon_losses,
+        test_dx_losses,
+        test_dz_losses,
+    ) = train_model(
+        params,
+        model,
+        train_loader,
+        test_loader,
+        divergence,
+        criterion,
+        optimizer,
+        early_stopping,
+        sched,
+    )
 
     # SAVE
     best_model.eval()

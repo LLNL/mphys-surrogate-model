@@ -76,12 +76,14 @@ def plot_predictions_AE_AR(
         figsize=(3 * len(test_ids), 2 * len(tplt)),
         sharey=True,
     )
-
+    model.eval()
     for i, id in enumerate(test_ids):
         x0 = x_test[id, :n_lag, :]
         m0 = m_test[id, 0]
         x_pred = np.zeros_like(x_test[id])
-        x_pred[:n_lag, :] = model.decoder(model.encoder(torch.Tensor(x0)))
+        x_pred[:n_lag, :] = (
+            model.decoder(model.encoder(torch.Tensor(x0))).detach().numpy()
+        )
         for t in range(n_lag, x_test.shape[1]):
             x_pred[t, :] = (
                 model(
@@ -159,10 +161,20 @@ def plot_latent_trajectories_AR(
                 labeli = "M / dlnr"
                 color = colors[-1]
             ax[0][i].plot(
-                dsd_time, z_enc[:, i], label=labeli, color=color, alpha=0.5, lw=0.5
+                dsd_time,
+                z_enc[:, i],
+                label=labeli,
+                color=color,
+                alpha=min(1, 150 / x_test.shape[0]),
+                lw=0.5,
             )
             ax[1][i].plot(
-                dsd_time, z_pred[:, i], label=labeli, color=color, alpha=0.5, lw=0.5
+                dsd_time,
+                z_pred[:, i],
+                label=labeli,
+                color=color,
+                alpha=min(1, 150 / x_test.shape[0]),
+                lw=0.5,
             )
             ax[0][i].set_xlabel("Elapsed time")
 
@@ -239,10 +251,20 @@ def plot_latent_trajectories_dzdt(
             else:
                 labeli = "M / dlnr"
                 color = colors[-1]
-            ax[0][i].plot(time, latents_data[:, i], color=color, alpha=0.5, lw=0.5)
+            ax[0][i].plot(
+                time,
+                latents_data[:, i],
+                color=color,
+                alpha=min(1, 150 / x_test.shape[0]),
+                lw=0.5,
+            )
             ax[0][i].set_title(labeli)
             ax[1][i].plot(
-                time, latents_pred[:, i].squeeze(), color=color, alpha=0.5, lw=0.5
+                time,
+                latents_pred[:, i].squeeze(),
+                color=color,
+                alpha=min(1, 150 / x_test.shape[0]),
+                lw=0.5,
             )
             ax[1][i].set_xlabel("Elapsed time")
     # for i in range(n_latent + 1):
