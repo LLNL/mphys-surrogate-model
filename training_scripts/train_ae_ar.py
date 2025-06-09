@@ -1,17 +1,20 @@
-import sys
-import os
-import time
 import copy
+import os
+import sys
+import time
 from pathlib import Path
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
-import numpy as np
-import torch
 import pickle as pkl
 import uuid
-from src import data_utils as du, models, training, plotting
+
+import numpy as np
+import torch
+
+from src import data_utils as du
+from src import models, plotting, training
 
 params = {
     "data_src": "box",
@@ -31,6 +34,8 @@ params = {
     "layer_size": (100, 100, 100),
     "CNN": False,
     "print_frequency": 1,
+    "emily_save": True,
+    "nipun_save": True,
 }
 
 torch.manual_seed(params["random_seed"])
@@ -339,16 +344,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------------------------------------------------------
     # Set up result specific directory
     best_model.eval()
-    tpsp_out_dir = Path("../trained_models/ae_ar_normed")
     id = str(uuid.uuid4().hex)
-    if not tpsp_out_dir.exists():
-        tpsp_out_dir.mkdir(parents=True, exist_ok=True)
-    if not (tpsp_loss_dir := tpsp_out_dir / "losses").exists():
-        tpsp_loss_dir.mkdir(parents=True, exist_ok=True)
-    if not (tpsp_mod_dir := tpsp_out_dir / "models").exists():
-        tpsp_mod_dir.mkdir(parents=True, exist_ok=True)
-    if not (tpsp_plot_dir := tpsp_out_dir / "plots").exists():
-        tpsp_plot_dir.mkdir(parents=True, exist_ok=True)
     case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}_{}".format(
         params["latent_dim"],
         params["layer_size"],
@@ -359,26 +355,51 @@ if __name__ == "__main__":
         params["w_dz"],
         id,
     )
+    # Emily save dirs
+    tpsp_out_dir = Path("../trained_models/ae_ar_normed")
+    if not tpsp_out_dir.exists():
+        tpsp_out_dir.mkdir(parents=True, exist_ok=True)
+    if not (tpsp_loss_dir := tpsp_out_dir / "losses").exists():
+        tpsp_loss_dir.mkdir(parents=True, exist_ok=True)
+    if not (tpsp_mod_dir := tpsp_out_dir / "models").exists():
+        tpsp_mod_dir.mkdir(parents=True, exist_ok=True)
+    if not (tpsp_plot_dir := tpsp_out_dir / "plots").exists():
+        tpsp_plot_dir.mkdir(parents=True, exist_ok=True)
+    # Nipun save dirs
+    runsp_out_dir = Path("../ng_scripts/trained_models/ae_ar_normed") / case_name
+    if not runsp_out_dir.exists():
+        runsp_out_dir.mkdir(parents=True, exist_ok=True)
 
     # Save losses
-    with open(tpsp_loss_dir / (case_name + ".pkl"), "wb") as pickle_file:
-        pkl.dump(
-            (
-                losses,
-                recon_losses,
-                dx_losses,
-                dz_losses,
-                test_losses,
-                test_recon_losses,
-                test_dx_losses,
-                test_dz_losses,
-            ),
-            pickle_file,
-        )
+    pkl_out_files = []
+    if params["emily_save"]:
+        pkl_out_files.append(tpsp_loss_dir / (case_name + ".pkl"))
+    if params["nipun_save"]:
+        pkl_out_files.append(runsp_out_dir / (case_name + ".pkl"))
+    for out_file in pkl_out_files:
+        with open(out_file, "wb") as pickle_file:
+            pkl.dump(
+                (
+                    losses,
+                    recon_losses,
+                    dx_losses,
+                    dz_losses,
+                    test_losses,
+                    test_recon_losses,
+                    test_dx_losses,
+                    test_dz_losses,
+                ),
+                pickle_file,
+            )
 
     # Save model
-    torch.save(best_model.state_dict(), tpsp_mod_dir / (case_name + ".pth"))
-    print(f"Saved model and losses as {case_name}")
+    mdl_out_files = []
+    if params["emily_save"]:
+        mdl_out_files.append(tpsp_mod_dir / (case_name + ".pth"))
+    if params["nipun_save"]:
+        mdl_out_files.append(runsp_out_dir / (case_name + ".pth"))
+    for out_file in mdl_out_files:
+        torch.save(best_model.state_dict(), out_file)
 
     # Loss plot
     fig = plotting.plot_losses(
@@ -391,8 +412,11 @@ if __name__ == "__main__":
         ],
         labels=["X: t -> t+1", "Z: t -> t+1", "Recon"],
         title=f"Training Loss, lag {params['n_lag']}",
-        saveas=tpsp_plot_dir / (case_name + "_losses.png"),
     )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_losses.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_losses.png"))
 
     # Plot distributions: reconstruction
     fig = plotting.plot_reconstructions(
@@ -400,8 +424,11 @@ if __name__ == "__main__":
         test_ids,
         x_test,
         r_bins_edges,
-        saveas=tpsp_plot_dir / (case_name + "_reconstructions.png"),
     )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_reconstructions.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
 
     # # Predictions: Multi time step
     # fig = plotting.plot_predictions_AE_AR(
@@ -412,8 +439,11 @@ if __name__ == "__main__":
     #     x_test,
     #     m_test,
     #     r_bins_edges,
-    #     saveas=tpsp_plot_dir / (case_name + "_predictions.png"),
     # )
+    # if params["emily_save"]:
+    #     fig.savefig(tpsp_plot_dir / (case_name + "_predictions.png"))
+    # if params["nipun_save"]:
+    #     fig.savefig(runsp_out_dir / (case_name + "_predictions.png"))
 
     # Plot trajectories of the latent variables
     fig = plotting.plot_latent_trajectories_AR(
@@ -422,13 +452,19 @@ if __name__ == "__main__":
         dsd_time,
         x_test,
         m_test,
-        saveas=tpsp_plot_dir / (case_name + "_trajectories.png"),
     )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_trajectories.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_trajectories.png"))
 
     # Plot latent space
     fig = plotting.viz_3d_latent_space(
         model,
         x_test,
         dsd_time,
-        saveas=tpsp_plot_dir / (case_name + "_latent_space.html"),
     )
+    if params["emily_save"]:
+        fig.write_html(tpsp_plot_dir / (case_name + "_latent_space.html"))
+    if params["nipun_save"]:
+        fig.write_html(runsp_out_dir / (case_name + "_latent_space.html"))
