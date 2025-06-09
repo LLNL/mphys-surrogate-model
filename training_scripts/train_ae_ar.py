@@ -15,9 +15,10 @@ from src import data_utils as du, models, training, plotting
 from torch.utils.data import DataLoader
 
 params = {
+    "data_src": "erf",
     "random_seed": 10,
-    "num_epochs": 30,
-    "batch_size": 128,
+    "num_epochs": 5,
+    "batch_size": 512,
     "learning_rate": 1e-3,
     "latent_dim": 3,
     "n_lag": 1,
@@ -28,13 +29,19 @@ params = {
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "layer_size": (20, 20, 10),
+    "layer_size": (100, 100, 100),
     "CNN": False,
     "print_frequency": 1,
 }
 
 torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
+test_ids = [0, 10, 20, 25]
+tplt = [0, 30, -1]
+if params["CNN"]:
+    prefix = params["data_src"] + "_CNN"
+else:
+    prefix = params["data_src"] + "_FFNN"
 
 
 class AEAutoregressor(torch.nn.Module):
@@ -89,23 +96,28 @@ if __name__ == "__main__":
 
     start_time = time.time()
     # Open dataset
-    ds_all = xr.open_dataset("../data/box64_train.nc")
-    dlnr = np.diff(np.log(ds_all["mass_bin"].values)).mean()
-    m_train = ds_all["dvdlnr"].sum(dim="mass_bin_idx")
-    x_train = (
-        (ds_all["dvdlnr"] / m_train).transpose("run", "time", "mass_bin_idx").to_numpy()
-    )
-    m_scale = m_train.max()
-    m_train = (m_train / m_scale).to_numpy()
-    n_bins = x_train.shape[2]
-    dsd_time = (ds_all["time"] / np.timedelta64(1, "s")).to_numpy()
-
-    ds_test = xr.open_dataset("../data/box64_test.nc")
-    m_test = ds_test["dvdlnr"].sum(dim="mass_bin_idx")
-    x_test = (
-        (ds_test["dvdlnr"] / m_test).transpose("run", "time", "mass_bin_idx").to_numpy()
-    )
-    m_test = (m_test / m_scale).to_numpy()
+    if params["data_src"] == "box":
+        (
+            x_train,
+            m_train,
+            x_test,
+            m_test,
+            r_bins_edges,
+            n_bins,
+            dsd_time,
+        ) = du.open_box_dataset()
+    elif params["data_src"] == "erf":
+        (
+            x_train,
+            m_train,
+            x_test,
+            m_test,
+            r_bins_edges,
+            n_bins,
+            dsd_time,
+        ) = du.open_erf_dataset()
+    else:
+        raise NotImplementedError("only erf and box data options exist")
 
     train_data = du.NormedBinDatasetAR(x_train, m_train, lag=params["n_lag"])
     train_loader = torch.utils.data.DataLoader(
@@ -261,10 +273,6 @@ if __name__ == "__main__":
     best_model.eval()
     output_directory = "../trained_models/ae_ar_normed"
     id = uuid.uuid4().hex
-    if params["CNN"]:
-        prefix = "CNN"
-    else:
-        prefix = "FFNN"
     case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}_{}".format(
         params["latent_dim"],
         params["layer_size"],
@@ -309,8 +317,6 @@ if __name__ == "__main__":
     )
 
     # Plot distributions: reconstruction
-    r_bins_edges = ds_all["mass_bin"]
-    test_ids = [0, 10, 20, 25]
     plotting.plot_reconstructions(
         model,
         test_ids,
@@ -320,10 +326,10 @@ if __name__ == "__main__":
     )
 
     # Predictions: Multi time step
-    tplt = [3, 5, 8, 12]  # [0, 1, 2, 3, 5, 8, 12]
     plotting.plot_predictions_AE_AR(
         model,
         test_ids,
+        dsd_time,
         tplt,
         x_test,
         m_test,
@@ -335,6 +341,7 @@ if __name__ == "__main__":
     plotting.plot_latent_trajectories_AR(
         params["latent_dim"],
         model,
+        dsd_time,
         x_test,
         m_test,
         # saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
@@ -342,7 +349,7 @@ if __name__ == "__main__":
     plotting.viz_3d_latent_space(
         model,
         x_test,
-        ds_test["time"].to_numpy() / 1e9,
+        dsd_time,
         output_directory + "/plots/",
         case_name,
     )

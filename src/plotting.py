@@ -68,7 +68,7 @@ def plot_reconstructions(
 
 
 def plot_predictions_AE_AR(
-    model, test_ids, tplt, x_test, m_test, r_bins_edges, n_lag=1, saveas=None
+    model, test_ids, dsd_time, tplt, x_test, m_test, r_bins_edges, n_lag=1, saveas=None
 ):
     (fig, ax) = plt.subplots(
         ncols=len(test_ids),
@@ -81,7 +81,7 @@ def plot_predictions_AE_AR(
         x0 = x_test[id, :n_lag, :]
         m0 = m_test[id, 0]
         x_pred = np.zeros_like(x_test[id])
-        x_pred[:n_lag, :] = x0
+        x_pred[:n_lag, :] = model.decoder(model.encoder(torch.Tensor(x0)))
         for t in range(n_lag, x_test.shape[1]):
             x_pred[t, :] = (
                 model(
@@ -104,7 +104,7 @@ def plot_predictions_AE_AR(
         ax[-1][i].set_xlabel("radius (um)")
 
     for j, t in enumerate(tplt):
-        ax[j][0].set_ylabel(f"dmdlnr at t={t}")
+        ax[j][0].set_ylabel(f"dmdlnr at t={dsd_time[t]}")
     ax[1][0].legend(["Data", "Model"])
     plt.suptitle(
         f"VAE Autoregressive model, lag {n_lag}: Multi time step; out of sample"
@@ -115,12 +115,13 @@ def plot_predictions_AE_AR(
         plt.show()
 
 
-def plot_latent_trajectories_AR(n_latent, model, x_test, m_test, n_lag=1, saveas=None):
+def plot_latent_trajectories_AR(
+    n_latent, model, dsd_time, x_test, m_test, n_lag=1, saveas=None
+):
     (fig, ax) = plt.subplots(
         ncols=n_latent + 1, nrows=2, figsize=(12, 6), sharey=False, sharex=True
     )
     colors = ["blue", "orange", "green", "pink", "purple", "gray"]
-    time = np.linspace(0, x_test.shape[1] - 1, x_test.shape[1])
     for j in range(x_test.shape[0]):
         x0 = x_test[j, :n_lag, :]
         mj = m_test[j, :]
@@ -158,16 +159,16 @@ def plot_latent_trajectories_AR(n_latent, model, x_test, m_test, n_lag=1, saveas
                 labeli = "M / dlnr"
                 color = colors[-1]
             ax[0][i].plot(
-                time, z_enc[:, i], label=labeli, color=color, alpha=0.5, lw=0.5
+                dsd_time, z_enc[:, i], label=labeli, color=color, alpha=0.5, lw=0.5
             )
             ax[1][i].plot(
-                time, z_pred[:, i], label=labeli, color=color, alpha=0.5, lw=0.5
+                dsd_time, z_pred[:, i], label=labeli, color=color, alpha=0.5, lw=0.5
             )
             ax[0][i].set_xlabel("Elapsed time")
 
     for i in range(n_latent):
         ax[0][i].set_title(f"z{i + 1}")
-        ax[0][i].set_xlim([0, x_test.shape[1] - 1])
+        ax[0][i].set_xlim([0, dsd_time.max()])
     ax[0][-1].set_title("mass (rescaled)")
     ax[0][0].set_ylabel("Data")
     ax[1][0].set_ylabel("Model")
@@ -322,7 +323,7 @@ def plot_predictions_dzdt(
 
 def viz_3d_latent_space(model, x_test, time, output_directory, case_name):
     # get latent space
-    lsn = model.encoder(torch.tensor(x_test)).detach().numpy()
+    lsn = model.encoder(torch.tensor(x_test.astype(np.float32))).detach().numpy()
 
     # Plot latent space
     pio.renderers.default = "browser"
