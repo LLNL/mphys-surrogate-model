@@ -56,7 +56,7 @@ def plot_reconstructions(
     (fig, ax) = plt.subplots(
         nrows=len(t_plt),
         ncols=len(test_ids),
-        figsize=(3 * len(test_ids), 13),
+        figsize=(6 * len(test_ids), 13),
         layout="constrained",
     )
 
@@ -457,12 +457,12 @@ def plot_full_testset_performance(model, x_test, tol, saveas=None):
     fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(34, 5), layout="constrained")
     # ---
     ax = axes[0]
-    klm = ax.matshow(np.log(test_kl.T), vmin=-9, vmax=-4)
+    klm = ax.matshow(np.log10(test_kl.T), vmin=-5, vmax=-2)
     fig.colorbar(
         klm,
         ax=ax,
         location="top",
-        label=f"log(KL Divergence) (Mean={np.mean(np.log(test_kl)):.2f})",
+        label=f"log(KL Divergence) (Mean={np.mean(np.log10(test_kl)):.2f})",
         extend="both",
     )
     ax.set_ylabel(f"Time")

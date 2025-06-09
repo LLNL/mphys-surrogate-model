@@ -18,9 +18,9 @@ from src import models, plotting, training
 
 params = {
     "data_src": "box",
-    "random_seed": 10,
-    "num_epochs": 5,
-    "batch_size": 512,
+    "random_seed": 0,
+    "num_epochs": 1000,
+    "batch_size": 10,
     "learning_rate": 1e-3,
     "latent_dim": 3,
     "n_lag": 1,
