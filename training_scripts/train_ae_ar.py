@@ -458,6 +458,13 @@ if __name__ == "__main__":
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_trajectories.png"))
 
+    # Plot full test set performance
+    fig = plotting.plot_full_testset_performance(model, x_test, params["tol"])
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_perf.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_full_test_perf.png"))
+
     # Plot latent space
     fig = plotting.viz_3d_latent_space(
         model,

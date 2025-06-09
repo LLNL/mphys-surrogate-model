@@ -1,11 +1,14 @@
 import os
 import sys
-import numpy as np
-import torch
+
 import matplotlib.pyplot as plt
-from src import data_utils as du
+import numpy as np
 import plotly.graph_objects as go
 import plotly.io as pio
+import torch
+from scipy.stats import wasserstein_distance
+
+from src import data_utils as du
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
@@ -415,6 +418,70 @@ def viz_3d_latent_space(model, x_test, time, saveas=None):
     # Optional save
     if saveas is not None:
         fig.write_html(saveas)
+
+    # Return fig for further manipulation
+    return fig
+
+
+def plot_full_testset_performance(model, x_test, tol, saveas=None):
+    # Extra vars
+    n_test = x_test.shape[0]
+    n_timesteps = x_test.shape[1]
+    divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
+
+    # Determine best and worst performing members
+    test_preds = model.decoder(model.encoder(torch.tensor(x_test)))
+    test_kl = np.zeros(x_test.shape[0:2])
+    test_wass = np.zeros(x_test.shape[0:2])
+    for nm in range(n_test):
+        for nt in range(n_timesteps):
+            pred_dist = test_preds[nm, nt]
+            true_dist = torch.tensor(x_test[nm, nt]).reshape(1, 1, -1)
+            test_kl[nm, nt] = divergence(
+                torch.log(pred_dist + tol),
+                torch.log(true_dist + tol),
+            )
+            test_wass[nm, nt] = wasserstein_distance(
+                pred_dist.detach().numpy().ravel(), true_dist.detach().numpy().ravel()
+            )
+    # test_kl_stat = np.mean(test_kl, axis=1)
+    # test_wass_stat = np.mean(test_wass, axis=1)
+    # tkl_argsort = np.argsort(-test_kl_stat)
+    # twass_argsort = np.argsort(-test_wass_stat)
+    # qtiles = [0, 0.25, 0.5, 0.75, 0.9999]
+    # qtile_idx = (np.array(qtiles) * n_test).astype(int)
+    # qtile_kl_mems = tkl_argsort[qtile_idx]
+    # qtile_wass_mems = twass_argsort[qtile_idx]
+
+    # Plot
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(34, 5), layout="constrained")
+    # ---
+    ax = axes[0]
+    klm = ax.matshow(np.log(test_kl.T), vmin=-9, vmax=-4)
+    fig.colorbar(
+        klm,
+        ax=ax,
+        location="top",
+        label=f"log(KL Divergence) (Mean={np.mean(np.log(test_kl)):.2f})",
+        extend="both",
+    )
+    ax.set_ylabel(f"Time")
+    # ---
+    ax = axes[1]
+    wsm = ax.matshow(test_wass.T, vmin=0.0005, vmax=0.008)
+    fig.colorbar(
+        wsm,
+        ax=ax,
+        location="top",
+        label=f"Wasserstein Distance (Mean={np.mean(test_wass):.2e})",
+        extend="both",
+    )
+    ax.set_xlabel(f"Test Member")
+    ax.set_ylabel(f"Time")
+
+    # Optional save
+    if saveas is not None:
+        fig.savefig(saveas)
 
     # Return fig for further manipulation
     return fig
