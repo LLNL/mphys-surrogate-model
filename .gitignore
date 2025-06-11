@@ -6,3 +6,4 @@
 *.pyc
 *.html
 .idea/*
+trained_models/

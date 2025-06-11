@@ -1,23 +1,26 @@
-import sys
-import os
-import time
 import copy
+import os
+import sys
+import time
+from pathlib import Path
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
-import numpy as np
-import xarray as xr
-import torch
 import pickle as pkl
 import uuid
-from src import data_utils as du, models, training, plotting
-from torch.utils.data import DataLoader
+
+import numpy as np
+import torch
+
+from src import data_utils as du
+from src import models, plotting, training
 
 params = {
-    "random_seed": 10,
-    "num_epochs": 30,
-    "batch_size": 128,
+    "data_src": "box",
+    "random_seed": 0,
+    "num_epochs": 1000,
+    "batch_size": 10,
     "learning_rate": 1e-3,
     "latent_dim": 3,
     "n_lag": 1,
@@ -28,15 +31,26 @@ params = {
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "layer_size": (20, 20, 10),
+    "layer_size": (100, 100, 100),
     "CNN": False,
     "print_frequency": 1,
+    "emily_save": True,
+    "nipun_save": True,
 }
 
 torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
+test_ids = [0, 10, 20, 25]
+tplt = [0, 30, -1]
+if params["CNN"]:
+    prefix = params["data_src"] + "_CNN"
+else:
+    prefix = params["data_src"] + "_FFNN"
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Model
+# ----------------------------------------------------------------------------------------------------------------------
 class AEAutoregressor(torch.nn.Module):
     def __init__(
         self, n_channels=2, n_bins=100, n_latent=10, layer_size=None, n_lag=1, CNN=False
@@ -75,43 +89,207 @@ class AEAutoregressor(torch.nn.Module):
         return bin1
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Training function
+# ----------------------------------------------------------------------------------------------------------------------
+def train_and_eval(
+    n_epochs,
+    model,
+    train_loader,
+    test_loader,
+    optimizer,
+    scheduler,
+    early_stopping,
+    print_flag=False,
+):
+    # Set up loss storage and other vars
+    losses = np.zeros(n_epochs) * np.nan
+    recon_losses = np.zeros(n_epochs) * np.nan
+    dx_losses = np.zeros(n_epochs) * np.nan
+    dz_losses = np.zeros(n_epochs) * np.nan
+    test_losses = np.zeros(n_epochs) * np.nan
+    test_recon_losses = np.zeros(n_epochs) * np.nan
+    test_dx_losses = np.zeros(n_epochs) * np.nan
+    test_dz_losses = np.zeros(n_epochs) * np.nan
+    best_test_loss = float("inf")
+    best_model = None
+
+    for epoch in range(n_epochs):
+        # Train
+        epoch_start_time = time.time()
+        model.train()
+        for batch_X, batch_y, batch_M in train_loader:
+            # Forward pass
+            pred_y = model(batch_X, batch_M)  # DSD pred t+1
+            pred_z = model.encoder(batch_X)  # Latent pred
+            pred_z1 = model.autoregressor(
+                torch.cat(
+                    (
+                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
+                        batch_M,
+                    ),
+                    dim=2,
+                )
+            )  # Latent t+1 pred
+            data_z1 = torch.cat(
+                (model.encoder(batch_y), batch_M), dim=2
+            )  # Latent t+1 "actual"
+            pred_x_recon = model.decoder(model.encoder(batch_X))  # DSD pred t+0
+
+            # Calculate train loss
+            loss_dz = criterion(pred_z1, data_z1)
+            loss_dx = divergence(
+                torch.log(pred_y + params["tol"]),
+                torch.log(batch_y + params["tol"]),
+            )
+            loss_recon = divergence(
+                torch.log(pred_x_recon + params["tol"]),
+                torch.log(batch_X + params["tol"]),
+            )
+            loss = (
+                params["w_dx"] * loss_dx
+                + params["w_recon"] * loss_recon
+                + params["w_dz"] * loss_dz
+            )
+
+            # Backward pass and optimization
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward(retain_graph=True)
+            optimizer.step()
+
+        # Save train losses
+        losses[epoch] = loss.item()
+        recon_losses[epoch] = loss_recon.item()
+        dx_losses[epoch] = loss_dx.item()
+        dz_losses[epoch] = loss_dz.item()
+
+        # Test
+        model.eval()
+        for batch_X, batch_y, batch_M in test_loader:
+            # Forward pass
+            pred_y = model(batch_X, batch_M)  # DSD pred t+1
+            pred_z = model.encoder(batch_X)  # Latent pred
+            pred_z1 = model.autoregressor(
+                torch.cat(
+                    (
+                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
+                        batch_M,
+                    ),
+                    dim=2,
+                )
+            )  # Latent t+1 pred
+            data_z1 = torch.cat(
+                (model.encoder(batch_y), batch_M), dim=2
+            )  # Latent t+1 "actual"
+            pred_x_recon = model.decoder(model.encoder(batch_X))  # DSD pred t+0
+
+            # Calculate test loss
+            loss_dz = criterion(pred_z1, data_z1)
+            loss_dx = divergence(
+                torch.log(pred_y + params["tol"]),
+                torch.log(batch_y + params["tol"]),
+            )
+            loss_recon = divergence(
+                torch.log(pred_x_recon + params["tol"]),
+                torch.log(batch_X + params["tol"]),
+            )
+
+            loss = (
+                params["w_dx"] * loss_dx
+                + params["w_recon"] * loss_recon
+                + params["w_dz"] * loss_dz
+            )
+
+        # Save test losses
+        test_losses[epoch] = loss.item()
+        test_recon_losses[epoch] = loss_recon.item()
+        test_dx_losses[epoch] = loss_dx.item()
+        test_dz_losses[epoch] = loss_dz.item()
+
+        # Save good model
+        if loss < best_test_loss:
+            best_test_loss = loss
+            best_model = copy.deepcopy(model)
+
+        # Update learning rate schedule
+        if params["lr_sched"]:
+            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                scheduler.step(loss)
+            else:
+                scheduler.step()
+
+        # Print
+        epoch_end_time = time.time()
+        if epoch % 1 == 0:
+            if print_flag:
+                print(
+                    f"Epoch {epoch}/{n_epochs} | Train Loss: {losses[epoch]:.4f} | Test Loss: {test_losses[epoch]:.4f} | LR: {scheduler.get_last_lr()[0]:.4e} | Epoch Time: {epoch_end_time - epoch_start_time} s"
+                )
+
+        # Early stopping
+        early_stopping(loss)
+        if early_stopping.early_stop:
+            if print_flag:
+                print("Training stopped early.")
+            break
+
+    return (
+        best_model,
+        losses,
+        recon_losses,
+        dx_losses,
+        dz_losses,
+        test_losses,
+        test_recon_losses,
+        test_dx_losses,
+        test_dz_losses,
+    )
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Main
+# ----------------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     # Set device
     device = torch.device(
         "cuda"
         if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
+        else "mps" if torch.backends.mps.is_available() else "cpu"
     )
     # torch.backends.cudnn.benchmark = True
-    print(f"Using {device} device")
+    print(
+        f"Using {device} device"
+    )  # TODO: while device code is here, I don't think the device is actually being used
 
     start_time = time.time()
     # Open dataset
-    ds_all = xr.open_dataset("../data/box64_train.nc")
-    dlnr = np.diff(np.log(ds_all["mass_bin"].values)).mean()
-    m_train = ds_all["dvdlnr"].sum(dim="mass_bin_idx")
-    x_train = (
-        (ds_all["dvdlnr"] / m_train).transpose("run", "time", "mass_bin_idx").to_numpy()
-    )
-    m_scale = m_train.max()
-    m_train = (m_train / m_scale).to_numpy()
-    n_bins = x_train.shape[2]
-    dsd_time = (ds_all["time"] / np.timedelta64(1, "s")).to_numpy()
-
-    ds_test = xr.open_dataset("../data/box64_test.nc")
-    m_test = ds_test["dvdlnr"].sum(dim="mass_bin_idx")
-    x_test = (
-        (ds_test["dvdlnr"] / m_test).transpose("run", "time", "mass_bin_idx").to_numpy()
-    )
-    m_test = (m_test / m_scale).to_numpy()
+    if params["data_src"] == "box":
+        (
+            x_train,
+            m_train,
+            x_test,
+            m_test,
+            r_bins_edges,
+            n_bins,
+            dsd_time,
+        ) = du.open_box_dataset()
+    elif params["data_src"] == "erf":
+        (
+            x_train,
+            m_train,
+            x_test,
+            m_test,
+            r_bins_edges,
+            n_bins,
+            dsd_time,
+        ) = du.open_erf_dataset()
+    else:
+        raise NotImplementedError("only erf and box data options exist")
 
     train_data = du.NormedBinDatasetAR(x_train, m_train, lag=params["n_lag"])
     train_loader = torch.utils.data.DataLoader(
         train_data, batch_size=params["batch_size"], shuffle=True
     )
-    # test_data = torch.utils.data.TensorDataset(test_inputs, test_outputs)
     test_data = du.NormedBinDatasetAR(x_test, m_test, lag=params["n_lag"])
     test_loader = torch.utils.data.DataLoader(
         test_data, batch_size=x_test.shape[0], shuffle=True
@@ -138,133 +316,35 @@ if __name__ == "__main__":
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total number of parameters: {total_params}")
 
-    # Set up loss storage
-    losses = np.zeros(params["num_epochs"]) * np.nan
-    recon_losses = np.zeros(params["num_epochs"]) * np.nan
-    dx_losses = np.zeros(params["num_epochs"]) * np.nan
-    dz_losses = np.zeros(params["num_epochs"]) * np.nan
+    # Training loop
+    # ----------------------------------------------------------------------------------
+    (
+        best_model,
+        losses,
+        recon_losses,
+        dx_losses,
+        dz_losses,
+        test_losses,
+        test_recon_losses,
+        test_dx_losses,
+        test_dz_losses,
+    ) = train_and_eval(
+        params["num_epochs"],
+        model,
+        train_loader,
+        test_loader,
+        optimizer,
+        sched,
+        early_stopping,
+        print_flag=True,
+    )
 
-    test_losses = np.zeros(params["num_epochs"]) * np.nan
-    test_recon_losses = np.zeros(params["num_epochs"]) * np.nan
-    test_dx_losses = np.zeros(params["num_epochs"]) * np.nan
-    test_dz_losses = np.zeros(params["num_epochs"]) * np.nan
-    best_test_loss = float("inf")
-
-    for epoch in range(params["num_epochs"]):
-        # Train
-        epoch_start_time = time.time()
-        model.train()
-        for batch_X, batch_y, batch_M in train_loader:
-            pred_y = model(batch_X, batch_M)
-            pred_z = model.encoder(batch_X)
-            pred_z1 = model.autoregressor(
-                torch.cat(
-                    (
-                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
-                        batch_M,
-                    ),
-                    dim=2,
-                )
-            )  # note: can train AR to predict zero change in M, or just ignore M in training
-            data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
-            pred_x_recon = model.decoder(model.encoder(batch_X))
-
-            loss_dx = divergence(
-                torch.log(pred_y + params["tol"]), torch.log(batch_y + params["tol"])
-            )
-            loss_dz = criterion(pred_z1, data_z1)
-            loss_recon = divergence(
-                torch.log(pred_x_recon + params["tol"]),
-                torch.log(batch_X + params["tol"]),
-            )
-
-            loss = loss_recon + params["w_dx"] * loss_dx + params["w_dz"] * loss_dz
-
-            # Backward pass and optimization
-            optimizer.zero_grad(set_to_none=True)
-            loss.backward(retain_graph=True)
-            optimizer.step()
-
-        # Save train losses
-        losses[epoch] = loss.item()
-        recon_losses[epoch] = loss_recon.item()
-        dx_losses[epoch] = loss_dx.item()
-        dz_losses[epoch] = loss_dz.item()
-
-        # test
-        model.eval()
-        for batch_X, batch_y, batch_M in test_loader:
-            # Forward pass
-            pred_y = model(batch_X, batch_M)
-            pred_z = model.encoder(batch_X)
-            pred_z1 = model.autoregressor(
-                torch.cat(
-                    (
-                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
-                        batch_M,
-                    ),
-                    dim=2,
-                )
-            )  # note: can train AR to predict zero change in M, or just ignore M in training
-            data_z1 = torch.cat((model.encoder(batch_y), batch_M), dim=2)
-            pred_x_recon = model.decoder(model.encoder(batch_X))
-
-            loss_dx = divergence(
-                torch.log(pred_y + params["tol"]), torch.log(batch_y + params["tol"])
-            )
-            loss_dz = criterion(pred_z1, data_z1)
-            loss_recon = divergence(
-                torch.log(pred_x_recon + params["tol"]),
-                torch.log(batch_X + params["tol"]),
-            )
-            loss = params["w_dx"] * loss_dx + loss_recon + params["w_dz"] * loss_dz
-
-        # Save test losses
-        test_losses[epoch] = loss.item()
-        test_recon_losses[epoch] = loss_recon.item()
-        test_dx_losses[epoch] = loss_dx.item()
-        test_dz_losses[epoch] = loss_dz.item()
-
-        # Save good model
-        if loss < best_test_loss:
-            best_test_loss = loss
-            best_model = copy.deepcopy(model)
-
-        # Update learning rate schedule
-        if params["lr_sched"]:
-            if isinstance(sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                sched.step(loss)
-            else:
-                sched.step()
-
-        # print progress
-        epoch_end_time = time.time()
-        if epoch % params["print_frequency"] == 0:
-            print(
-                f"Epoch [{epoch}/{params['num_epochs']}], Train Loss: {losses[epoch]:.4f} | "
-                f"Test Loss: {test_losses[epoch]:.4f} | LR: {sched.get_last_lr()}"
-                f"| Epoch Time: {epoch_end_time - epoch_start_time} s"
-            )
-            print(
-                f"Recon: {recon_losses[epoch]:.4f} | "
-                f"dx: {params['w_dx'] * dx_losses[epoch]:.4f} | "
-                f"dz: {params['w_dz'] * dz_losses[epoch]:.4f} | "
-            )
-
-        # early stopping
-        early_stopping(loss)
-        if early_stopping.early_stop:
-            print("Training stopped early.")
-            break
-
-    # SAVE
+    # ------------------------------------------------------------------------------------------------------------------
+    # Save and plot
+    # ------------------------------------------------------------------------------------------------------------------
+    # Set up result specific directory
     best_model.eval()
-    output_directory = "../trained_models/ae_ar_normed"
-    id = uuid.uuid4().hex
-    if params["CNN"]:
-        prefix = "CNN"
-    else:
-        prefix = "FFNN"
+    id = str(uuid.uuid4().hex)
     case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}_{}".format(
         params["latent_dim"],
         params["layer_size"],
@@ -275,27 +355,54 @@ if __name__ == "__main__":
         params["w_dz"],
         id,
     )
-    with open(output_directory + "/losses/" + case_name + ".pkl", "wb") as pickle_file:
-        pkl.dump(
-            (
-                losses,
-                recon_losses,
-                dx_losses,
-                dz_losses,
-                test_losses,
-                test_recon_losses,
-                test_dx_losses,
-                test_dz_losses,
-            ),
-            pickle_file,
-        )
-    torch.save(
-        best_model.state_dict(), output_directory + "/model/" + case_name + ".pth"
-    )
-    print(f"Saved model and losses as {case_name}")
+    # Emily save dirs
+    tpsp_out_dir = Path("../trained_models/ae_ar_normed")
+    if not tpsp_out_dir.exists():
+        tpsp_out_dir.mkdir(parents=True, exist_ok=True)
+    if not (tpsp_loss_dir := tpsp_out_dir / "losses").exists():
+        tpsp_loss_dir.mkdir(parents=True, exist_ok=True)
+    if not (tpsp_mod_dir := tpsp_out_dir / "models").exists():
+        tpsp_mod_dir.mkdir(parents=True, exist_ok=True)
+    if not (tpsp_plot_dir := tpsp_out_dir / "plots").exists():
+        tpsp_plot_dir.mkdir(parents=True, exist_ok=True)
+    # Nipun save dirs
+    runsp_out_dir = Path("../ng_scripts/trained_models/ae_ar_normed") / case_name
+    if not runsp_out_dir.exists():
+        runsp_out_dir.mkdir(parents=True, exist_ok=True)
 
-    ############### PLOTS PLOTS PLOTS ###############
-    plotting.plot_losses(
+    # Save losses
+    pkl_out_files = []
+    if params["emily_save"]:
+        pkl_out_files.append(tpsp_loss_dir / (case_name + ".pkl"))
+    if params["nipun_save"]:
+        pkl_out_files.append(runsp_out_dir / (case_name + ".pkl"))
+    for out_file in pkl_out_files:
+        with open(out_file, "wb") as pickle_file:
+            pkl.dump(
+                (
+                    losses,
+                    recon_losses,
+                    dx_losses,
+                    dz_losses,
+                    test_losses,
+                    test_recon_losses,
+                    test_dx_losses,
+                    test_dz_losses,
+                ),
+                pickle_file,
+            )
+
+    # Save model
+    mdl_out_files = []
+    if params["emily_save"]:
+        mdl_out_files.append(tpsp_mod_dir / (case_name + ".pth"))
+    if params["nipun_save"]:
+        mdl_out_files.append(runsp_out_dir / (case_name + ".pth"))
+    for out_file in mdl_out_files:
+        torch.save(best_model.state_dict(), out_file)
+
+    # Loss plot
+    fig = plotting.plot_losses(
         losses,
         test_losses=test_losses,
         sub_losses=[
@@ -305,44 +412,66 @@ if __name__ == "__main__":
         ],
         labels=["X: t -> t+1", "Z: t -> t+1", "Recon"],
         title=f"Training Loss, lag {params['n_lag']}",
-        saveas=output_directory + "/plots/" + case_name + "_losses.png",
     )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_losses.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_losses.png"))
 
     # Plot distributions: reconstruction
-    r_bins_edges = ds_all["mass_bin"]
-    test_ids = [0, 10, 20, 25]
-    plotting.plot_reconstructions(
+    fig = plotting.plot_reconstructions(
         model,
         test_ids,
         x_test,
         r_bins_edges,
-        saveas=output_directory + "/plots/" + case_name + "_reconstructions.png",
     )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_reconstructions.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
 
-    # Predictions: Multi time step
-    tplt = [3, 5, 8, 12]  # [0, 1, 2, 3, 5, 8, 12]
-    plotting.plot_predictions_AE_AR(
-        model,
-        test_ids,
-        tplt,
-        x_test,
-        m_test,
-        r_bins_edges,
-        # saveas=output_directory + "/plots/" + case_name + "_predictions.png",
-    )
+    # # Predictions: Multi time step
+    # fig = plotting.plot_predictions_AE_AR(
+    #     model,
+    #     test_ids,
+    #     dsd_time,
+    #     tplt,
+    #     x_test,
+    #     m_test,
+    #     r_bins_edges,
+    # )
+    # if params["emily_save"]:
+    #     fig.savefig(tpsp_plot_dir / (case_name + "_predictions.png"))
+    # if params["nipun_save"]:
+    #     fig.savefig(runsp_out_dir / (case_name + "_predictions.png"))
 
     # Plot trajectories of the latent variables
-    plotting.plot_latent_trajectories_AR(
+    fig = plotting.plot_latent_trajectories_AR(
         params["latent_dim"],
         model,
+        dsd_time,
         x_test,
         m_test,
-        # saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
     )
-    plotting.viz_3d_latent_space(
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_trajectories.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_trajectories.png"))
+
+    # Plot full test set performance
+    fig = plotting.plot_full_testset_performance(model, x_test, params["tol"])
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_perf.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_full_test_perf.png"))
+
+    # Plot latent space
+    fig = plotting.viz_3d_latent_space(
         model,
         x_test,
-        ds_test["time"].to_numpy() / 1e9,
-        output_directory + "/plots/",
-        case_name,
+        dsd_time,
     )
+    if params["emily_save"]:
+        fig.write_html(tpsp_plot_dir / (case_name + "_latent_space.html"))
+    if params["nipun_save"]:
+        fig.write_html(runsp_out_dir / (case_name + "_latent_space.html"))

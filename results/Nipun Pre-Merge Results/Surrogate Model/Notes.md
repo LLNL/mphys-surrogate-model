@@ -45,3 +45,8 @@
 
 # Optuna Baseline_200
 Results from the Optuna test done in Nipun's repo pre-merge.
+
+# Seed100_Epoch100
+Testing 100 different random seeds for 100 epochs each. Interesting behavior occurs where
+models converge bimodally. They have similar performance but one set of models is definitely better than 
+the other set.
