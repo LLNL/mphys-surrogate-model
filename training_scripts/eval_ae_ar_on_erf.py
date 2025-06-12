@@ -62,8 +62,8 @@ params = load_params.copy()
 params["data_src"] = "erf"
 # params["lr_sched"] = False
 params["batch_size"] = 128
-params["wd"] = 0.0
-params["learning_rate"] = 1e-2
+# params["wd"] = 0.0
+params["learning_rate"] = 1e-3
 # params["w_dx"] = 0
 # params["w_recon"] = 0
 params["num_epochs"] = 50
@@ -110,7 +110,7 @@ model = AEAutoregressor(
     CNN=params["CNN"],
 )
 model.load_state_dict(torch.load(output_directory + "/model/" + case_name + ".pth"))
-
+#
 # plotting.plot_reconstructions(
 #         model,
 #         test_ids,
@@ -147,6 +147,12 @@ model.load_state_dict(torch.load(output_directory + "/model/" + case_name + ".pt
 #     case_name + "_erfeval",
 # )
 
+# model.autoregressor = models.Autoregressive(
+#             n_bins=params["latent_dim"] + 1,
+#             n_bins_in=params["latent_dim"] * params["n_lag"] + 1,
+#             layer_size=params["layer_size"],
+#         )
+
 # refit AR portion of model
 divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 criterion = torch.nn.MSELoss()
@@ -162,12 +168,6 @@ early_stopping = training.EarlyStopping(patience=params["patience"])
 total_params = sum(p.numel() for p in model.parameters())
 ar_params = sum(p.numel() for p in model.autoregressor.parameters())
 print(f"Retraining {ar_params} of {total_params} parameters")
-
-# model.autoregressor = models.Autoregressive(
-#             n_bins=params["latent_dim"] + 1,
-#             n_bins_in=params["latent_dim"] * params["n_lag"] + 1,
-#             layer_size=params["layer_size"],
-#         )
 
 best_model, (
     losses,

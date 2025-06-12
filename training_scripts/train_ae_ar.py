@@ -17,8 +17,8 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "erf",
     "random_seed": 10,
-    "num_epochs": 30,
-    "batch_size": 256,
+    "num_epochs": 100,
+    "batch_size": 128,
     "learning_rate": 1e-3,
     "latent_dim": 3,
     "n_lag": 1,
@@ -29,7 +29,7 @@ params = {
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "layer_size": (100, 100, 100),
+    "layer_size": (10, 20, 10),
     "CNN": False,
     "print_frequency": 1,
 }
@@ -37,11 +37,13 @@ params = {
 torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
 test_ids = [0, 10, 20, 30]
-tplt = [0, 30, -1]
+tplt = [0, 5, -1]
 if params["CNN"]:
     prefix = params["data_src"] + "_CNN"
 else:
     prefix = params["data_src"] + "_FFNN"
+
+output_directory = "../results/poster_erf_results/ae_ar"
 
 
 class AEAutoregressor(torch.nn.Module):
@@ -273,7 +275,7 @@ if __name__ == "__main__":
             r_bins_edges,
             n_bins,
             dsd_time,
-        ) = du.open_erf_dataset()
+        ) = du.open_erf_dataset(sample_time=np.arange(0, 61, 5))
     else:
         raise NotImplementedError("only erf and box data options exist")
 
@@ -293,6 +295,7 @@ if __name__ == "__main__":
         n_bins=n_bins,
         n_latent=params["latent_dim"],
         n_lag=params["n_lag"],
+        layer_size=params["layer_size"],
         CNN=params["CNN"],
     )
 
@@ -331,7 +334,6 @@ if __name__ == "__main__":
 
     # SAVE
     best_model.eval()
-    output_directory = "../trained_models/ae_ar_normed"
     id = uuid.uuid4().hex
     case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}_{}".format(
         params["latent_dim"],
@@ -394,7 +396,7 @@ if __name__ == "__main__":
         x_test,
         m_test,
         r_bins_edges,
-        # saveas=output_directory + "/plots/" + case_name + "_predictions.png",
+        saveas=output_directory + "/plots/" + case_name + "_predictions.png",
     )
 
     # Plot trajectories of the latent variables
@@ -404,7 +406,7 @@ if __name__ == "__main__":
         dsd_time,
         x_test,
         m_test,
-        # saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
+        saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
     )
     plotting.viz_3d_latent_space(
         model,
