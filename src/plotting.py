@@ -9,6 +9,8 @@ import torch
 from scipy.stats import wasserstein_distance
 
 from src import data_utils as du
+import plotly.graph_objects as go
+import plotly.io as pio
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
@@ -74,6 +76,8 @@ def plot_reconstructions(
             )
 
             ax[j][i].set_xscale("log")
+            ax[j][i].set_ylabel("PSD")
+            ax[j][i].set_xlabel("r (m)")
         ax[0][i].set_title(f"Run #{id}")
 
     # Accoutrements
@@ -93,19 +97,22 @@ def plot_predictions_AE_AR(
 ):
     # Set up figure
     (fig, ax) = plt.subplots(
-        nrows=len(tplt),
         ncols=len(test_ids),
+        nrows=len(tplt),
         figsize=(3 * len(test_ids), 2 * len(tplt)),
         sharey=True,
         layout="constrained",
     )
+    model.eval()
 
     # Plot predictions for AE-AR model for multiple time steps
     for i, id in enumerate(test_ids):
         x0 = x_test[id, :n_lag, :]
         m0 = m_test[id, 0]
         x_pred = np.zeros_like(x_test[id])
-        x_pred[:n_lag, :] = model.decoder(model.encoder(torch.Tensor(x0)))
+        x_pred[:n_lag, :] = (
+            model.decoder(model.encoder(torch.Tensor(x0))).detach().numpy()
+        )
         for t in range(n_lag, x_test.shape[1]):
             x_pred[t, :] = (
                 model(
@@ -140,6 +147,55 @@ def plot_predictions_AE_AR(
         fig.savefig(saveas)
 
     # Return fig for further manipulation
+    return fig
+
+
+def plot_single_prediction_AE_AR(
+    model, id, dsd_time, x_test, m_test, r_bins_edges, n_lag=1, saveas=None
+):
+    (fig, ax) = plt.subplots(
+        1,
+        1,
+        figsize=(6, 3),
+    )
+    model.eval()
+    x0 = x_test[id, :n_lag, :]
+    m0 = m_test[id, 0]
+    x_pred = np.zeros_like(x_test[id])
+    x_pred[:n_lag, :] = model.decoder(model.encoder(torch.Tensor(x0))).detach().numpy()
+    for t in range(n_lag, x_test.shape[1]):
+        x_pred[t, :] = (
+            model(
+                torch.Tensor(x_pred[t - n_lag : t, :]).reshape(
+                    -1, n_lag, x_pred[t].shape[0]
+                ),
+                torch.Tensor([m0]).reshape(1, 1, 1),
+            )
+            .detach()
+            .numpy()[0][0]
+        )
+
+    l1 = ax.step(r_bins_edges, x_test[id, 0, :], label="t=0s, Data", color="grey")
+    l2 = ax.step(r_bins_edges, x_test[id, -1, :], label=f"t={dsd_time[-1]}s Data")
+    l3 = ax.step(
+        r_bins_edges,
+        x_pred[-1, :],
+        ls="--",
+        linewidth=3,
+        label=f"t={dsd_time[-1]}s Model",
+    )
+
+    ax.set_xscale("log")
+    ax.set_xlabel("radius (um)")
+
+    ax.set_ylabel("PSD")
+    ax.legend()
+    plt.suptitle(
+        f"VAE Autoregressive model, lag {n_lag}: Multi time step; out of sample"
+    )
+    if saveas is not None:
+        plt.savefig(saveas)
+
     return fig
 
 
@@ -195,10 +251,20 @@ def plot_latent_trajectories_AR(
                 labeli = "M / dlnr"
                 color = colors[-1]
             ax[0][i].plot(
-                dsd_time, z_enc[:, i], label=labeli, color=color, alpha=0.5, lw=0.5
+                dsd_time,
+                z_enc[:, i],
+                label=labeli,
+                color=color,
+                alpha=min(1, 150 / x_test.shape[0]),
+                lw=0.5,
             )
             ax[1][i].plot(
-                dsd_time, z_pred[:, i], label=labeli, color=color, alpha=0.5, lw=0.5
+                dsd_time,
+                z_pred[:, i],
+                label=labeli,
+                color=color,
+                alpha=min(1, 150 / x_test.shape[0]),
+                lw=0.5,
             )
             ax[0][i].set_xlabel("Elapsed time")
 
@@ -217,6 +283,69 @@ def plot_latent_trajectories_AR(
 
     # Return fig for further manipulation
     return fig
+
+
+def plot_single_latent_trajectory_AR(
+    n_latent, model, dsd_time, x_test, m_test, j=0, n_lag=1, saveas=None
+):
+    (fig, ax) = plt.subplots(ncols=1, nrows=1, figsize=(6, 6))
+    colors = ["blue", "orange", "green", "pink", "purple", "gray"]
+    x0 = x_test[j, :n_lag, :]
+    mj = m_test[j, :]
+    z0 = np.array(
+        [
+            model.encoder(torch.Tensor(x0[t]).reshape(1, -1)).detach().numpy()[0]
+            for t in range(n_lag)
+        ]
+    )
+    z_pred = np.zeros((x_test.shape[1], n_latent + 1))
+    z_enc = np.zeros((x_test.shape[1], n_latent + 1))
+    z_enc[:, -1] = mj
+    z_enc[:n_lag, :-1] = z0
+    z_pred[:n_lag, :-1] = z0
+    z_pred[:n_lag, -1] = mj[0]
+    for t in range(n_lag, x_test.shape[1]):
+        lagged_input = torch.cat(
+            (
+                torch.Tensor(z_pred[t - n_lag : t, :-1]).reshape(n_lag * n_latent),
+                torch.Tensor([mj[0]]),
+            )
+        )
+        z_pred[t, :] = model.autoregressor(lagged_input).detach().numpy()
+        z_enc[t, :-1] = (
+            model.encoder(torch.Tensor(x_test[j, t, :]).reshape(1, -1))
+            .detach()
+            .numpy()[0]
+        )
+
+    for i in range(n_latent + 1):
+        if i < n_latent:
+            labeli = f"z{i}"
+            color = colors[i]
+        else:
+            labeli = "M / dlnr"
+            color = colors[-1]
+        ax.plot(
+            dsd_time,
+            z_enc[:, i],
+            label=labeli,
+            color=color,
+            lw=2,
+        )
+        ax.plot(
+            dsd_time,
+            z_pred[:, i],
+            label=labeli + " pred",
+            color=color,
+            ls="--",
+            lw=2,
+        )
+    ax.set_xlabel("Elapsed time")
+    ax.set_ylabel("Latent variable value")
+    ax.legend()
+    ax.set_xlim([0, dsd_time.max()])
+    plt.title(f"Autoregressive Z(t), lag {n_lag}")
+    plt.show()
 
 
 def plot_latent_trajectories_dzdt(
@@ -277,10 +406,20 @@ def plot_latent_trajectories_dzdt(
             else:
                 labeli = "M / dlnr"
                 color = colors[-1]
-            ax[0][i].plot(time, latents_data[:, i], color=color, alpha=0.5, lw=0.5)
+            ax[0][i].plot(
+                time,
+                latents_data[:, i],
+                color=color,
+                alpha=min(1, 150 / x_test.shape[0]),
+                lw=0.5,
+            )
             ax[0][i].set_title(labeli)
             ax[1][i].plot(
-                time, latents_pred[:, i].squeeze(), color=color, alpha=0.5, lw=0.5
+                time,
+                latents_pred[:, i].squeeze(),
+                color=color,
+                alpha=min(1, 150 / x_test.shape[0]),
+                lw=0.5,
             )
             ax[1][i].set_xlabel("Elapsed time")
     # for i in range(n_latent + 1):
@@ -331,11 +470,6 @@ def plot_predictions_dzdt(
     z_encoded = model.encoder(torch.Tensor(x_test)).detach().numpy()
     for i, id in enumerate(test_ids):
         z0 = np.concatenate((z_encoded[id, 0, :], np.array([m_test[id, 0]])), axis=-1)
-        # if isinstance(model.dzdt, models.SINDyDeriv):
-        #     latents_pred = du.sindy_simulate(
-        #         z0, tplt, model.dzdt.sindy_coeffs.weight.float(), model.dzdt.poly_order, zlim
-        #     )
-        # elif isinstance(model.dzdt, models.NNDerivatives):
         latents_pred = du.simulate(z0, dsd_time[tplt], model.dzdt, zlim)
         x_pred = model.decoder(torch.Tensor(latents_pred[:, :-1])).detach().numpy()
 
@@ -349,7 +483,7 @@ def plot_predictions_dzdt(
         ax[-1][i].set_xlabel("radius (um)")
 
     for j, t in enumerate(tplt):
-        ax[j][0].set_ylabel(f"dmdlnr at t={t}")
+        ax[j][0].set_ylabel(f"dmdlnr at t={dsd_time[t]}")
     ax[1][0].legend(["Data", "Model"])
     plt.suptitle(f"AE-SINDy model: Multi time step; out of sample")
 
@@ -361,7 +495,7 @@ def plot_predictions_dzdt(
 
 def viz_3d_latent_space(model, x_test, time, saveas=None):
     # get latent space
-    lsn = model.encoder(torch.tensor(x_test.astype(np.float32))).detach().numpy()
+    lsn = model.encoder(torch.Tensor(x_test)).detach().numpy()
 
     # Plot latent space
     pio.renderers.default = "browser"
@@ -430,13 +564,13 @@ def plot_full_testset_performance(model, x_test, tol, saveas=None):
     divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 
     # Determine best and worst performing members
-    test_preds = model.decoder(model.encoder(torch.tensor(x_test)))
+    test_preds = model.decoder(model.encoder(torch.Tensor(x_test)))
     test_kl = np.zeros(x_test.shape[0:2])
     test_wass = np.zeros(x_test.shape[0:2])
     for nm in range(n_test):
         for nt in range(n_timesteps):
             pred_dist = test_preds[nm, nt]
-            true_dist = torch.tensor(x_test[nm, nt]).reshape(1, 1, -1)
+            true_dist = torch.Tensor(x_test[nm, nt]).reshape(1, 1, -1)
             test_kl[nm, nt] = divergence(
                 torch.log(pred_dist + tol),
                 torch.log(true_dist + tol),

@@ -17,10 +17,10 @@ from src import data_utils as du
 from src import models, plotting, training
 
 params = {
-    "data_src": "box",
-    "random_seed": 0,
-    "num_epochs": 1000,
-    "batch_size": 10,
+    "data_src": "erf",
+    "random_seed": 10,
+    "num_epochs": 100,
+    "batch_size": 128,
     "learning_rate": 1e-3,
     "latent_dim": 3,
     "n_lag": 1,
@@ -40,8 +40,8 @@ params = {
 
 torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
-test_ids = [0, 10, 20, 25]
-tplt = [0, 30, -1]
+test_ids = [0, 10, 20, 30]
+tplt = [0, 5, -1]
 if params["CNN"]:
     prefix = params["data_src"] + "_CNN"
 else:
@@ -118,6 +118,7 @@ def train_and_eval(
         # Train
         epoch_start_time = time.time()
         model.train()
+        mean_epoch_loss = [0, 0, 0, 0]
         for batch_X, batch_y, batch_M in train_loader:
             # Forward pass
             pred_y = model(batch_X, batch_M)  # DSD pred t+1
@@ -157,11 +158,16 @@ def train_and_eval(
             loss.backward(retain_graph=True)
             optimizer.step()
 
+            mean_epoch_loss[0] += loss.item()
+            mean_epoch_loss[1] += loss_recon.item()
+            mean_epoch_loss[2] += loss_dx.item()
+            mean_epoch_loss[3] += loss_dz.item()
+
         # Save train losses
-        losses[epoch] = loss.item()
-        recon_losses[epoch] = loss_recon.item()
-        dx_losses[epoch] = loss_dx.item()
-        dz_losses[epoch] = loss_dz.item()
+        losses[epoch] = mean_epoch_loss[0] / len(train_loader)
+        recon_losses[epoch] = mean_epoch_loss[1] / len(train_loader)
+        dx_losses[epoch] = mean_epoch_loss[2] / len(train_loader)
+        dz_losses[epoch] = mean_epoch_loss[3] / len(train_loader)
 
         # Test
         model.eval()
@@ -220,17 +226,22 @@ def train_and_eval(
 
         # Print
         epoch_end_time = time.time()
-        if epoch % 1 == 0:
-            if print_flag:
-                print(
-                    f"Epoch {epoch}/{n_epochs} | Train Loss: {losses[epoch]:.4f} | Test Loss: {test_losses[epoch]:.4f} | LR: {scheduler.get_last_lr()[0]:.4e} | Epoch Time: {epoch_end_time - epoch_start_time} s"
-                )
+        if epoch % params["print_frequency"] == 0 and print_flag:
+            print(
+                f"Epoch [{epoch}/{params['num_epochs']}], Train Loss: {losses[epoch]:.4f} | "
+                f"Test Loss: {test_losses[epoch]:.4f} | LR: {scheduler.get_last_lr()}"
+                f"| Epoch Time: {epoch_end_time - epoch_start_time} s"
+            )
+            print(
+                f"Recon: {params['w_recon'] * recon_losses[epoch]:.4f} | "
+                f"dx: {params['w_dx'] * dx_losses[epoch]:.4f} | "
+                f"dz: {params['w_dz'] * dz_losses[epoch]:.4f} | "
+            )
 
         # Early stopping
         early_stopping(loss)
-        if early_stopping.early_stop:
-            if print_flag:
-                print("Training stopped early.")
+        if early_stopping.early_stop and print_flag:
+            print("Training stopped early.")
             break
 
     return (
@@ -254,7 +265,9 @@ if __name__ == "__main__":
     device = torch.device(
         "cuda"
         if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available() else "cpu"
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
     )
     # torch.backends.cudnn.benchmark = True
     print(
@@ -282,7 +295,7 @@ if __name__ == "__main__":
             r_bins_edges,
             n_bins,
             dsd_time,
-        ) = du.open_erf_dataset()
+        ) = du.open_erf_dataset(sample_time=np.arange(0, 61, 5))
     else:
         raise NotImplementedError("only erf and box data options exist")
 
@@ -292,7 +305,7 @@ if __name__ == "__main__":
     )
     test_data = du.NormedBinDatasetAR(x_test, m_test, lag=params["n_lag"])
     test_loader = torch.utils.data.DataLoader(
-        test_data, batch_size=x_test.shape[0], shuffle=True
+        test_data, batch_size=len(test_data), shuffle=True
     )
 
     # Initialize the model
@@ -301,6 +314,7 @@ if __name__ == "__main__":
         n_bins=n_bins,
         n_latent=params["latent_dim"],
         n_lag=params["n_lag"],
+        layer_size=params["layer_size"],
         CNN=params["CNN"],
     )
 
@@ -430,20 +444,20 @@ if __name__ == "__main__":
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
 
-    # # Predictions: Multi time step
-    # fig = plotting.plot_predictions_AE_AR(
-    #     model,
-    #     test_ids,
-    #     dsd_time,
-    #     tplt,
-    #     x_test,
-    #     m_test,
-    #     r_bins_edges,
-    # )
-    # if params["emily_save"]:
-    #     fig.savefig(tpsp_plot_dir / (case_name + "_predictions.png"))
-    # if params["nipun_save"]:
-    #     fig.savefig(runsp_out_dir / (case_name + "_predictions.png"))
+    # Predictions: Multi time step
+    fig = plotting.plot_predictions_AE_AR(
+        model,
+        test_ids,
+        dsd_time,
+        tplt,
+        x_test,
+        m_test,
+        r_bins_edges,
+    )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_predictions.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_predictions.png"))
 
     # Plot trajectories of the latent variables
     fig = plotting.plot_latent_trajectories_AR(
