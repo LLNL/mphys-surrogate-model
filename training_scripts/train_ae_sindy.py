@@ -311,7 +311,10 @@ if __name__ == "__main__":
 
     # Plot latent space
     plotting.viz_3d_latent_space(
-        model, x_test, dsd_time, output_directory + "/plots", case_name
+        model,
+        x_test,
+        dsd_time,
+        output_directory + "/plots/" + case_name + ".html",  # TODO: Test
     )
 
     # TODO: wasserstein & other metrics across all test members
