@@ -436,10 +436,7 @@ if __name__ == "__main__":
     fig = plotting.plot_reconstructions(
         model,
         test_ids,
-        dsd_time,
-        tplt,
         x_test,
-        m_test,
         r_bins_edges,
     )
     if params["emily_save"]:

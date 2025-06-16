@@ -495,7 +495,7 @@ def plot_predictions_dzdt(
 
 def viz_3d_latent_space(model, x_test, time, saveas=None):
     # get latent space
-    lsn = model.encoder(torch.tensor(x_test.astype(np.float32))).detach().numpy()
+    lsn = model.encoder(torch.Tensor(x_test)).detach().numpy()
 
     # Plot latent space
     pio.renderers.default = "browser"
@@ -564,13 +564,13 @@ def plot_full_testset_performance(model, x_test, tol, saveas=None):
     divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 
     # Determine best and worst performing members
-    test_preds = model.decoder(model.encoder(torch.tensor(x_test)))
+    test_preds = model.decoder(model.encoder(torch.Tensor(x_test)))
     test_kl = np.zeros(x_test.shape[0:2])
     test_wass = np.zeros(x_test.shape[0:2])
     for nm in range(n_test):
         for nt in range(n_timesteps):
             pred_dist = test_preds[nm, nt]
-            true_dist = torch.tensor(x_test[nm, nt]).reshape(1, 1, -1)
+            true_dist = torch.Tensor(x_test[nm, nt]).reshape(1, 1, -1)
             test_kl[nm, nt] = divergence(
                 torch.log(pred_dist + tol),
                 torch.log(true_dist + tol),
