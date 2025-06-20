@@ -108,7 +108,6 @@ def train_and_eval(
         # Train
         epoch_start_time = time.time()
         model.train()
-        mean_epoch_loss = [0, 0, 0, 0]
         for batch_x, batch_dx, batch_M in train_loader:
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
@@ -136,16 +135,11 @@ def train_and_eval(
             loss.backward(retain_graph=True)
             optimizer.step()
 
-            mean_epoch_loss[0] += loss.item()
-            mean_epoch_loss[1] += loss_recon.item()
-            mean_epoch_loss[2] += loss_dx.item()
-            mean_epoch_loss[3] += loss_dz.item()
-
         # Save train losses
-        losses[epoch] = mean_epoch_loss[0] / len(train_loader)
-        recon_losses[epoch] = mean_epoch_loss[1] / len(train_loader)
-        dx_losses[epoch] = mean_epoch_loss[2] / len(train_loader)
-        dz_losses[epoch] = mean_epoch_loss[3] / len(train_loader)
+        losses[epoch] = loss.item()
+        recon_losses[epoch] = loss_recon.item()
+        dx_losses[epoch] = loss_dx.item()
+        dz_losses[epoch] = loss_dz.item()
 
         # Test
         model.eval()
@@ -208,8 +202,9 @@ def train_and_eval(
 
         # Early stopping
         early_stopping(loss)
-        if early_stopping.early_stop and print_flag:
-            print("Training stopped early.")
+        if early_stopping.early_stop:
+            if print_flag:
+                print("Training stopped early.")
             break
 
     return (

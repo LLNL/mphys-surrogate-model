@@ -235,8 +235,9 @@ def train_and_eval(
 
         # Early stopping
         early_stopping(loss)
-        if early_stopping.early_stop and print_flag:
-            print("Training stopped early.")
+        if early_stopping.early_stop:
+            if print_flag:
+                print("Training stopped early.")
             break
 
     return (
