@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "box",
     "random_seed": 10,
-    "num_epochs": 3,
+    "num_epochs": 1000,
     "batch_size": 32,
     "learning_rate": 1e-3,
     "latent_dim": 3,
@@ -31,7 +31,7 @@ params = {
     "layer_size": (40, 40, 40),
     "CNN": False,
     "print_frequency": 1,
-    "emily_save": False,
+    "emily_save": True,
     "nipun_save": True,
 }
 
