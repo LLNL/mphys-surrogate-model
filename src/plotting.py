@@ -360,12 +360,18 @@ def plot_latent_trajectories_dzdt(
     plt_dx=True,
     saveas=None,
 ):
+    # Set up figure
     (fig, ax) = plt.subplots(
-        ncols=n_latent + 1, nrows=2, figsize=(12, 6), sharey=False, sharex=True
+        ncols=n_latent + 1,
+        nrows=2,
+        figsize=(24, 12),
+        sharey=False,
+        sharex=True,
+        layout="constrained",
     )
     colors = ["blue", "orange", "green", "pink", "purple", "gray"]
 
-    # compute limits
+    # Compute limits
     z_enc_train = model.encoder(torch.Tensor(x_train)).detach().numpy()
     zlim = np.zeros((n_latent + 1, 2))
     for il in range(n_latent):
@@ -374,7 +380,7 @@ def plot_latent_trajectories_dzdt(
     zlim[-1][0] = m_train.min()
     zlim[-1][1] = m_train.max()
 
-    # compute all else
+    # Compute all else
     z_encoded = model.encoder(torch.Tensor(x_test)).detach().numpy()
     dz_encoded = np.gradient(z_encoded, axis=1) / dt
     for j in range(x_test.shape[0]):
@@ -427,14 +433,17 @@ def plot_latent_trajectories_dzdt(
     #         ax[0][i].set_ylim([zlim[i][0], zlim[i][1]])
     #         ax[1][i].set_ylim([zlim[i][0], zlim[i][1]])
 
+    # Accoutrements
     ax[0][0].set_ylabel("Data")
     ax[1][0].set_ylabel("Prediction")
-    plt.suptitle(title)
-    plt.tight_layout()
+    fig.suptitle(title)
+
+    # Optional save
     if saveas is not None:
         plt.savefig(saveas)
-    else:
-        plt.show()
+
+    # Return fig for further manipulation
+    return fig
 
 
 def plot_predictions_dzdt(
@@ -450,6 +459,7 @@ def plot_predictions_dzdt(
     r_bins_edges,
     saveas=None,
 ):
+    # Set up figure
     (fig, ax) = plt.subplots(
         ncols=len(test_ids),
         nrows=len(tplt),
@@ -457,7 +467,7 @@ def plot_predictions_dzdt(
         sharey=True,
     )
 
-    # compute limits
+    # Compute limits
     z_enc_train = model.encoder(torch.Tensor(x_train)).detach().numpy()
     zlim = np.zeros((n_latent + 1, 2))
     for il in range(n_latent):
@@ -466,7 +476,7 @@ def plot_predictions_dzdt(
     zlim[-1][0] = m_train.min()
     zlim[-1][1] = m_train.max()
 
-    # compute all else
+    # Compute all else
     z_encoded = model.encoder(torch.Tensor(x_test)).detach().numpy()
     for i, id in enumerate(test_ids):
         z0 = np.concatenate((z_encoded[id, 0, :], np.array([m_test[id, 0]])), axis=-1)
@@ -482,15 +492,20 @@ def plot_predictions_dzdt(
         ax[0][i].set_title(f"Run #{id}")
         ax[-1][i].set_xlabel("radius (um)")
 
+    # Accoutrements
     for j, t in enumerate(tplt):
         ax[j][0].set_ylabel(f"dmdlnr at t={dsd_time[t]}")
     ax[1][0].legend(["Data", "Model"])
-    plt.suptitle(f"AE-SINDy model: Multi time step; out of sample")
+    fig.suptitle(
+        f"AE-SINDy model: Multi time step; out of sample"
+    )  # TODO: Does this need changing between NNdzdt and SINDy?
 
+    # Optional save
     if saveas is not None:
-        plt.savefig(saveas)
-    else:
-        plt.show()
+        fig.savefig(saveas)
+
+    # Return fig for further manipulation
+    return fig
 
 
 def viz_3d_latent_space(model, x_test, time, saveas=None):

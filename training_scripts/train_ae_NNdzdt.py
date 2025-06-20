@@ -392,84 +392,84 @@ if __name__ == "__main__":
     for out_file in mdl_out_files:
         torch.save(best_model.state_dict(), out_file)
 
-    # # Loss plot
-    # fig = plotting.plot_losses(
-    #     losses,
-    #     test_losses=test_losses,
-    #     sub_losses=[
-    #         params["loss_weight_sindy_x"] * np.array(dx_losses),
-    #         params["loss_weight_sindy_z"] * np.array(dz_losses),
-    #         params["loss_weight_recon"] * np.array(recon_losses),
-    #     ],
-    #     labels=["dx/dt", "dz/dt", "Recon"],
-    #     title=f"Training Loss",
-    # )
-    # if params["emily_save"]:
-    #     fig.savefig(tpsp_plot_dir / (case_name + "_losses.png"))
-    # if params["nipun_save"]:
-    #     fig.savefig(runsp_out_dir / (case_name + "_losses.png"))
-    #
-    # # Plot distributions: reconstruction
-    # fig = plotting.plot_reconstructions(
-    #     model,
-    #     test_ids,
-    #     x_test,
-    #     r_bins_edges,
-    # )
-    # if params["emily_save"]:
-    #     fig.savefig(tpsp_plot_dir / (case_name + "_reconstructions.png"))
-    # if params["nipun_save"]:
-    #     fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
-    #
-    # # Predictions: Multi time step
-    # fig = plotting.plot_predictions_dzdt(
-    #     test_ids,
-    #     tplt,
-    #     params["latent_dim"],
-    #     model,
-    #     dsd_time,
-    #     x_test,
-    #     m_test,
-    #     x_train,
-    #     m_train,
-    #     r_bins_edges,
-    # )
-    # if params["emily_save"]:
-    #     fig.savefig(tpsp_plot_dir / (case_name + "_predictions.png"))
-    # if params["nipun_save"]:
-    #     fig.savefig(runsp_out_dir / (case_name + "_predictions.png"))
-    #
-    # # Plot trajectories of the latent variables
-    # fig = plotting.plot_latent_trajectories_dzdt(
-    #     params["latent_dim"],
-    #     model,
-    #     x_test,
-    #     m_test,
-    #     test_data.dt,
-    #     test_data.t,
-    #     x_train,
-    #     m_train,
-    #     plt_dx=False,
-    # )
-    # if params["emily_save"]:
-    #     fig.savefig(tpsp_plot_dir / (case_name + "_trajectories.png"))
-    # if params["nipun_save"]:
-    #     fig.savefig(runsp_out_dir / (case_name + "_trajectories.png"))
-    #
-    # # Plot full test set performance
-    # fig = plotting.plot_full_testset_performance(model, x_test, params["tol"])
-    # if params["emily_save"]:
-    #     fig.savefig(tpsp_plot_dir / (case_name + "_full_test_perf.png"))
-    # if params["nipun_save"]:
-    #     fig.savefig(runsp_out_dir / (case_name + "_full_test_perf.png"))
-    #
-    # # Plot latent space
-    # fig = plotting.viz_3d_latent_space(
-    #     model,
-    #     x_test,
-    #     dsd_time,
-    # )
-    # if params["emily_save"]:
-    #     fig.write_html(tpsp_plot_dir / (case_name + "_latent_space.html"))
-    # if params["nipun_save"]:
-    #     fig.write_html(runsp_out_dir / (case_name + "_latent_space.html"))
+    # Loss plot
+    fig = plotting.plot_losses(
+        losses,
+        test_losses=test_losses,
+        sub_losses=[
+            params["loss_weight_sindy_x"] * np.array(dx_losses),
+            params["loss_weight_sindy_z"] * np.array(dz_losses),
+            params["loss_weight_recon"] * np.array(recon_losses),
+        ],
+        labels=["dx/dt", "dz/dt", "Recon"],
+        title=f"Training Loss",
+    )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_losses.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_losses.png"))
+
+    # Plot distributions: reconstruction
+    fig = plotting.plot_reconstructions(
+        model,
+        test_ids,
+        x_test,
+        r_bins_edges,
+    )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_reconstructions.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
+
+    # Predictions: Multi time step
+    fig = plotting.plot_predictions_dzdt(
+        test_ids,
+        tplt,
+        params["latent_dim"],
+        model,
+        dsd_time,
+        x_test,
+        m_test,
+        x_train,
+        m_train,
+        r_bins_edges,
+    )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_predictions.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_predictions.png"))
+
+    # Plot trajectories of the latent variables
+    fig = plotting.plot_latent_trajectories_dzdt(
+        params["latent_dim"],
+        model,
+        x_test,
+        m_test,
+        test_data.dt,
+        test_data.t,
+        x_train,
+        m_train,
+        plt_dx=False,
+    )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_trajectories.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_trajectories.png"))
+
+    # Plot full test set performance
+    fig = plotting.plot_full_testset_performance(model, x_test, params["tol"])
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_perf.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_full_test_perf.png"))
+
+    # Plot latent space
+    fig = plotting.viz_3d_latent_space(
+        model,
+        x_test,
+        dsd_time,
+    )
+    if params["emily_save"]:
+        fig.write_html(tpsp_plot_dir / (case_name + "_latent_space.html"))
+    if params["nipun_save"]:
+        fig.write_html(runsp_out_dir / (case_name + "_latent_space.html"))
