@@ -12,7 +12,6 @@ import uuid
 
 import numpy as np
 import torch
-
 from src import data_utils as du
 from src import models, plotting, training
 
@@ -42,10 +41,6 @@ torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
 test_ids = [0, 10, 20, 30]
 tplt = [0, 5, -1]
-if params["CNN"]:
-    prefix = params["data_src"] + "_CNN"
-else:
-    prefix = params["data_src"] + "_FFNN"
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -265,9 +260,7 @@ if __name__ == "__main__":
     device = torch.device(
         "cuda"
         if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
+        else "mps" if torch.backends.mps.is_available() else "cpu"
     )
     # torch.backends.cudnn.benchmark = True
     print(
@@ -359,6 +352,10 @@ if __name__ == "__main__":
     # Set up result specific directory
     best_model.eval()
     id = str(uuid.uuid4().hex)
+    if params["CNN"]:
+        prefix = params["data_src"] + "_CNN"
+    else:
+        prefix = params["data_src"] + "_FFNN"
     case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}_{}".format(
         params["latent_dim"],
         params["layer_size"],
