@@ -11,7 +11,7 @@ import xarray as xr
 import torch
 import pickle as pkl
 import uuid
-from src import data_utils as du, models, training, plotting
+from src import data_utils as du, models, training, plotting, thresholding
 from torch.utils.data import DataLoader
 
 params = {
@@ -27,21 +27,30 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "lambda1_factor": 0.5,
-    # "lambda3_sparsity": 0.0, TODO: sequential thresholding
     "CNN": False,
     "print_frequency": 1,
+    "sequential_threshold_method": "bimodal_gmm",  # None, bimodal_gmm, knee_detection
+    "sequential_thresholding_interval": 10,  # None
 }
 
 torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
 
-output_directory = "../results/poster_erf_results/ae_sindy"
+output_directory = "../trained_models/ae_sindy_normed"
 test_ids = [0, 10, 20, 30]
 tplt = [0, 5, -1]
 
 
 class AESINDy(torch.nn.Module):
-    def __init__(self, n_channels=1, n_bins=100, n_latent=10, poly_order=2, CNN=False):
+    def __init__(
+        self,
+        n_channels=1,
+        n_bins=100,
+        n_latent=10,
+        poly_order=2,
+        CNN=False,
+        sequential_thresholding=False,
+    ):
         super(AESINDy, self).__init__()
         self.poly_order = poly_order
 
@@ -62,7 +71,11 @@ class AESINDy(torch.nn.Module):
             self.decoder = models.FFNNDecoder(
                 n_bins=n_bins, n_latent=n_latent, distribution=True
             )
-        self.dzdt = models.SINDyDeriv(n_latent=n_latent + 1, poly_order=poly_order)
+        self.dzdt = models.SINDyDeriv(
+            n_latent=n_latent + 1,
+            poly_order=poly_order,
+            use_thresholds=sequential_thresholding,
+        )
 
     def forward(self, bin0, M):
         z0 = self.encoder(bin0)
@@ -120,6 +133,9 @@ if __name__ == "__main__":
         n_latent=params["latent_dim"],
         poly_order=params["poly_order"],
         CNN=params["CNN"],
+        sequential_thresholding=True
+        if params["sequential_thresholding_interval"] is not None
+        else False,
     )
 
     # Loss function and optimizer
@@ -128,11 +144,22 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
     )
+    if params["sequential_threshold_method"] is not None:
+        thresholder = thresholding.AdaptiveSequentialThresholdingSINDy(
+            model.dzdt,
+            thresholding.AdaptiveThresholdAnalyzer(
+                method=params["sequential_threshold_method"],
+                min_epochs_between=params["sequential_thresholding_interval"],
+            ),
+        )
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
     early_stopping = training.EarlyStopping(patience=params["patience"])
 
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"Total number of parameters: {total_params}")
+    total_coeffs = sum(p.numel() for p in model.dzdt.parameters())
+    print(
+        f"Total number of parameters: {total_params}, {total_coeffs} are SINDy coefficients"
+    )
 
     # Compute & set weights based on Champion et al recs
     xx = np.squeeze(train_data.x)
@@ -151,6 +178,7 @@ if __name__ == "__main__":
     recon_losses = np.zeros(params["num_epochs"]) * np.nan
     dx_losses = np.zeros(params["num_epochs"]) * np.nan
     dz_losses = np.zeros(params["num_epochs"]) * np.nan
+    threshold_events = []
 
     test_losses = np.zeros(params["num_epochs"]) * np.nan
     test_recon_losses = np.zeros(params["num_epochs"]) * np.nan
@@ -188,6 +216,26 @@ if __name__ == "__main__":
             optimizer.zero_grad(set_to_none=True)
             loss.backward(retain_graph=True)
             optimizer.step()
+
+        # Check for adaptive thresholding
+        if params["sequential_threshold_method"] is not None:
+            (
+                thresholded,
+                threshold,
+                n_active,
+                analysis,
+            ) = thresholder.maybe_apply_threshold(epoch, loss.item())
+        else:
+            thresholded = False
+
+        if thresholded:
+            print(
+                f"Epoch {epoch}: Applied {analysis.get('threshold_method', 'unknown')} "
+                f"thresholding with threshold={threshold:.6f}, "
+                f"active coefficients={n_active} / {total_coeffs}"
+            )
+            threshold_events.append(epoch)
+            coeffs = model.dzdt.get_coeffs()
 
         # Save train losses
         losses[epoch] = loss.item()
@@ -311,7 +359,7 @@ if __name__ == "__main__":
 
     # Plot latent space
     plotting.viz_3d_latent_space(
-        model,
+        best_model,
         x_test,
         dsd_time,
         output_directory + "/plots/" + case_name + ".html",  # TODO: Test
@@ -321,7 +369,7 @@ if __name__ == "__main__":
 
     # Plot distributions: reconstruction
     plotting.plot_reconstructions(
-        model,
+        best_model,
         test_ids,
         x_test,
         r_bins_edges,
@@ -333,7 +381,7 @@ if __name__ == "__main__":
         test_ids,
         tplt,
         params["latent_dim"],
-        model,
+        best_model,
         dsd_time,
         x_test,
         m_test,
@@ -346,7 +394,7 @@ if __name__ == "__main__":
     # Plot trajectories of the latent variables
     plotting.plot_latent_trajectories_dzdt(
         params["latent_dim"],
-        model,
+        best_model,
         x_test,
         m_test,
         test_data.dt,
