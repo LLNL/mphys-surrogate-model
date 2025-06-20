@@ -11,7 +11,7 @@ class AdaptiveThresholdAnalyzer:
         method="bimodal_gmm",
         min_epochs_between=50,
         convergence_patience=10,
-        convergence_threshold=1e-4,
+        convergence_threshold=0.05,
     ):
         self.method = method
         self.min_epochs_between = min_epochs_between

@@ -15,9 +15,10 @@ from src import data_utils as du, models, training, plotting, thresholding
 from torch.utils.data import DataLoader
 
 params = {
+    "data_src": "erf",
     "random_seed": 10,
-    "num_epochs": 30,
-    "batch_size": 128,
+    "num_epochs": 100,
+    "batch_size": 32,
     "learning_rate": 1e-3,
     "latent_dim": 3,
     "poly_order": 3,
@@ -28,12 +29,16 @@ params = {
     "lambda1_factor": 0.5,
     "CNN": False,
     "print_frequency": 1,
-    "sequential_threshold_method": "bimdoal_gmm",  # None, bimodal_gmm, knee_detection
+    "sequential_threshold_method": "bimodal_gmm",  # None, bimodal_gmm, knee_detection
     "sequential_thresholding_interval": 10,  # None
 }
 
 torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
+
+output_directory = "../trained_models/ae_sindy_normed"
+test_ids = [0, 10, 20, 30]
+tplt = [0, 5, -1]
 
 
 class AESINDy(torch.nn.Module):
@@ -92,24 +97,29 @@ if __name__ == "__main__":
     print(f"Using {device} device")
 
     start_time = time.time()
-    # Open dataset
-    ds_all = xr.open_dataset("../data/box64_train.nc")
-    dlnr = np.diff(np.log(ds_all["mass_bin"].values)).mean()
-    m_train = ds_all["dvdlnr"].sum(dim="mass_bin_idx")
-    x_train = (
-        (ds_all["dvdlnr"] / m_train).transpose("run", "time", "mass_bin_idx").to_numpy()
-    )
-    m_scale = m_train.max()
-    m_train = (m_train / m_scale).to_numpy()
-    n_bins = x_train.shape[2]
-    dsd_time = (ds_all["time"] / np.timedelta64(1, "s")).to_numpy()
 
-    ds_test = xr.open_dataset("../data/box64_test.nc")
-    m_test = ds_test["dvdlnr"].sum(dim="mass_bin_idx")
-    x_test = (
-        (ds_test["dvdlnr"] / m_test).transpose("run", "time", "mass_bin_idx").to_numpy()
-    )
-    m_test = (m_test / m_scale).to_numpy()
+    if params["data_src"] == "box":
+        (
+            x_train,
+            m_train,
+            x_test,
+            m_test,
+            r_bins_edges,
+            n_bins,
+            dsd_time,
+        ) = du.open_box_dataset()
+    elif params["data_src"] == "erf":
+        (
+            x_train,
+            m_train,
+            x_test,
+            m_test,
+            r_bins_edges,
+            n_bins,
+            dsd_time,
+        ) = du.open_erf_dataset(sample_time=np.arange(0, 61, 5))
+    else:
+        raise NotImplementedError("only erf and box data options exist")
 
     train_data = du.NormedBinDatasetDzDt(x_train, dsd_time, m_train)
     train_loader = DataLoader(train_data, batch_size=params["batch_size"], shuffle=True)
@@ -297,7 +307,6 @@ if __name__ == "__main__":
 
     # SAVE
     best_model.eval()
-    output_directory = "../trained_models/ae_sindy_normed"
     id = uuid.uuid4().hex
     if params["CNN"]:
         prefix = "CNN"
@@ -350,16 +359,17 @@ if __name__ == "__main__":
 
     # Plot latent space
     plotting.viz_3d_latent_space(
-        model, x_test, dsd_time, output_directory + "/plots", case_name
+        best_model,
+        x_test,
+        dsd_time,
+        output_directory + "/plots/" + case_name + ".html",  # TODO: Test
     )
 
     # TODO: wasserstein & other metrics across all test members
 
     # Plot distributions: reconstruction
-    r_bins_edges = ds_all["mass_bin"]
-    test_ids = [0, 10, 20, 25]
     plotting.plot_reconstructions(
-        model,
+        best_model,
         test_ids,
         x_test,
         r_bins_edges,
@@ -367,25 +377,24 @@ if __name__ == "__main__":
     )
 
     # Predictions: Multi time step
-    tplt = [3, 5, 8, 12]  # [0, 1, 2, 3, 5, 8, 12]
     plotting.plot_predictions_dzdt(
         test_ids,
         tplt,
         params["latent_dim"],
-        model,
+        best_model,
         dsd_time,
         x_test,
         m_test,
         x_train,
         m_train,
         r_bins_edges,
-        # saveas=output_directory + "/plots/" + case_name + "_predictions.png",
+        saveas=output_directory + "/plots/" + case_name + "_predictions.png",
     )
 
     # Plot trajectories of the latent variables
     plotting.plot_latent_trajectories_dzdt(
         params["latent_dim"],
-        model,
+        best_model,
         x_test,
         m_test,
         test_data.dt,
@@ -393,5 +402,5 @@ if __name__ == "__main__":
         x_train,
         m_train,
         plt_dx=False,
-        # saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
+        saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
     )

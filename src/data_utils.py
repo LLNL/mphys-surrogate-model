@@ -8,6 +8,53 @@ from scipy.integrate import odeint, solve_ivp
 from itertools import combinations_with_replacement
 
 
+def open_box_dataset():
+    ds_all = xr.open_dataset("../data/box64_train.nc", decode_timedelta=True)
+    r_bins_edges = ds_all["mass_bin"]
+    m_train = ds_all["dvdlnr"].sum(dim="mass_bin_idx")
+    x_train = (
+        (ds_all["dvdlnr"] / m_train).transpose("run", "time", "mass_bin_idx").to_numpy()
+    )
+    m_scale = m_train.max()
+    m_train = (m_train / m_scale).to_numpy()
+    n_bins = x_train.shape[2]
+    dsd_time = (ds_all["time"] / np.timedelta64(1, "s")).to_numpy()
+
+    ds_test = xr.open_dataset("../data/box64_test.nc", decode_timedelta=True)
+    m_test = ds_test["dvdlnr"].sum(dim="mass_bin_idx")
+    x_test = (
+        (ds_test["dvdlnr"] / m_test).transpose("run", "time", "mass_bin_idx").to_numpy()
+    )
+    m_test = (m_test / m_scale).to_numpy()
+
+    return (x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time)
+
+
+def open_erf_dataset(path=None, sample_time=None):
+    if path is None:
+        ds_all = xr.open_dataset("../data/congestus_coal_200m_train.nc")
+        ds_test = xr.open_dataset("../data/congestus_coal_200m_test.nc")
+    else:
+        ds_all = xr.open_dataset(path + "_train.nc")
+        ds_test = xr.open_dataset(path + "_test.nc")
+    if sample_time is not None:
+        ds_all = ds_all.isel(t=sample_time)
+        ds_test = ds_test.isel(t=sample_time)
+    r_bins_edges = ds_all["rbin_l"]
+    m_train = ds_all["dmdlnr"].sum(dim="bin").transpose("loc", "t")
+    x_train = (ds_all["dmdlnr"] / m_train).transpose("loc", "t", "bin").to_numpy()
+    m_scale = m_train.max()
+    m_train = (m_train / m_scale).to_numpy()
+    n_bins = x_train.shape[2]
+    dsd_time = ds_all["t"].to_numpy()
+    dsd_time = dsd_time - dsd_time[0]
+    m_test = ds_test["dmdlnr"].sum(dim="bin").transpose("loc", "t")
+    x_test = (ds_test["dmdlnr"] / m_test).transpose("loc", "t", "bin").to_numpy()
+    m_test = (m_test / m_scale).to_numpy()
+
+    return (x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time)
+
+
 # Create torch dataset
 class NormedBinDatasetDzDt(Dataset):
     def __init__(self, dmdlnr_normed, dsd_time, M):
@@ -535,17 +582,16 @@ def sindy_simulate(z0, T, sindy_coeffs, poly_order, z_lim):
 
 
 def simulate(z0, T, dz_network, z_lim):
-    def f(z, t):
+    def f(t, z):
         n_latent = z.size
         dz = dz_network(torch.Tensor(z)).detach().numpy()
         for il in range(n_latent):
-            if z[il] >= z_lim[il][1]:
-                dz[il] = 0.0
-            elif z[il] <= z_lim[il][0]:
+            if (z[il] >= z_lim[il][1]) or (z[il] <= z_lim[il][0]):
                 dz[il] = 0.0
         return dz
 
-    Z = odeint(f, z0, T)
+    sol = solve_ivp(f, [T[0], T[-1]], z0, method="RK45", t_eval=T)
+    Z = sol.y.T
     return Z
 
 

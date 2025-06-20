@@ -4,4 +4,7 @@
 *.pkl
 *.nc
 *.pyc
+*.html
 .idea/*
+trained_models/
+.DS_Store
