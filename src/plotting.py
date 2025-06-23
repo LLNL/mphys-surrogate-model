@@ -611,7 +611,7 @@ def plot_full_testset_performance(model, x_test, tol, saveas=None):
         klm,
         ax=ax,
         location="top",
-        label=f"log(KL Divergence) (Mean={np.mean(np.log10(test_kl)):.2f})",
+        label=f"log10(KL Divergence) (Mean={np.mean(np.log10(test_kl)):.2f})",
         extend="both",
     )
     ax.set_ylabel(f"Time")
