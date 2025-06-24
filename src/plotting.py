@@ -26,7 +26,7 @@ def plot_losses(
     saveas=None,
 ):
     # Set up figure
-    fig, ax = plt.subplots(1, 1, figsize=(34, 13), layout="constrained")
+    fig, ax = plt.subplots(1, 1, figsize=(8, 6), layout="constrained")
 
     # Plot losses
     ax.plot(losses, label="total train")
@@ -58,7 +58,7 @@ def plot_reconstructions(
     (fig, ax) = plt.subplots(
         nrows=len(t_plt),
         ncols=len(test_ids),
-        figsize=(6 * len(test_ids), 13),
+        figsize=(3 * len(test_ids), 2 * len(t_plt)),
         layout="constrained",
     )
 
@@ -206,7 +206,7 @@ def plot_latent_trajectories_AR(
     (fig, ax) = plt.subplots(
         nrows=2,
         ncols=n_latent + 1,
-        figsize=(12, 6),
+        figsize=(3 * (n_latent + 1), 6),
         sharey=False,
         sharex=True,
         layout="constrained",
@@ -364,7 +364,7 @@ def plot_latent_trajectories_dzdt(
     (fig, ax) = plt.subplots(
         ncols=n_latent + 1,
         nrows=2,
-        figsize=(24, 12),
+        figsize=(3 * (n_latent + 1), 6),
         sharey=False,
         sharex=True,
         layout="constrained",
