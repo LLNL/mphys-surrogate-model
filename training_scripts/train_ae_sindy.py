@@ -89,9 +89,9 @@ if __name__ == "__main__":
     device = torch.device(
         "cuda"
         if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
         else "cpu"
+        # NOTE: Attemping to use MPS backend will lead to an error
+        # "...as_strided_tensorimpl does not work with MPS..."
     )
     # torch.backends.cudnn.benchmark = True
     print(f"Using {device} device")
@@ -173,6 +173,8 @@ if __name__ == "__main__":
     params["loss_weight_sindy_x"] = lambda1
     params["loss_weight_sindy_z"] = lambda2
 
+    model.to(device)
+
     # Set up loss storage
     losses = np.zeros(params["num_epochs"]) * np.nan
     recon_losses = np.zeros(params["num_epochs"]) * np.nan
@@ -192,6 +194,10 @@ if __name__ == "__main__":
         model.train()
         mean_epoch_loss = [0, 0, 0, 0]
         for batch_x, batch_dx, batch_M in train_loader:
+            batch_x = batch_x.to(device)
+            batch_dx = batch_dx.to(device)
+            batch_M = batch_M.to(device)
+
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
             z = model.encoder(batch_x)
@@ -252,6 +258,10 @@ if __name__ == "__main__":
         # test
         model.eval()
         for batch_x, batch_dx, batch_M in test_loader:
+            batch_x = batch_x.to(device)
+            batch_dx = batch_dx.to(device)
+            batch_M = batch_M.to(device)
+
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
             z = model.encoder(batch_x)
@@ -313,6 +323,8 @@ if __name__ == "__main__":
 
     # SAVE
     best_model.eval()
+    best_model = best_model.to("cpu")
+
     id = uuid.uuid4().hex
     if params["CNN"]:
         prefix = "CNN"
