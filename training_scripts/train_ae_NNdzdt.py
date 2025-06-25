@@ -12,9 +12,10 @@ import uuid
 
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
+
 from src import data_utils as du
 from src import models, plotting, training
-from torch.utils.data import DataLoader
 
 params = {
     "data_src": "erf",
@@ -309,7 +310,7 @@ if __name__ == "__main__":
     xxl2 = np.linalg.norm(xx, ord=2, axis=1) ** 2
     dxl2 = np.linalg.norm(dx, ord=2, axis=1) ** 2
     lambda1 = xxl2.sum() / dxl2.sum() * params["lambda1_factor"]
-    lambda2 = lambda1 / 100  # 2 orders of magnitude smaller
+    lambda2 = lambda1 / 1e2  # 2 orders of magnitude smaller
     params["loss_weight_recon"] = 1.0
     params["loss_weight_sindy_x"] = lambda1
     params["loss_weight_sindy_z"] = lambda2
@@ -344,7 +345,6 @@ if __name__ == "__main__":
     # Set up case name
     best_model.eval()
     best_model = best_model.to("cpu")
-
     id = str(uuid.uuid4().hex)
     if params["CNN"]:
         prefix = params["data_src"] + "_CNN"
