@@ -12,12 +12,11 @@ import uuid
 
 import numpy as np
 import torch
-
 from src import data_utils as du
 from src import models, plotting, training
 
 params = {
-    "data_src": "erf",
+    "data_src": "box",
     "random_seed": 10,
     "num_epochs": 100,
     "batch_size": 128,
@@ -42,10 +41,6 @@ torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
 test_ids = [0, 10, 20, 30]
 tplt = [0, 5, -1]
-if params["CNN"]:
-    prefix = params["data_src"] + "_CNN"
-else:
-    prefix = params["data_src"] + "_FFNN"
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -240,8 +235,9 @@ def train_and_eval(
 
         # Early stopping
         early_stopping(loss)
-        if early_stopping.early_stop and print_flag:
-            print("Training stopped early.")
+        if early_stopping.early_stop:
+            if print_flag:
+                print("Training stopped early.")
             break
 
     return (
@@ -356,9 +352,13 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------------------------------------------------------
     # Save and plot
     # ------------------------------------------------------------------------------------------------------------------
-    # Set up result specific directory
+    # Set up case name
     best_model.eval()
     id = str(uuid.uuid4().hex)
+    if params["CNN"]:
+        prefix = params["data_src"] + "_CNN"
+    else:
+        prefix = params["data_src"] + "_FFNN"
     case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}_{}".format(
         params["latent_dim"],
         params["layer_size"],
@@ -369,6 +369,8 @@ if __name__ == "__main__":
         params["w_dz"],
         id,
     )
+    print(f"Save ID is {case_name}")
+
     # Emily save dirs
     tpsp_out_dir = Path("../trained_models/ae_ar_normed")
     if not tpsp_out_dir.exists():
@@ -379,10 +381,17 @@ if __name__ == "__main__":
         tpsp_mod_dir.mkdir(parents=True, exist_ok=True)
     if not (tpsp_plot_dir := tpsp_out_dir / "plots").exists():
         tpsp_plot_dir.mkdir(parents=True, exist_ok=True)
+    if params["emily_save"]:
+        print(
+            f"Saving output files to the respective folders at {tpsp_out_dir}/{{losses,models,plots}}/{case_name}*"
+        )
+
     # Nipun save dirs
     runsp_out_dir = Path("../ng_scripts/trained_models/ae_ar_normed") / case_name
     if not runsp_out_dir.exists():
         runsp_out_dir.mkdir(parents=True, exist_ok=True)
+    if params["nipun_save"]:
+        print(f"Saving output files to {runsp_out_dir}*")
 
     # Save losses
     pkl_out_files = []
@@ -434,7 +443,7 @@ if __name__ == "__main__":
 
     # Plot distributions: reconstruction
     fig = plotting.plot_reconstructions(
-        model,
+        best_model,
         test_ids,
         x_test,
         r_bins_edges,
@@ -446,7 +455,7 @@ if __name__ == "__main__":
 
     # Predictions: Multi time step
     fig = plotting.plot_predictions_AE_AR(
-        model,
+        best_model,
         test_ids,
         dsd_time,
         tplt,
@@ -462,7 +471,7 @@ if __name__ == "__main__":
     # Plot trajectories of the latent variables
     fig = plotting.plot_latent_trajectories_AR(
         params["latent_dim"],
-        model,
+        best_model,
         dsd_time,
         x_test,
         m_test,
@@ -473,7 +482,7 @@ if __name__ == "__main__":
         fig.savefig(runsp_out_dir / (case_name + "_trajectories.png"))
 
     # Plot full test set performance
-    fig = plotting.plot_full_testset_performance(model, x_test, params["tol"])
+    fig = plotting.plot_full_testset_performance(best_model, x_test, params["tol"])
     if params["emily_save"]:
         fig.savefig(tpsp_plot_dir / (case_name + "_full_test_perf.png"))
     if params["nipun_save"]:
@@ -481,7 +490,7 @@ if __name__ == "__main__":
 
     # Plot latent space
     fig = plotting.viz_3d_latent_space(
-        model,
+        best_model,
         x_test,
         dsd_time,
     )
