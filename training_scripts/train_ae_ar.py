@@ -96,7 +96,10 @@ def train_and_eval(
     scheduler,
     early_stopping,
     print_flag=False,
+    device="cpu",
 ):
+    model.to(device)
+
     # Set up loss storage and other vars
     losses = np.zeros(n_epochs) * np.nan
     recon_losses = np.zeros(n_epochs) * np.nan
@@ -116,6 +119,10 @@ def train_and_eval(
         mean_epoch_loss = [0, 0, 0, 0]
         for batch_X, batch_y, batch_M in train_loader:
             # Forward pass
+            batch_X = batch_X.to(device)
+            batch_y = batch_y.to(device)
+            batch_M = batch_M.to(device)
+
             pred_y = model(batch_X, batch_M)  # DSD pred t+1
             pred_z = model.encoder(batch_X)  # Latent pred
             pred_z1 = model.autoregressor(
@@ -167,6 +174,10 @@ def train_and_eval(
         # Test
         model.eval()
         for batch_X, batch_y, batch_M in test_loader:
+            batch_X = batch_X.to(device)
+            batch_y = batch_y.to(device)
+            batch_M = batch_M.to(device)
+
             # Forward pass
             pred_y = model(batch_X, batch_M)  # DSD pred t+1
             pred_z = model.encoder(batch_X)  # Latent pred
@@ -262,7 +273,7 @@ if __name__ == "__main__":
         "cuda"
         if torch.cuda.is_available()
         else "mps"
-        if torch.backends.mps.is_available()
+        if torch.backends.mps.is_available() and params["batch_size"] > 1000
         else "cpu"
     )
     # torch.backends.cudnn.benchmark = True
@@ -347,6 +358,7 @@ if __name__ == "__main__":
         sched,
         early_stopping,
         print_flag=True,
+        device=device,
     )
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -354,6 +366,8 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------------------------------------------------------
     # Set up case name
     best_model.eval()
+    best_model = best_model.to("cpu")
+
     id = str(uuid.uuid4().hex)
     if params["CNN"]:
         prefix = params["data_src"] + "_CNN"

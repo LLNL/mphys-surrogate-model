@@ -17,9 +17,9 @@ from src import models, plotting, training
 from torch.utils.data import DataLoader
 
 params = {
-    "data_src": "box",
-    "random_seed": 10,
-    "num_epochs": 10,
+    "data_src": "erf",
+    "random_seed": 0,
+    "num_epochs": 100,
     "batch_size": 32,
     "learning_rate": 1e-3,
     "latent_dim": 3,
@@ -28,7 +28,7 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "lambda1_factor": 0.5,
-    "layer_size": (100, 100, 100),
+    "layer_size": (40, 40, 40),
     "CNN": False,
     "print_frequency": 1,
     "emily_save": True,
@@ -91,7 +91,10 @@ def train_and_eval(
     scheduler,
     early_stopping,
     print_flag=False,
+    device="cpu",
 ):
+    model.to(device)
+
     # Set up loss storage and other vars
     losses = np.zeros(n_epochs) * np.nan
     recon_losses = np.zeros(n_epochs) * np.nan
@@ -110,6 +113,10 @@ def train_and_eval(
         model.train()
         mean_epoch_loss = [0, 0, 0, 0]
         for batch_x, batch_dx, batch_M in train_loader:
+            batch_x = batch_x.to(device)
+            batch_dx = batch_dx.to(device)
+            batch_M = batch_M.to(device)
+
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
             z = model.encoder(batch_x)
@@ -150,6 +157,10 @@ def train_and_eval(
         # Test
         model.eval()
         for batch_x, batch_dx, batch_M in test_loader:
+            batch_x = batch_x.to(device)
+            batch_dx = batch_dx.to(device)
+            batch_M = batch_M.to(device)
+
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
             z = model.encoder(batch_x)
@@ -234,9 +245,9 @@ if __name__ == "__main__":
     device = torch.device(
         "cuda"
         if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
         else "cpu"
+        # NOTE: Attemping to use MPS backend will lead to an error
+        # "...as_strided_tensorimpl does not work with MPS..."
     )
     # torch.backends.cudnn.benchmark = True
     print(
@@ -326,6 +337,7 @@ if __name__ == "__main__":
         sched,
         early_stopping,
         print_flag=True,
+        device=device,
     )
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -333,6 +345,8 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------------------------------------------------------
     # Set up case name
     best_model.eval()
+    best_model = best_model.to("cpu")
+
     id = str(uuid.uuid4().hex)
     if params["CNN"]:
         prefix = params["data_src"] + "_CNN"
