@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "erf",
     "random_seed": 10,
-    "num_epochs": 100,
+    "num_epochs": 10,
     "batch_size": 32,
     "learning_rate": 1e-3,
     "latent_dim": 3,
@@ -190,6 +190,7 @@ if __name__ == "__main__":
         # Train
         epoch_start_time = time.time()
         model.train()
+        mean_epoch_loss = [0, 0, 0, 0]
         for batch_x, batch_dx, batch_M in train_loader:
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
@@ -211,6 +212,11 @@ if __name__ == "__main__":
                 + params["loss_weight_recon"] * loss_recon
                 + params["loss_weight_sindy_z"] * loss_dz
             )
+
+            mean_epoch_loss[0] += loss.item()
+            mean_epoch_loss[1] += loss_recon.item()
+            mean_epoch_loss[2] += loss_dx.item()
+            mean_epoch_loss[3] += loss_dz.item()
 
             # Backward pass and optimization
             optimizer.zero_grad(set_to_none=True)
@@ -238,10 +244,10 @@ if __name__ == "__main__":
             coeffs = model.dzdt.get_coeffs()
 
         # Save train losses
-        losses[epoch] = loss.item()
-        recon_losses[epoch] = loss_recon.item()
-        dx_losses[epoch] = loss_dx.item()
-        dz_losses[epoch] = loss_dz.item()
+        losses[epoch] = mean_epoch_loss[0] / len(train_loader)
+        recon_losses[epoch] = mean_epoch_loss[1] / len(train_loader)
+        dx_losses[epoch] = mean_epoch_loss[2] / len(train_loader)
+        dz_losses[epoch] = mean_epoch_loss[3] / len(train_loader)
 
         # test
         model.eval()

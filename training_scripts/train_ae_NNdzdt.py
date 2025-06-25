@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "box",
     "random_seed": 10,
-    "num_epochs": 1000,
+    "num_epochs": 10,
     "batch_size": 32,
     "learning_rate": 1e-3,
     "latent_dim": 3,
@@ -28,7 +28,7 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "lambda1_factor": 0.5,
-    "layer_size": (40, 40, 40),
+    "layer_size": (100, 100, 100),
     "CNN": False,
     "print_frequency": 1,
     "emily_save": True,
@@ -108,6 +108,7 @@ def train_and_eval(
         # Train
         epoch_start_time = time.time()
         model.train()
+        mean_epoch_loss = [0, 0, 0, 0]
         for batch_x, batch_dx, batch_M in train_loader:
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
@@ -135,11 +136,16 @@ def train_and_eval(
             loss.backward(retain_graph=True)
             optimizer.step()
 
+            mean_epoch_loss[0] += loss.item()
+            mean_epoch_loss[1] += loss_recon.item()
+            mean_epoch_loss[2] += loss_dx.item()
+            mean_epoch_loss[3] += loss_dz.item()
+
         # Save train losses
-        losses[epoch] = loss.item()
-        recon_losses[epoch] = loss_recon.item()
-        dx_losses[epoch] = loss_dx.item()
-        dz_losses[epoch] = loss_dz.item()
+        losses[epoch] = mean_epoch_loss[0] / len(train_loader)
+        recon_losses[epoch] = mean_epoch_loss[1] / len(train_loader)
+        dx_losses[epoch] = mean_epoch_loss[2] / len(train_loader)
+        dz_losses[epoch] = mean_epoch_loss[3] / len(train_loader)
 
         # Test
         model.eval()
@@ -228,7 +234,9 @@ if __name__ == "__main__":
     device = torch.device(
         "cuda"
         if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available() else "cpu"
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
     )
     # torch.backends.cudnn.benchmark = True
     print(

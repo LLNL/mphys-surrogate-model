@@ -18,7 +18,7 @@ from src import models, plotting, training
 params = {
     "data_src": "box",
     "random_seed": 10,
-    "num_epochs": 1000,
+    "num_epochs": 100,
     "batch_size": 128,
     "learning_rate": 1e-3,
     "latent_dim": 3,
@@ -261,7 +261,9 @@ if __name__ == "__main__":
     device = torch.device(
         "cuda"
         if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available() else "cpu"
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
     )
     # torch.backends.cudnn.benchmark = True
     print(
