@@ -277,9 +277,7 @@ if __name__ == "__main__":
         else "cpu"
     )
     # torch.backends.cudnn.benchmark = True
-    print(
-        f"Using {device} device"
-    )  # TODO: while device code is here, I don't think the device is actually being used
+    print(f"Using {device} device")
 
     start_time = time.time()
     # Open dataset

@@ -250,9 +250,7 @@ if __name__ == "__main__":
         # "...as_strided_tensorimpl does not work with MPS..."
     )
     # torch.backends.cudnn.benchmark = True
-    print(
-        f"Using {device} device"
-    )  # TODO: while device code is here, I don't think the device is actually being used
+    print(f"Using {device} device")
 
     start_time = time.time()
     # Open dataset
