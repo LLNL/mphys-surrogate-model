@@ -4,6 +4,8 @@ import sys
 import time
 from pathlib import Path
 
+import optuna
+
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
@@ -37,10 +39,14 @@ params = {
     "nipun_save": True,
 }
 
+# Global variables and settings
+# Criterion and divergence need to be outside train function to be available in other scripts
 torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
 test_ids = [0, 10, 20, 30]
 tplt = [0, 5, -1]
+criterion = torch.nn.MSELoss()
+divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -94,9 +100,10 @@ def train_and_eval(
     test_loader,
     optimizer,
     scheduler,
-    early_stopping,
+    early_stopping=None,
     print_flag=False,
     device="cpu",
+    optuna_trial=None,
 ):
     model.to(device)
 
@@ -244,12 +251,19 @@ def train_and_eval(
                 f"dz: {params['w_dz'] * dz_losses[epoch]:.4f} | "
             )
 
+        # Optional optuna report
+        if optuna_trial is not None:
+            optuna_trial.report(losses[epoch], epoch)
+            if optuna_trial.should_prune():
+                raise optuna.exceptions.TrialPruned()
+
         # Early stopping
-        early_stopping(loss)
-        if early_stopping.early_stop:
-            if print_flag:
-                print("Training stopped early.")
-            break
+        if early_stopping is not None:
+            early_stopping(loss)
+            if early_stopping.early_stop:
+                if print_flag:
+                    print("Training stopped early.")
+                break
 
     return (
         best_model,
@@ -272,9 +286,11 @@ if __name__ == "__main__":
     device = torch.device(
         "cuda"
         if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available() and params["batch_size"] > 1000
-        else "cpu"
+        else (
+            "mps"
+            if torch.backends.mps.is_available() and params["batch_size"] > 1000
+            else "cpu"
+        )
     )
     # torch.backends.cudnn.benchmark = True
     print(f"Using {device} device")
@@ -323,9 +339,7 @@ if __name__ == "__main__":
         CNN=params["CNN"],
     )
 
-    # Loss function and optimizer
-    criterion = torch.nn.MSELoss()
-    divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
+    # Optimizer and scheduling
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
     )
