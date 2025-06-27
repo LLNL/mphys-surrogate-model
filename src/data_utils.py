@@ -1,15 +1,21 @@
-from torch.utils.data import Dataset, DataLoader
-import numpy as np
-import xarray as xr
-import torch
 import random
-from scipy.special import binom
-from scipy.integrate import odeint, solve_ivp
 from itertools import combinations_with_replacement
+from pathlib import Path
+
+import numpy as np
+import torch
+import xarray as xr
+from scipy.integrate import odeint, solve_ivp
+from scipy.special import binom
+from torch.utils.data import DataLoader, Dataset
 
 
 def open_box_dataset():
-    ds_all = xr.open_dataset("../data/box64_train.nc", decode_timedelta=True)
+    # Set path
+    dpath = Path(__file__).parent.parent / "data"
+
+    # Train dataset
+    ds_all = xr.open_dataset(dpath / "box64_train.nc", decode_timedelta=True)
     r_bins_edges = ds_all["mass_bin"]
     m_train = ds_all["dvdlnr"].sum(dim="mass_bin_idx")
     x_train = (
@@ -20,7 +26,8 @@ def open_box_dataset():
     n_bins = x_train.shape[2]
     dsd_time = (ds_all["time"] / np.timedelta64(1, "s")).to_numpy()
 
-    ds_test = xr.open_dataset("../data/box64_test.nc", decode_timedelta=True)
+    # Test dataset
+    ds_test = xr.open_dataset(dpath / "box64_test.nc", decode_timedelta=True)
     m_test = ds_test["dvdlnr"].sum(dim="mass_bin_idx")
     x_test = (
         (ds_test["dvdlnr"] / m_test).transpose("run", "time", "mass_bin_idx").to_numpy()
@@ -32,8 +39,9 @@ def open_box_dataset():
 
 def open_erf_dataset(path=None, sample_time=None):
     if path is None:
-        ds_all = xr.open_dataset("../data/congestus_coal_200m_train.nc")
-        ds_test = xr.open_dataset("../data/congestus_coal_200m_test.nc")
+        path = Path(__file__).parent.parent / "data"
+        ds_all = xr.open_dataset(path / "congestus_coal_200m_train.nc")
+        ds_test = xr.open_dataset(path / "congestus_coal_200m_test.nc")
     else:
         ds_all = xr.open_dataset(path + "_train.nc")
         ds_test = xr.open_dataset(path + "_test.nc")
