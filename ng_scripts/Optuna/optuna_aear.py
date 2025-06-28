@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import sys
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -23,7 +24,7 @@ def objective(trial):
     # Hyperparameter tuning
     lr = trial.suggest_float("lr", 1e-6, 1e-1, log=True)
     # batch_size = trial.suggest_int("batch_size", 2, 128)
-    batch_size = trial.suggest_categorical("batch_size", [2**i for i in range(1, 8)])
+    batch_size = trial.suggest_categorical("batch_size", [2**i for i in range(2, 9)])
 
     # Fixed parameters
     num_epochs = 10  # Reduced for faster trials
@@ -59,6 +60,7 @@ def objective(trial):
         sched,
         early_stopping=None,
         print_flag=False,
+        optuna_trial=trial,
     )
     losses = train_output[1]
     best_train_loss = np.min(losses)
@@ -68,6 +70,7 @@ def objective(trial):
 
 if __name__ == "__main__":
     # Open dataset
+    start_time = time.time()
     if params["data_src"] == "box":
         (
             x_train,
@@ -96,10 +99,10 @@ if __name__ == "__main__":
     test_data = du.NormedBinDatasetAR(x_test, m_test, lag=params["n_lag"])
 
     # Set up save folder
-    base_output_directory = Path("./Optuna_Studies")
+    base_output_directory = Path("./")
     id = str(uuid.uuid4().hex)
     output_directory = base_output_directory / (
-        datetime.now().isoformat().split(".")[0] + "_" + id
+        "AE-AR_" + datetime.now().isoformat().split(".")[0] + "_" + id
     )
     if not output_directory.exists():
         output_directory.mkdir(parents=True, exist_ok=True)
@@ -170,9 +173,11 @@ if __name__ == "__main__":
             writer.writerow(row)
 
     # Print best value
+    stop_time = time.time()
     print("Best trial:")
     trial = study.best_trial
     print(f"  Value: {trial.value}")
     print("  Params: ")
     for key, value in trial.params.items():
         print(f"    {key}: {value}")
+    print(f"Duration: {stop_time - start_time}")
