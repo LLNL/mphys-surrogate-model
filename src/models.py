@@ -2,7 +2,17 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import Conv1d, ConvTranspose1d
-from torch.nn import Linear, ReLU, Sigmoid, ConstantPad1d, Identity, ELU, Tanh, Softmax
+from torch.nn import (
+    Linear,
+    ReLU,
+    Sigmoid,
+    ConstantPad1d,
+    Identity,
+    ELU,
+    Tanh,
+    Softmax,
+    SiLU,
+)
 from src import data_utils as du
 
 """
@@ -376,20 +386,18 @@ class NNDerivatives(torch.nn.Module):
         self.layer2 = Linear(layer_size[0], layer_size[1])
         self.layer3 = Linear(layer_size[1], layer_size[2])
         self.layer4 = Linear(layer_size[2], n_latent)
-        self.activation1 = ELU()
-        self.activation2 = ELU()
-        self.activation3 = ELU()
-        self.activation4 = Tanh()
+        self.activation1 = SiLU()
+        self.activation2 = SiLU()
+        self.activation3 = SiLU()
 
         self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
         self.act = [
             self.activation1,
             self.activation2,
             self.activation3,
-            self.activation4,
         ]
 
-        self.apply(self.init_weights)
+        self.initialize_network()
 
     def forward(self, z, M=None):
         if M is not None:
@@ -403,7 +411,6 @@ class NNDerivatives(torch.nn.Module):
         x = self.layer3(x)
         x = self.activation3(x)
         x = self.layer4(x)
-        x = self.activation4(x)
 
         return x
 
@@ -421,11 +428,17 @@ class NNDerivatives(torch.nn.Module):
             layer.weight.data = weights[i]
             layer.bias.data = biases[i]
 
-    def init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            torch.nn.init.xavier_uniform_(m.weight)
-            if m.bias is not None:
-                torch.nn.init.zeros_(m.bias)
+    def initialize_network(self):
+        for i, module in enumerate(self.layers):
+            if isinstance(module, nn.Linear):
+                if i < len(self.layers) - 1:  # Hidden layers with SiLU
+                    nn.init.kaiming_normal_(
+                        module.weight, mode="fan_in", nonlinearity="relu"
+                    )
+                    nn.init.constant_(module.bias, 0.0)
+                else:  # Output layer (no activation)
+                    nn.init.normal_(module.weight, mean=0.0, std=0.01)
+                    nn.init.constant_(module.bias, 0.0)
 
 
 """
