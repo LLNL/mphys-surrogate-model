@@ -489,13 +489,22 @@ if __name__ == "__main__":
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_full_test_recon.png"))
 
-    fig = plotting.plot_full_testset_performance_pred(
+    fig, test_preds, test_kl, test_wass = plotting.plot_full_testset_performance_pred(
         best_model, x_test, z_pred, params["tol"]
     )
     if params["emily_save"]:
         fig.savefig(tpsp_plot_dir / (case_name + "_full_test_pred.png"))
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_full_test_pred.png"))
+
+    # Plot quanties from test set
+    fig = plotting.plot_testset_quantiles_pred(
+        x_test, test_preds, test_wass, tplt, dsd_time, r_bins_edges
+    )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_quantiles_test_pred.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_quantiles_test_pred.png"))
 
     # Plot latent space
     fig = plotting.viz_3d_latent_space(
