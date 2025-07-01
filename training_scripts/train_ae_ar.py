@@ -155,15 +155,15 @@ def train_and_eval(
                 + params["w_dz"] * loss_dz
             )
 
-            # Backward pass and optimization
-            optimizer.zero_grad(set_to_none=True)
-            loss.backward(retain_graph=True)
-            optimizer.step()
-
             mean_epoch_loss[0] += loss.item()
             mean_epoch_loss[1] += loss_recon.item()
             mean_epoch_loss[2] += loss_dx.item()
             mean_epoch_loss[3] += loss_dz.item()
+
+            # Backward pass and optimization
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward(retain_graph=True)
+            optimizer.step()
 
         # Save train losses
         losses[epoch] = mean_epoch_loss[0] / len(train_loader)
