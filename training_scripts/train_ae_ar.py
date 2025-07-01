@@ -481,7 +481,7 @@ if __name__ == "__main__":
         fig.savefig(runsp_out_dir / (case_name + "_predictions.png"))
 
     # Plot trajectories of the latent variables
-    fig = plotting.plot_latent_trajectories_AR(
+    fig, z_pred = plotting.plot_latent_trajectories_AR(
         params["latent_dim"],
         best_model,
         dsd_time,
@@ -494,11 +494,21 @@ if __name__ == "__main__":
         fig.savefig(runsp_out_dir / (case_name + "_trajectories.png"))
 
     # Plot full test set performance
-    fig = plotting.plot_full_testset_performance(best_model, x_test, params["tol"])
+    fig = plotting.plot_full_testset_performance_recon(
+        best_model, x_test, params["tol"]
+    )
     if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_perf.png"))
+        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_recon.png"))
     if params["nipun_save"]:
-        fig.savefig(runsp_out_dir / (case_name + "_full_test_perf.png"))
+        fig.savefig(runsp_out_dir / (case_name + "_full_test_recon.png"))
+
+    fig = plotting.plot_full_testset_performance_pred(
+        best_model, x_test, z_pred, params["tol"]
+    )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_pred.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_full_test_pred.png"))
 
     # Plot latent space
     fig = plotting.viz_3d_latent_space(
