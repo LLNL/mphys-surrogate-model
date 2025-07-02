@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+import random
 import sys
 import time
 import uuid
@@ -17,14 +18,16 @@ sys.path.append(project_root)
 import src.data_utils as du
 from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
 
-torch.manual_seed(params["random_seed"])
-
 
 def objective(trial):
+    # Set seed
+    torch.manual_seed(params["random_seed"])
+    np.random.seed(params["random_seed"])
+    random.seed(params["random_seed"])
+
     # Hyperparameter tuning
     lr = trial.suggest_float("lr", 1e-6, 1e-1, log=True)
-    # batch_size = trial.suggest_int("batch_size", 2, 128)
-    batch_size = trial.suggest_categorical("batch_size", [2**i for i in range(2, 9)])
+    batch_size = trial.suggest_int("batch_size", 4, 256)
 
     # Fixed parameters
     num_epochs = 10  # Reduced for faster trials
@@ -114,12 +117,14 @@ if __name__ == "__main__":
     storage_url = f"sqlite:///{db_path}"
 
     # Set up and run study
-    pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=2)
+    sampler = optuna.samplers.TPESampler()
+    pruner = optuna.pruners.HyperbandPruner()
     study = optuna.create_study(
-        direction="minimize",
+        storage=storage_url,
+        sampler=sampler,
         pruner=pruner,
         study_name="AE-AR",
-        storage=storage_url,
+        direction="minimize",
         load_if_exists=True,
     )
     study.optimize(objective, n_trials=10)
