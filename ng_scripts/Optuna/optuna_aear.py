@@ -16,7 +16,20 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")
 sys.path.append(project_root)
 
 import src.data_utils as du
-from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
+
+MODEL_TYPE = "AE-AR"
+# MODEL_TYPE = "NNdzdt"
+# MODEL_TYPE = "AE-SINDy"
+
+if MODEL_TYPE == "AE-AR":
+    from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
+elif MODEL_TYPE == "NNdzdt":
+    from training_scripts.train_ae_NNdzdt import AENNdzdt, params, train_and_eval
+elif MODEL_TYPE == "AE-SINDy":
+    from training_scripts.train_ae_sindy import AESINDy, params, train_and_eval
+    from src import thresholding
+else:
+    raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
 
 def objective(trial):
@@ -25,7 +38,7 @@ def objective(trial):
     np.random.seed(params["random_seed"])
     random.seed(params["random_seed"])
 
-    # Hyperparameter tuning
+    # Hyperparameter options
     lr = trial.suggest_float("lr", 1e-6, 1e-1, log=True)
     batch_size = trial.suggest_int("batch_size", 4, 256)
 
@@ -33,13 +46,47 @@ def objective(trial):
     num_epochs = 10  # Reduced for faster trials
 
     # Initialize the model
-    model = AEAutoregressor(
-        n_channels=1,
-        n_bins=n_bins,
-        n_latent=params["latent_dim"],
-        n_lag=params["n_lag"],
-        CNN=params["CNN"],
-    )
+    if MODEL_TYPE == "AE-AR":
+        model = AEAutoregressor(
+            n_channels=1,
+            n_bins=n_bins,
+            n_latent=params["latent_dim"],
+            n_lag=params["n_lag"],
+            CNN=params["CNN"],
+        )
+    elif MODEL_TYPE == "NNdzdt":
+        model = AENNdzdt(
+            n_channels=1,
+            n_bins=n_bins,
+            n_latent=params["latent_dim"],
+            layer_size=params["layer_size"],
+            CNN=params["CNN"],
+        )
+    elif MODEL_TYPE == "AE-SINDy":
+        model = AESINDy(
+            n_channels=1,
+            n_bins=n_bins,
+            n_latent=params["latent_dim"],
+            poly_order=params["poly_order"],
+            CNN=params["CNN"],
+            sequential_thresholding=(
+                True
+                if params["sequential_thresholding_interval"] is not None
+                else False
+            ),
+        )
+        if params["sequential_threshold_method"] is not None:
+            # For now, code just has to be copied from train_ae_sindy.py because
+            # initializing thresholder requires access to model
+            params["thresholder"] = thresholding.AdaptiveSequentialThresholdingSINDy(
+                model.dzdt,
+                thresholding.AdaptiveThresholdAnalyzer(
+                    method=params["sequential_threshold_method"],
+                    min_epochs_between=params["sequential_thresholding_interval"],
+                ),
+            )
+    else:
+        raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
     # Optimizer and scheduler
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=params["wd"])
@@ -61,6 +108,7 @@ def objective(trial):
         test_loader,
         optimizer,
         sched,
+        params,
         early_stopping=None,
         print_flag=False,
         optuna_trial=trial,
@@ -98,14 +146,27 @@ if __name__ == "__main__":
         raise NotImplementedError("only erf and box data options exist")
 
     # Set up datasets and loaders
-    train_data = du.NormedBinDatasetAR(x_train, m_train, lag=params["n_lag"])
-    test_data = du.NormedBinDatasetAR(x_test, m_test, lag=params["n_lag"])
+    if MODEL_TYPE == "AE-AR":
+        train_data = du.NormedBinDatasetAR(x_train, m_train, lag=params["n_lag"])
+        test_data = du.NormedBinDatasetAR(x_test, m_test, lag=params["n_lag"])
+    elif MODEL_TYPE == "NNdzdt" or MODEL_TYPE == "AE-SINDy":
+        train_data = du.NormedBinDatasetDzDt(x_train, dsd_time, m_train)
+        test_data = du.NormedBinDatasetDzDt(x_test, dsd_time, m_test)
+    else:
+        raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
+
+    # Set weights
+    if MODEL_TYPE == "NNdzdt" or MODEL_TYPE == "AE-SINDy":
+        lambda1, lambda2, lambda3 = du.champion_calculate_weights(train_data)
+        params["loss_weight_recon"] = 1.0
+        params["loss_weight_sindy_x"] = lambda1
+        params["loss_weight_sindy_z"] = lambda2
 
     # Set up save folder
     base_output_directory = Path("./")
     id = str(uuid.uuid4().hex)
     output_directory = base_output_directory / (
-        "AE-AR_" + datetime.now().isoformat().split(".")[0] + "_" + id
+        f"{MODEL_TYPE}_" + datetime.now().isoformat().split(".")[0] + "_" + id
     )
     if not output_directory.exists():
         output_directory.mkdir(parents=True, exist_ok=True)
@@ -123,7 +184,7 @@ if __name__ == "__main__":
         storage=storage_url,
         sampler=sampler,
         pruner=pruner,
-        study_name="AE-AR",
+        study_name=MODEL_TYPE,
         direction="minimize",
         load_if_exists=True,
     )
