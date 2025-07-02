@@ -101,6 +101,8 @@ def train_and_eval(
     optuna_trial=None,
 ):
     model.to(device)
+    # if device == "cpu":
+    #     torch.set_num_threads(1)
 
     # Set up loss storage and other vars
     losses = np.zeros(n_epochs) * np.nan
