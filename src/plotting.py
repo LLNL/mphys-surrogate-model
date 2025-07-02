@@ -213,6 +213,7 @@ def plot_latent_trajectories_AR(
     )
     colors = ["blue", "orange", "green", "pink", "purple", "gray"]
 
+    z_pred = np.zeros((x_test.shape[0], len(dsd_time), n_latent + 1))
     # Plot trajectories for AR model
     for j in range(x_test.shape[0]):
         x0 = x_test[j, :n_lag, :]
@@ -223,20 +224,21 @@ def plot_latent_trajectories_AR(
                 for t in range(n_lag)
             ]
         )
-        z_pred = np.zeros((x_test.shape[1], n_latent + 1))
         z_enc = np.zeros((x_test.shape[1], n_latent + 1))
         z_enc[:, -1] = mj
         z_enc[:n_lag, :-1] = z0
-        z_pred[:n_lag, :-1] = z0
-        z_pred[:n_lag, -1] = mj[0]
+        z_pred[j, :n_lag, :-1] = z0
+        z_pred[j, :n_lag, -1] = mj[0]
         for t in range(n_lag, x_test.shape[1]):
             lagged_input = torch.cat(
                 (
-                    torch.Tensor(z_pred[t - n_lag : t, :-1]).reshape(n_lag * n_latent),
+                    torch.Tensor(z_pred[j, t - n_lag : t, :-1]).reshape(
+                        n_lag * n_latent
+                    ),
                     torch.Tensor([mj[0]]),
                 )
             )
-            z_pred[t, :] = model.autoregressor(lagged_input).detach().numpy()
+            z_pred[j, t, :] = model.autoregressor(lagged_input).detach().numpy()
             z_enc[t, :-1] = (
                 model.encoder(torch.Tensor(x_test[j, t, :]).reshape(1, -1))
                 .detach()
@@ -260,7 +262,7 @@ def plot_latent_trajectories_AR(
             )
             ax[1][i].plot(
                 dsd_time,
-                z_pred[:, i],
+                z_pred[j, :, i],
                 label=labeli,
                 color=color,
                 alpha=min(1, 150 / x_test.shape[0]),
@@ -282,7 +284,7 @@ def plot_latent_trajectories_AR(
         fig.savefig(saveas)
 
     # Return fig for further manipulation
-    return fig
+    return fig, z_pred
 
 
 def plot_single_latent_trajectory_AR(
@@ -382,6 +384,7 @@ def plot_latent_trajectories_dzdt(
 
     # Compute all else
     z_encoded = model.encoder(torch.Tensor(x_test)).detach().numpy()
+    z_pred = np.zeros((x_test.shape[0], len(time), n_latent + 1))
     dz_encoded = np.gradient(z_encoded, axis=1) / dt
     for j in range(x_test.shape[0]):
         if plt_dx:
@@ -403,6 +406,7 @@ def plot_latent_trajectories_dzdt(
             )
             z0 = np.concatenate((z_encoded[j, 0, :], np.array([m_test[j, 0]])), axis=-1)
             latents_pred = du.simulate(z0, time, model.dzdt, zlim).squeeze()
+            z_pred[j, :, :] = latents_pred
             title = "Z(t)"
 
         for i in range(n_latent + 1):
@@ -428,10 +432,6 @@ def plot_latent_trajectories_dzdt(
                 lw=0.5,
             )
             ax[1][i].set_xlabel("Elapsed time")
-    # for i in range(n_latent + 1):
-    #     if not plt_dx:
-    #         ax[0][i].set_ylim([zlim[i][0], zlim[i][1]])
-    #         ax[1][i].set_ylim([zlim[i][0], zlim[i][1]])
 
     # Accoutrements
     ax[0][0].set_ylabel("Data")
@@ -443,7 +443,7 @@ def plot_latent_trajectories_dzdt(
         plt.savefig(saveas)
 
     # Return fig for further manipulation
-    return fig
+    return fig, z_pred
 
 
 def plot_predictions_dzdt(
@@ -496,9 +496,7 @@ def plot_predictions_dzdt(
     for j, t in enumerate(tplt):
         ax[j][0].set_ylabel(f"dmdlnr at t={dsd_time[t]}")
     ax[1][0].legend(["Data", "Model"])
-    fig.suptitle(
-        f"AE-SINDy model: Multi time step; out of sample"
-    )  # TODO: Does this need changing between NNdzdt and SINDy?
+    fig.suptitle(f"Multi time step; out of sample")
 
     # Optional save
     if saveas is not None:
@@ -572,7 +570,7 @@ def viz_3d_latent_space(model, x_test, time, saveas=None):
     return fig
 
 
-def plot_full_testset_performance(model, x_test, tol, saveas=None):
+def plot_full_testset_performance_recon(model, x_test, tol, saveas=None):
     # Extra vars
     n_test = x_test.shape[0]
     n_timesteps = x_test.shape[1]
@@ -593,14 +591,6 @@ def plot_full_testset_performance(model, x_test, tol, saveas=None):
             test_wass[nm, nt] = wasserstein_distance(
                 pred_dist.detach().numpy().ravel(), true_dist.detach().numpy().ravel()
             )
-    # test_kl_stat = np.mean(test_kl, axis=1)
-    # test_wass_stat = np.mean(test_wass, axis=1)
-    # tkl_argsort = np.argsort(-test_kl_stat)
-    # twass_argsort = np.argsort(-test_wass_stat)
-    # qtiles = [0, 0.25, 0.5, 0.75, 0.9999]
-    # qtile_idx = (np.array(qtiles) * n_test).astype(int)
-    # qtile_kl_mems = tkl_argsort[qtile_idx]
-    # qtile_wass_mems = twass_argsort[qtile_idx]
 
     # Plot
     fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(34, 5), layout="constrained")
@@ -627,6 +617,104 @@ def plot_full_testset_performance(model, x_test, tol, saveas=None):
     )
     ax.set_xlabel(f"Test Member")
     ax.set_ylabel(f"Time")
+
+    # Optional save
+    if saveas is not None:
+        fig.savefig(saveas)
+
+    # Return fig for further manipulation
+    return fig
+
+
+def plot_full_testset_performance_pred(model, x_test, z_pred, tol, saveas=None):
+    # Extra vars
+    n_test = x_test.shape[0]
+    n_timesteps = x_test.shape[1]
+    divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
+
+    # Determine best and worst performing members
+    test_preds = model.decoder(torch.Tensor(z_pred[:, :, :-1]))
+    test_kl = np.zeros(x_test.shape[0:2])
+    test_wass = np.zeros(x_test.shape[0:2])
+    for nm in range(n_test):
+        for nt in range(n_timesteps):
+            pred_dist = test_preds[nm, nt]
+            true_dist = torch.Tensor(x_test[nm, nt]).reshape(1, 1, -1)
+            test_kl[nm, nt] = divergence(
+                torch.log(pred_dist + tol),
+                torch.log(true_dist + tol),
+            )
+            test_wass[nm, nt] = wasserstein_distance(
+                pred_dist.detach().numpy().ravel(), true_dist.detach().numpy().ravel()
+            )
+
+    # Plot
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(34, 5), layout="constrained")
+    # ---
+    ax = axes[0]
+    klm = ax.matshow(np.log10(test_kl.T), vmin=-5, vmax=-2)
+    fig.colorbar(
+        klm,
+        ax=ax,
+        location="top",
+        label=f"log10(KL Divergence) (Mean={np.mean(np.log10(test_kl)):.2f})",
+        extend="both",
+    )
+    ax.set_ylabel(f"Time")
+    # ---
+    ax = axes[1]
+    wsm = ax.matshow(test_wass.T, vmin=0.0005, vmax=0.008)
+    fig.colorbar(
+        wsm,
+        ax=ax,
+        location="top",
+        label=f"Wasserstein Distance (Mean={np.mean(test_wass):.2e})",
+        extend="both",
+    )
+    ax.set_xlabel(f"Test Member")
+    ax.set_ylabel(f"Time")
+
+    # Optional save
+    if saveas is not None:
+        fig.savefig(saveas)
+
+    # Return fig for further manipulation
+    return fig, test_preds.detach().numpy(), test_kl, test_wass
+
+
+def plot_testset_quantiles_pred(
+    x_test, test_preds, test_metric, tplt, dsd_time, r_bins_edges, saveas=None
+):
+    n_test = x_test.shape[0]
+    test_metric_timemean = np.mean(test_metric, axis=1)
+    tm_argsort = np.argsort(-test_metric_timemean)
+    qtiles = [0, 0.25, 0.5, 0.75, 0.9999]
+    qtile_idx = (np.array(qtiles) * n_test).astype(int)
+    qtile_mems = tm_argsort[qtile_idx]
+
+    # Set up figure
+    (fig, ax) = plt.subplots(
+        ncols=len(qtile_mems),
+        nrows=len(tplt),
+        figsize=(3 * len(qtile_mems), 2 * len(tplt)),
+        sharey=True,
+    )
+
+    for i, id in enumerate(qtile_mems):
+        for j, t in enumerate(tplt):
+            ax[j][i].step(r_bins_edges, x_test[id, t, :])
+            ax[j][i].step(r_bins_edges, test_preds[id, t, :])
+
+            ax[j][i].set_xscale("log")
+            ax[j][i].set_xscale("log")
+        ax[0][i].set_title(f"{qtiles[i] * 100}th percentile")
+        ax[-1][i].set_xlabel("radius (um)")
+
+    # Accoutrements
+    for j, t in enumerate(tplt):
+        ax[j][0].set_ylabel(f"dmdlnr at t={dsd_time[t]}")
+    ax[1][0].legend(["Data", "Model"])
+    fig.suptitle(f"Multi time step; out of sample; percentiles")
 
     # Optional save
     if saveas is not None:
