@@ -173,7 +173,9 @@ def train_and_eval(
                 threshold,
                 n_active,
                 analysis,
-            ) = thresholder.maybe_apply_threshold(epoch, loss.item())
+            ) = parameters[
+                "thresholder"
+            ].maybe_apply_threshold(epoch, loss.item())
         else:
             thresholded = False
 
@@ -347,7 +349,7 @@ if __name__ == "__main__":
         model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
     )
     if params["sequential_threshold_method"] is not None:
-        thresholder = thresholding.AdaptiveSequentialThresholdingSINDy(
+        params["thresholder"] = thresholding.AdaptiveSequentialThresholdingSINDy(
             model.dzdt,
             thresholding.AdaptiveThresholdAnalyzer(
                 method=params["sequential_threshold_method"],
