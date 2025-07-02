@@ -162,15 +162,15 @@ def train_and_eval(
                 + params["w_dz"] * loss_dz
             )
 
-            # Backward pass and optimization
-            optimizer.zero_grad(set_to_none=True)
-            loss.backward(retain_graph=True)
-            optimizer.step()
-
             mean_epoch_loss[0] += loss.item()
             mean_epoch_loss[1] += loss_recon.item()
             mean_epoch_loss[2] += loss_dx.item()
             mean_epoch_loss[3] += loss_dz.item()
+
+            # Backward pass and optimization
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward(retain_graph=True)
+            optimizer.step()
 
         # Save train losses
         losses[epoch] = mean_epoch_loss[0] / len(train_loader)
@@ -495,7 +495,7 @@ if __name__ == "__main__":
         fig.savefig(runsp_out_dir / (case_name + "_predictions.png"))
 
     # Plot trajectories of the latent variables
-    fig = plotting.plot_latent_trajectories_AR(
+    fig, z_pred = plotting.plot_latent_trajectories_AR(
         params["latent_dim"],
         best_model,
         dsd_time,
@@ -508,11 +508,30 @@ if __name__ == "__main__":
         fig.savefig(runsp_out_dir / (case_name + "_trajectories.png"))
 
     # Plot full test set performance
-    fig = plotting.plot_full_testset_performance(best_model, x_test, params["tol"])
+    fig = plotting.plot_full_testset_performance_recon(
+        best_model, x_test, params["tol"]
+    )
     if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_perf.png"))
+        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_recon.png"))
     if params["nipun_save"]:
-        fig.savefig(runsp_out_dir / (case_name + "_full_test_perf.png"))
+        fig.savefig(runsp_out_dir / (case_name + "_full_test_recon.png"))
+
+    fig, test_preds, test_kl, test_wass = plotting.plot_full_testset_performance_pred(
+        best_model, x_test, z_pred, params["tol"]
+    )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_pred.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_full_test_pred.png"))
+
+    # Plot quanties from test set
+    fig = plotting.plot_testset_quantiles_pred(
+        x_test, test_preds, test_wass, tplt, dsd_time, r_bins_edges
+    )
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_quantiles_test_pred.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_quantiles_test_pred.png"))
 
     # Plot latent space
     fig = plotting.viz_3d_latent_space(
