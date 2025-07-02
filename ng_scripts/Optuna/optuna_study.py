@@ -6,6 +6,8 @@ import sys
 import time
 import uuid
 from datetime import datetime
+from functools import partial
+from multiprocessing import Pool
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +34,7 @@ else:
     raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
 
-def objective(trial):
+def objective(trial, n_bins, train_data, test_data):
     # Set seed
     torch.manual_seed(params["random_seed"])
     np.random.seed(params["random_seed"])
@@ -119,9 +121,24 @@ def objective(trial):
     return best_train_loss
 
 
+def optimize_worker(args):
+    worker_id, n_trials, storage_url, study_name, objective_func = args
+
+    # Set this once per worker process
+    torch.set_num_threads(1)
+
+    # Do optimization
+    study = optuna.load_study(study_name=study_name, storage=storage_url)
+    study.optimize(objective_func, n_trials=n_trials)
+
+    return None
+
+
 if __name__ == "__main__":
+    total_trials = 16  # Make it multiples of 8 on mac with 8 perf. cores
+    parallel_flag = True
+
     # Open dataset
-    start_time = time.time()
     if params["data_src"] == "box":
         (
             x_train,
@@ -173,26 +190,54 @@ if __name__ == "__main__":
     else:
         print(f"Folder '{output_directory}' already exists.")
 
+    # Set up parallel info
+    n_workers = 8  # 8 performance cores and 4 efficiency cores
+    if parallel_flag:
+        if total_trials % n_workers:
+            raise RuntimeError("Ensure total trials is a multiple of n_workers")
+    trials_per_worker = int(total_trials / n_workers)
+
     # Set up SQLite storage in results folder
     db_path = output_directory / "study.db"
     storage_url = f"sqlite:///{db_path}"
+    study_name = MODEL_TYPE
 
-    # Set up and run study
+    # Set up study
     sampler = optuna.samplers.TPESampler()
     pruner = optuna.pruners.HyperbandPruner()
     study = optuna.create_study(
         storage=storage_url,
         sampler=sampler,
         pruner=pruner,
-        study_name=MODEL_TYPE,
+        study_name=study_name,
         direction="minimize",
         load_if_exists=True,
     )
-    study.optimize(objective, n_trials=10)
+
+    # Run study
+    start_time = time.time()
+    objective_with_args = partial(
+        objective, n_bins=n_bins, train_data=train_data, test_data=test_data
+    )
+    if parallel_flag:
+        worker_args = [
+            (i, trials_per_worker, storage_url, study_name, objective_with_args)
+            for i in range(n_workers)
+        ]
+        with Pool(processes=n_workers) as pool:
+            results = pool.map(optimize_worker, worker_args)
+    else:
+        study.optimize(objective_with_args, n_trials=total_trials)
+    stop_time = time.time()
 
     # Save best hyperparameters
     best_params_file = output_directory / "best_params.json"
-    best_params = {"value": study.best_trial.value, "params": study.best_trial.params}
+    best_params = {
+        "value": study.best_trial.value,
+        "params": study.best_trial.params,
+        "optuna_runtime": stop_time - start_time,
+        "random_seed": params["random_seed"],
+    }
     best_params_file.write_text(json.dumps(best_params, indent=4))
 
     # Save full study object
@@ -239,7 +284,6 @@ if __name__ == "__main__":
             writer.writerow(row)
 
     # Print best value
-    stop_time = time.time()
     print("Best trial:")
     trial = study.best_trial
     print(f"  Value: {trial.value}")
