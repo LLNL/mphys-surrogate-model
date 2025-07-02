@@ -4,6 +4,8 @@ import sys
 import time
 from pathlib import Path
 
+import optuna
+
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
@@ -12,15 +14,14 @@ import uuid
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
-
 from src import data_utils as du
 from src import models, plotting, training
+from torch.utils.data import DataLoader
 
 params = {
-    "data_src": "erf",
+    "data_src": "box",
     "random_seed": 0,
-    "num_epochs": 100,
+    "num_epochs": 10,
     "batch_size": 32,
     "learning_rate": 1e-3,
     "latent_dim": 3,
@@ -28,7 +29,6 @@ params = {
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "lambda1_factor": 0.5,
     "layer_size": (40, 40, 40),
     "CNN": False,
     "print_frequency": 1,
@@ -36,10 +36,14 @@ params = {
     "nipun_save": True,
 }
 
+# Global variables and settings
+# Criterion and divergence need to be outside train function to be available in other scripts
 torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
 test_ids = [0, 10, 20, 30]
 tplt = [0, 5, -1]
+criterion = torch.nn.MSELoss()
+divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -90,9 +94,11 @@ def train_and_eval(
     test_loader,
     optimizer,
     scheduler,
-    early_stopping,
+    parameters,
+    early_stopping=None,
     print_flag=False,
     device="cpu",
+    optuna_trial=None,
 ):
     model.to(device)
 
@@ -130,13 +136,13 @@ def train_and_eval(
             loss_dz = criterion(pred_dz, dz)
             loss_dx = criterion(pred_dx, batch_dx)
             loss_recon = divergence(
-                torch.log(pred_x_recon + params["tol"]),
-                torch.log(batch_x + params["tol"]),
+                torch.log(pred_x_recon + parameters["tol"]),
+                torch.log(batch_x + parameters["tol"]),
             )
             loss = (
-                params["loss_weight_sindy_x"] * loss_dx
-                + params["loss_weight_recon"] * loss_recon
-                + params["loss_weight_sindy_z"] * loss_dz
+                parameters["loss_weight_sindy_x"] * loss_dx
+                + parameters["loss_weight_recon"] * loss_recon
+                + parameters["loss_weight_sindy_z"] * loss_dz
             )
 
             mean_epoch_loss[0] += loss.item()
@@ -176,14 +182,14 @@ def train_and_eval(
                 pred_dx, batch_dx
             )  # TODO: Why does ae-ar have divergence here but this has criterion?. Check train loss too
             loss_recon = divergence(
-                torch.log(pred_x_recon + params["tol"]),
-                torch.log(batch_x + params["tol"]),
+                torch.log(pred_x_recon + parameters["tol"]),
+                torch.log(batch_x + parameters["tol"]),
             )
 
             loss = (
-                params["loss_weight_sindy_x"] * loss_dx
-                + params["loss_weight_recon"] * loss_recon
-                + params["loss_weight_sindy_z"] * loss_dz
+                parameters["loss_weight_sindy_x"] * loss_dx
+                + parameters["loss_weight_recon"] * loss_recon
+                + parameters["loss_weight_sindy_z"] * loss_dz
             )
 
         # Save test losses
@@ -198,7 +204,7 @@ def train_and_eval(
             best_model = copy.deepcopy(model)
 
         # Update learning rate schedule
-        if params["lr_sched"]:
+        if parameters["lr_sched"]:
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                 scheduler.step(loss)
             else:
@@ -206,24 +212,31 @@ def train_and_eval(
 
         # Print
         epoch_end_time = time.time()
-        if epoch % params["print_frequency"] == 0 and print_flag:
+        if epoch % parameters["print_frequency"] == 0 and print_flag:
             print(
-                f"Epoch [{epoch}/{params['num_epochs']}], Train Loss: {losses[epoch]:.4f} | "
+                f"Epoch [{epoch}/{parameters['num_epochs']}], Train Loss: {losses[epoch]:.4f} | "
                 f"Test Loss: {test_losses[epoch]:.4f} | LR: {scheduler.get_last_lr()}"
                 f"| Epoch Time: {epoch_end_time - epoch_start_time} s"
             )
             print(
-                f"Recon: {params['loss_weight_recon'] * recon_losses[epoch]:.4f} | "
-                f"dx: {params['loss_weight_sindy_x'] * dx_losses[epoch]:.4f} | "
-                f"dz: {params['loss_weight_sindy_z'] * dz_losses[epoch]:.4f} | "
+                f"Recon: {parameters['loss_weight_recon'] * recon_losses[epoch]:.4f} | "
+                f"dx: {parameters['loss_weight_sindy_x'] * dx_losses[epoch]:.4f} | "
+                f"dz: {parameters['loss_weight_sindy_z'] * dz_losses[epoch]:.4f} | "
             )
 
+        # Optional optuna report
+        if optuna_trial is not None:
+            optuna_trial.report(losses[epoch], epoch)
+            if optuna_trial.should_prune():
+                raise optuna.exceptions.TrialPruned()
+
         # Early stopping
-        early_stopping(loss)
-        if early_stopping.early_stop:
-            if print_flag:
-                print("Training stopped early.")
-            break
+        if early_stopping is not None:
+            early_stopping(loss)
+            if early_stopping.early_stop:
+                if print_flag:
+                    print("Training stopped early.")
+                break
 
     return (
         best_model,
@@ -292,9 +305,7 @@ if __name__ == "__main__":
         CNN=params["CNN"],
     )
 
-    # Loss function and optimizer
-    criterion = torch.nn.MSELoss()
-    divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
+    # Optimizer and scheduling
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
     )
@@ -305,12 +316,8 @@ if __name__ == "__main__":
     print(f"Total number of parameters: {total_params}")
 
     # Compute & set weights based on Champion et al recs
-    xx = np.squeeze(train_data.x)
-    dx = np.squeeze(train_data.dx)
-    xxl2 = np.linalg.norm(xx, ord=2, axis=1) ** 2
-    dxl2 = np.linalg.norm(dx, ord=2, axis=1) ** 2
-    lambda1 = xxl2.sum() / dxl2.sum() * params["lambda1_factor"]
-    lambda2 = lambda1 / 1e2  # 2 orders of magnitude smaller
+    lambda1, lambda2, lambda3 = du.champion_calculate_weights(train_data)
+    print(f"lambda: 1.0, {lambda1}, {lambda2}")
     params["loss_weight_recon"] = 1.0
     params["loss_weight_sindy_x"] = lambda1
     params["loss_weight_sindy_z"] = lambda2
@@ -334,7 +341,8 @@ if __name__ == "__main__":
         test_loader,
         optimizer,
         sched,
-        early_stopping,
+        params,
+        early_stopping=early_stopping,
         print_flag=True,
         device=device,
     )

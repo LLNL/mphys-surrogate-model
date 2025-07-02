@@ -20,7 +20,7 @@ from src import models, plotting, training
 params = {
     "data_src": "box",
     "random_seed": 10,
-    "num_epochs": 100,
+    "num_epochs": 10,
     "batch_size": 128,
     "learning_rate": 1e-3,
     "latent_dim": 3,
@@ -100,6 +100,7 @@ def train_and_eval(
     test_loader,
     optimizer,
     scheduler,
+    parameters,
     early_stopping=None,
     print_flag=False,
     device="cpu",
@@ -135,7 +136,9 @@ def train_and_eval(
             pred_z1 = model.autoregressor(
                 torch.cat(
                     (
-                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
+                        pred_z.reshape(
+                            -1, 1, parameters["latent_dim"] * parameters["n_lag"]
+                        ),
                         batch_M,
                     ),
                     dim=2,
@@ -149,17 +152,17 @@ def train_and_eval(
             # Calculate train loss
             loss_dz = criterion(pred_z1, data_z1)
             loss_dx = divergence(
-                torch.log(pred_y + params["tol"]),
-                torch.log(batch_y + params["tol"]),
+                torch.log(pred_y + parameters["tol"]),
+                torch.log(batch_y + parameters["tol"]),
             )
             loss_recon = divergence(
-                torch.log(pred_x_recon + params["tol"]),
-                torch.log(batch_X + params["tol"]),
+                torch.log(pred_x_recon + parameters["tol"]),
+                torch.log(batch_X + parameters["tol"]),
             )
             loss = (
-                params["w_dx"] * loss_dx
-                + params["w_recon"] * loss_recon
-                + params["w_dz"] * loss_dz
+                parameters["w_dx"] * loss_dx
+                + parameters["w_recon"] * loss_recon
+                + parameters["w_dz"] * loss_dz
             )
 
             mean_epoch_loss[0] += loss.item()
@@ -191,7 +194,9 @@ def train_and_eval(
             pred_z1 = model.autoregressor(
                 torch.cat(
                     (
-                        pred_z.reshape(-1, 1, params["latent_dim"] * params["n_lag"]),
+                        pred_z.reshape(
+                            -1, 1, parameters["latent_dim"] * parameters["n_lag"]
+                        ),
                         batch_M,
                     ),
                     dim=2,
@@ -205,18 +210,18 @@ def train_and_eval(
             # Calculate test loss
             loss_dz = criterion(pred_z1, data_z1)
             loss_dx = divergence(
-                torch.log(pred_y + params["tol"]),
-                torch.log(batch_y + params["tol"]),
+                torch.log(pred_y + parameters["tol"]),
+                torch.log(batch_y + parameters["tol"]),
             )
             loss_recon = divergence(
-                torch.log(pred_x_recon + params["tol"]),
-                torch.log(batch_X + params["tol"]),
+                torch.log(pred_x_recon + parameters["tol"]),
+                torch.log(batch_X + parameters["tol"]),
             )
 
             loss = (
-                params["w_dx"] * loss_dx
-                + params["w_recon"] * loss_recon
-                + params["w_dz"] * loss_dz
+                parameters["w_dx"] * loss_dx
+                + parameters["w_recon"] * loss_recon
+                + parameters["w_dz"] * loss_dz
             )
 
         # Save test losses
@@ -231,7 +236,7 @@ def train_and_eval(
             best_model = copy.deepcopy(model)
 
         # Update learning rate schedule
-        if params["lr_sched"]:
+        if parameters["lr_sched"]:
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                 scheduler.step(loss)
             else:
@@ -239,16 +244,16 @@ def train_and_eval(
 
         # Print
         epoch_end_time = time.time()
-        if epoch % params["print_frequency"] == 0 and print_flag:
+        if epoch % parameters["print_frequency"] == 0 and print_flag:
             print(
-                f"Epoch [{epoch}/{params['num_epochs']}], Train Loss: {losses[epoch]:.4f} | "
+                f"Epoch [{epoch}/{parameters['num_epochs']}], Train Loss: {losses[epoch]:.4f} | "
                 f"Test Loss: {test_losses[epoch]:.4f} | LR: {scheduler.get_last_lr()}"
                 f"| Epoch Time: {epoch_end_time - epoch_start_time} s"
             )
             print(
-                f"Recon: {params['w_recon'] * recon_losses[epoch]:.4f} | "
-                f"dx: {params['w_dx'] * dx_losses[epoch]:.4f} | "
-                f"dz: {params['w_dz'] * dz_losses[epoch]:.4f} | "
+                f"Recon: {parameters['w_recon'] * recon_losses[epoch]:.4f} | "
+                f"dx: {parameters['w_dx'] * dx_losses[epoch]:.4f} | "
+                f"dz: {parameters['w_dz'] * dz_losses[epoch]:.4f} | "
             )
 
         # Optional optuna report
@@ -368,7 +373,8 @@ if __name__ == "__main__":
         test_loader,
         optimizer,
         sched,
-        early_stopping,
+        params,
+        early_stopping=early_stopping,
         print_flag=True,
         device=device,
     )
@@ -379,7 +385,6 @@ if __name__ == "__main__":
     # Set up case name
     best_model.eval()
     best_model = best_model.to("cpu")
-
     id = str(uuid.uuid4().hex)
     if params["CNN"]:
         prefix = params["data_src"] + "_CNN"

@@ -649,3 +649,22 @@ def calculate_autocorrelation(dsd_data, max_lag=10):
                     autocorr[r, lag] = corr_sum / count
 
     return autocorr
+
+
+def champion_calculate_weights(ds, lambda1_metaweight=0.5, lambda3=1.0):
+    """
+    See Champion et al. supplementary materials for information.
+
+    :param ds: Training dataset
+    :param lambda1_metaweight: lambda1 is specified as "slightly less than", this sets that
+    :param lambda3: Reconstruction weight, currently just set to 1.0 but this function allows this to be
+                    programmatically changed.
+    :return: lambda1, lambda2, lambda3
+    """
+    xx = np.squeeze(ds.x)
+    dx = np.squeeze(ds.dx)
+    xxl2 = np.linalg.norm(xx, ord=2, axis=1) ** 2
+    dxl2 = np.linalg.norm(dx, ord=2, axis=1) ** 2
+    lambda1 = xxl2.sum() / dxl2.sum() * lambda1_metaweight
+    lambda2 = lambda1 / 1e2  # 2 orders of magnitude smaller
+    return lambda1, lambda2, lambda3
