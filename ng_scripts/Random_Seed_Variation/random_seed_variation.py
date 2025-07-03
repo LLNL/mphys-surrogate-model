@@ -23,11 +23,9 @@ MODEL_TYPE = "AE-AR"
 # MODEL_TYPE = "AE-SINDy"
 
 if MODEL_TYPE == "AE-AR":
-    from training_scripts.train_ae_ar import (AEAutoregressor, params,
-                                              train_and_eval)
+    from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
 elif MODEL_TYPE == "NNdzdt":
-    from training_scripts.train_ae_NNdzdt import (AENNdzdt, params,
-                                                  train_and_eval)
+    from training_scripts.train_ae_NNdzdt import AENNdzdt, params, train_and_eval
 elif MODEL_TYPE == "AE-SINDy":
     from src import thresholding
     from training_scripts.train_ae_sindy import AESINDy, params, train_and_eval
@@ -120,7 +118,7 @@ def train_model(args):
 
 
 if __name__ == "__main__":
-    total_trials = 8  # On mac with 8 perf. cores, choose multiple of 8 total_trials
+    total_trials = 200  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
     # Open dataset
@@ -227,11 +225,23 @@ if __name__ == "__main__":
 
     # Plot results
     hist_file = output_directory / "hist.png"
-    fig, ax = plt.subplots(1, 1, figsize=(10, 10), layout="constrained")
-    ax.hist(res, bins=50, label="Training Loss")
+    fig, axes = plt.subplots(1, 2, figsize=(10, 10), layout="constrained")
+    # ---
+    ax = axes[0]
+    ax.hist(res, bins=20, label="Training Loss")
     ax.set_xlabel("Training Loss")
     ax.set_ylabel("Number of trials")
-    ax.set_title(f"Training Loss Over Random Seed ({total_trials} Trials)")
+    ax.set_title("Total")
+    # ---
+    ax = axes[1]
+    ax.hist(
+        res, bins=20, range=(res.min(), np.quantile(res, 0.95)), label="Training Loss"
+    )
+    ax.set_xlabel("Training Loss")
+    ax.set_ylabel("Number of trials")
+    ax.set_title("95th Percentile Zoom")
+    # ---
+    fig.suptitle(f"Training Loss Over Random Seed ({total_trials} Trials)")
     fig.savefig(hist_file)
 
     # Print best values
