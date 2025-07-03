@@ -1,4 +1,3 @@
-import csv
 import json
 import os
 import random
@@ -6,13 +5,13 @@ import sys
 import time
 import uuid
 from datetime import datetime
-from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
 
 import numpy as np
-import optuna
+import pandas as pd
 import torch
+from matplotlib import pyplot as plt
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 sys.path.append(project_root)
@@ -24,12 +23,14 @@ MODEL_TYPE = "AE-AR"
 # MODEL_TYPE = "AE-SINDy"
 
 if MODEL_TYPE == "AE-AR":
-    from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
+    from training_scripts.train_ae_ar import (AEAutoregressor, params,
+                                              train_and_eval)
 elif MODEL_TYPE == "NNdzdt":
-    from training_scripts.train_ae_NNdzdt import AENNdzdt, params, train_and_eval
+    from training_scripts.train_ae_NNdzdt import (AENNdzdt, params,
+                                                  train_and_eval)
 elif MODEL_TYPE == "AE-SINDy":
-    from training_scripts.train_ae_sindy import AESINDy, params, train_and_eval
     from src import thresholding
+    from training_scripts.train_ae_sindy import AESINDy, params, train_and_eval
 else:
     raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
@@ -196,6 +197,7 @@ if __name__ == "__main__":
         ]
         with Pool(processes=n_workers) as pool:
             res = pool.map(train_model, worker_args)
+        res = np.array(res)
     else:
         res = np.zeros(total_trials)
         for i in range(total_trials):
@@ -203,3 +205,37 @@ if __name__ == "__main__":
             res[i] = train_model(args)
     stop_time = time.time()
     print(f"Duration: {stop_time - start_time}")
+
+    # Calculate
+    best_seed = np.argmin(res)
+    best_train_loss = res[best_seed]
+
+    # Save best results
+    best_seed_file = output_directory / "best_seed.json"
+    best_seed_dict = {
+        "loss": float(best_train_loss),
+        "seed": int(best_seed),
+        "runtime": stop_time - start_time,
+    }
+    best_seed_file.write_text(json.dumps(best_seed_dict, indent=4))
+
+    # Save all results
+    all_params_file = output_directory / "all_seeds.csv"
+    sf = pd.Series(res, name="loss").sort_values()
+    sf.index.name = "seed"
+    sf.to_csv(all_params_file)
+
+    # Plot results
+    hist_file = output_directory / "hist.png"
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10), layout="constrained")
+    ax.hist(res, bins=50, label="Training Loss")
+    ax.set_xlabel("Training Loss")
+    ax.set_ylabel("Number of trials")
+    ax.set_title(f"Training Loss Over Random Seed ({total_trials} Trials)")
+    fig.savefig(hist_file)
+
+    # Print best values
+    print(f"Best seed is {best_seed} with loss {best_train_loss}")
+
+    # Finish up
+    plt.close("all")
