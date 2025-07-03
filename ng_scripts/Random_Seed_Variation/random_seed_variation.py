@@ -38,6 +38,9 @@ def train_model(args):
     # Unpack args
     random_seed, n_bins, train_loader, test_loader = args
 
+    # Set this once per worker process
+    torch.set_num_threads(1)
+
     # Set seed
     torch.manual_seed(random_seed)
     np.random.seed(random_seed)
@@ -117,7 +120,7 @@ def train_model(args):
 
 if __name__ == "__main__":
     total_trials = 8  # On mac with 8 perf. cores, choose multiple of 8 total_trials
-    parallel_flag = False
+    parallel_flag = True
 
     # Open dataset
     if params["data_src"] == "box":
@@ -188,9 +191,15 @@ if __name__ == "__main__":
     # Run study
     start_time = time.time()
     if parallel_flag:
-        pass
+        worker_args = [
+            (i, n_bins, train_loader, test_loader) for i in range(total_trials)
+        ]
+        with Pool(processes=n_workers) as pool:
+            res = pool.map(train_model, worker_args)
     else:
         res = np.zeros(total_trials)
         for i in range(total_trials):
             args = (i, n_bins, train_loader, test_loader)
             res[i] = train_model(args)
+    stop_time = time.time()
+    print(f"Duration: {stop_time - start_time}")
