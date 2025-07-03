@@ -135,7 +135,7 @@ def optimize_worker(args):
 
 
 if __name__ == "__main__":
-    total_trials = 16  # Make it multiples of 8 on mac with 8 perf. cores
+    total_trials = 48  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
     # Open dataset
