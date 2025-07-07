@@ -14,8 +14,9 @@ import uuid
 
 import numpy as np
 import torch
+
 from src import data_utils as du
-from src import models, plotting, training
+from src import models, plotting, training, diagnostics
 from torch.utils.data import DataLoader
 
 params = {
@@ -474,16 +475,17 @@ if __name__ == "__main__":
         fig.savefig(runsp_out_dir / (case_name + "_predictions.png"))
 
     # Plot trajectories of the latent variables
-    fig, z_pred = plotting.plot_latent_trajectories_dzdt(
+    z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_dzdt(
         params["latent_dim"],
         best_model,
+        test_data.t,
         x_test,
         m_test,
-        test_data.dt,
-        test_data.t,
         x_train,
         m_train,
-        plt_dx=False,
+    )
+    fig = plotting.plot_latent_trajectories(
+        params["latent_dim"], test_data.t, z_pred, z_data
     )
     if params["emily_save"]:
         fig.savefig(tpsp_plot_dir / (case_name + "_trajectories.png"))
@@ -499,17 +501,18 @@ if __name__ == "__main__":
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_full_test_recon.png"))
 
-    fig, test_preds, test_kl, test_wass = plotting.plot_full_testset_performance_pred(
-        best_model, x_test, z_pred, params["tol"]
+    test_kl, test_wass, test_wun = diagnostics.get_performance_metrics(
+        x_test, m_test, z_pred, x_pred
     )
+    fig = plotting.plot_full_testset_performance_pred(test_kl, test_wass, test_wun)
     if params["emily_save"]:
         fig.savefig(tpsp_plot_dir / (case_name + "_full_test_pred.png"))
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_full_test_pred.png"))
 
-    # Plot quanties from test set
+    # Plot quantiles from test set
     fig = plotting.plot_testset_quantiles_pred(
-        x_test, test_preds, test_wass, tplt, dsd_time, r_bins_edges
+        x_test, x_pred, test_wass, tplt, dsd_time, r_bins_edges
     )
     if params["emily_save"]:
         fig.savefig(tpsp_plot_dir / (case_name + "_quantiles_test_pred.png"))
