@@ -13,12 +13,12 @@ import uuid
 import numpy as np
 import torch
 from src import data_utils as du
-from src import models, plotting, training
+from src import models, plotting, training, diagnostics
 
 params = {
     "data_src": "box",
     "random_seed": 10,
-    "num_epochs": 100,
+    "num_epochs": 10,
     "batch_size": 128,
     "learning_rate": 1e-3,
     "latent_dim": 3,
@@ -481,12 +481,11 @@ if __name__ == "__main__":
         fig.savefig(runsp_out_dir / (case_name + "_predictions.png"))
 
     # Plot trajectories of the latent variables
-    fig, z_pred = plotting.plot_latent_trajectories_AR(
-        params["latent_dim"],
-        best_model,
-        dsd_time,
-        x_test,
-        m_test,
+    z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_AR(
+        params["latent_dim"], best_model, dsd_time, x_test, m_test
+    )
+    fig = plotting.plot_latent_trajectories_AR(
+        params["latent_dim"], dsd_time, z_pred, z_data
     )
     if params["emily_save"]:
         fig.savefig(tpsp_plot_dir / (case_name + "_trajectories.png"))
@@ -502,17 +501,18 @@ if __name__ == "__main__":
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_full_test_recon.png"))
 
-    fig, test_preds, test_kl, test_wass = plotting.plot_full_testset_performance_pred(
-        best_model, x_test, z_pred, params["tol"]
+    test_kl, test_wass, test_wun = diagnostics.get_performance_metrics(
+        x_test, m_test, z_pred, x_pred
     )
+    fig = plotting.plot_full_testset_performance_pred(test_kl, test_wass, test_wun)
     if params["emily_save"]:
         fig.savefig(tpsp_plot_dir / (case_name + "_full_test_pred.png"))
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_full_test_pred.png"))
 
-    # Plot quanties from test set
+    # Plot quantiles from test set
     fig = plotting.plot_testset_quantiles_pred(
-        x_test, test_preds, test_wass, tplt, dsd_time, r_bins_edges
+        x_test, x_pred, test_wass, tplt, dsd_time, r_bins_edges
     )
     if params["emily_save"]:
         fig.savefig(tpsp_plot_dir / (case_name + "_quantiles_test_pred.png"))

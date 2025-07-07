@@ -81,7 +81,7 @@ def plot_reconstructions(
         ax[0][i].set_title(f"Run #{id}")
 
     # Accoutrements
-    ax[0][0].legend(["Data", "VAE Reconstruction"])
+    ax[0][0].legend(["Data", "AE Reconstruction"])
     fig.suptitle("Reconstruction Demo: Out of Sample")
 
     # Optional save
@@ -200,7 +200,7 @@ def plot_single_prediction_AE_AR(
 
 
 def plot_latent_trajectories_AR(
-    n_latent, model, dsd_time, x_test, m_test, n_lag=1, saveas=None
+    n_latent, dsd_time, z_pred, z_data, n_lag=1, saveas=None
 ):
     # Set up figure
     (fig, ax) = plt.subplots(
@@ -213,38 +213,7 @@ def plot_latent_trajectories_AR(
     )
     colors = ["blue", "orange", "green", "pink", "purple", "gray"]
 
-    z_pred = np.zeros((x_test.shape[0], len(dsd_time), n_latent + 1))
-    # Plot trajectories for AR model
-    for j in range(x_test.shape[0]):
-        x0 = x_test[j, :n_lag, :]
-        mj = m_test[j, :]
-        z0 = np.array(
-            [
-                model.encoder(torch.Tensor(x0[t]).reshape(1, -1)).detach().numpy()[0]
-                for t in range(n_lag)
-            ]
-        )
-        z_enc = np.zeros((x_test.shape[1], n_latent + 1))
-        z_enc[:, -1] = mj
-        z_enc[:n_lag, :-1] = z0
-        z_pred[j, :n_lag, :-1] = z0
-        z_pred[j, :n_lag, -1] = mj[0]
-        for t in range(n_lag, x_test.shape[1]):
-            lagged_input = torch.cat(
-                (
-                    torch.Tensor(z_pred[j, t - n_lag : t, :-1]).reshape(
-                        n_lag * n_latent
-                    ),
-                    torch.Tensor([mj[0]]),
-                )
-            )
-            z_pred[j, t, :] = model.autoregressor(lagged_input).detach().numpy()
-            z_enc[t, :-1] = (
-                model.encoder(torch.Tensor(x_test[j, t, :]).reshape(1, -1))
-                .detach()
-                .numpy()[0]
-            )
-
+    for j in range(z_pred.shape[0]):
         for i in range(n_latent + 1):
             if i < n_latent:
                 labeli = f"z{i}"
@@ -254,10 +223,10 @@ def plot_latent_trajectories_AR(
                 color = colors[-1]
             ax[0][i].plot(
                 dsd_time,
-                z_enc[:, i],
+                z_data[j, :, i],
                 label=labeli,
                 color=color,
-                alpha=min(1, 150 / x_test.shape[0]),
+                alpha=min(1, 150 / z_pred.shape[0]),
                 lw=0.5,
             )
             ax[1][i].plot(
@@ -265,7 +234,7 @@ def plot_latent_trajectories_AR(
                 z_pred[j, :, i],
                 label=labeli,
                 color=color,
-                alpha=min(1, 150 / x_test.shape[0]),
+                alpha=min(1, 150 / z_pred.shape[0]),
                 lw=0.5,
             )
             ax[0][i].set_xlabel("Elapsed time")
@@ -284,7 +253,7 @@ def plot_latent_trajectories_AR(
         fig.savefig(saveas)
 
     # Return fig for further manipulation
-    return fig, z_pred
+    return fig
 
 
 def plot_single_latent_trajectory_AR(
@@ -626,30 +595,9 @@ def plot_full_testset_performance_recon(model, x_test, tol, saveas=None):
     return fig
 
 
-def plot_full_testset_performance_pred(model, x_test, z_pred, tol, saveas=None):
-    # Extra vars
-    n_test = x_test.shape[0]
-    n_timesteps = x_test.shape[1]
-    divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
-
-    # Determine best and worst performing members
-    test_preds = model.decoder(torch.Tensor(z_pred[:, :, :-1]))
-    test_kl = np.zeros(x_test.shape[0:2])
-    test_wass = np.zeros(x_test.shape[0:2])
-    for nm in range(n_test):
-        for nt in range(n_timesteps):
-            pred_dist = test_preds[nm, nt]
-            true_dist = torch.Tensor(x_test[nm, nt]).reshape(1, 1, -1)
-            test_kl[nm, nt] = divergence(
-                torch.log(pred_dist + tol),
-                torch.log(true_dist + tol),
-            )
-            test_wass[nm, nt] = wasserstein_distance(
-                pred_dist.detach().numpy().ravel(), true_dist.detach().numpy().ravel()
-            )
-
+def plot_full_testset_performance_pred(test_kl, test_wass, test_wass_un, saveas=None):
     # Plot
-    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(34, 5), layout="constrained")
+    fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(34, 8), layout="constrained")
     # ---
     ax = axes[0]
     klm = ax.matshow(np.log10(test_kl.T), vmin=-5, vmax=-2)
@@ -673,22 +621,40 @@ def plot_full_testset_performance_pred(model, x_test, z_pred, tol, saveas=None):
     )
     ax.set_xlabel(f"Test Member")
     ax.set_ylabel(f"Time")
+    # ---
+    ax = axes[2]
+    wsm = ax.matshow(test_wass_un.T, vmin=0.0005, vmax=0.008)
+    fig.colorbar(
+        wsm,
+        ax=ax,
+        location="top",
+        label=f"Unnormalized Wasserstein Distance (Mean={np.mean(test_wass_un):.2e})",
+        extend="both",
+    )
+    ax.set_xlabel(f"Test Member")
+    ax.set_ylabel(f"Time")
 
     # Optional save
     if saveas is not None:
         fig.savefig(saveas)
 
     # Return fig for further manipulation
-    return fig, test_preds.detach().numpy(), test_kl, test_wass
+    return fig
 
 
 def plot_testset_quantiles_pred(
-    x_test, test_preds, test_metric, tplt, dsd_time, r_bins_edges, saveas=None
+    x_test,
+    test_preds,
+    test_metric,
+    tplt,
+    dsd_time,
+    r_bins_edges,
+    qtiles=[0, 0.25, 0.5, 0.75, 0.9999],
+    saveas=None,
 ):
     n_test = x_test.shape[0]
     test_metric_timemean = np.mean(test_metric, axis=1)
     tm_argsort = np.argsort(-test_metric_timemean)
-    qtiles = [0, 0.25, 0.5, 0.75, 0.9999]
     qtile_idx = (np.array(qtiles) * n_test).astype(int)
     qtile_mems = tm_argsort[qtile_idx]
 
@@ -703,7 +669,7 @@ def plot_testset_quantiles_pred(
     for i, id in enumerate(qtile_mems):
         for j, t in enumerate(tplt):
             ax[j][i].step(r_bins_edges, x_test[id, t, :])
-            ax[j][i].step(r_bins_edges, test_preds[id, t, :])
+            ax[j][i].step(r_bins_edges, test_preds[id, t, :].detach().numpy())
 
             ax[j][i].set_xscale("log")
             ax[j][i].set_xscale("log")
