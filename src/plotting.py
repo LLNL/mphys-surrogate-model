@@ -199,9 +199,7 @@ def plot_single_prediction_AE_AR(
     return fig
 
 
-def plot_latent_trajectories_AR(
-    n_latent, dsd_time, z_pred, z_data, n_lag=1, saveas=None
-):
+def plot_latent_trajectories(n_latent, dsd_time, z_pred, z_data, saveas=None):
     # Set up figure
     (fig, ax) = plt.subplots(
         nrows=2,
@@ -246,7 +244,7 @@ def plot_latent_trajectories_AR(
     ax[0][-1].set_title("mass (rescaled)")
     ax[0][0].set_ylabel("Data")
     ax[1][0].set_ylabel("Model")
-    fig.suptitle(f"Autoregressive Z(t), lag {n_lag}")
+    fig.suptitle(f"Test set predicted Z(t)")
 
     # Optional save
     if saveas is not None:
@@ -317,102 +315,6 @@ def plot_single_latent_trajectory_AR(
     ax.set_xlim([0, dsd_time.max()])
     plt.title(f"Autoregressive Z(t), lag {n_lag}")
     plt.show()
-
-
-def plot_latent_trajectories_dzdt(
-    n_latent,
-    model,
-    x_test,
-    m_test,
-    dt,
-    time,
-    x_train,
-    m_train,
-    plt_dx=True,
-    saveas=None,
-):
-    # Set up figure
-    (fig, ax) = plt.subplots(
-        ncols=n_latent + 1,
-        nrows=2,
-        figsize=(3 * (n_latent + 1), 6),
-        sharey=False,
-        sharex=True,
-        layout="constrained",
-    )
-    colors = ["blue", "orange", "green", "pink", "purple", "gray"]
-
-    # Compute limits
-    z_enc_train = model.encoder(torch.Tensor(x_train)).detach().numpy()
-    zlim = np.zeros((n_latent + 1, 2))
-    for il in range(n_latent):
-        zlim[il][0] = z_enc_train[:, :, il].min()
-        zlim[il][1] = z_enc_train[:, :, il].max()
-    zlim[-1][0] = m_train.min()
-    zlim[-1][1] = m_train.max()
-
-    # Compute all else
-    z_encoded = model.encoder(torch.Tensor(x_test)).detach().numpy()
-    z_pred = np.zeros((x_test.shape[0], len(time), n_latent + 1))
-    dz_encoded = np.gradient(z_encoded, axis=1) / dt
-    for j in range(x_test.shape[0]):
-        if plt_dx:
-            latents_data = np.concatenate(
-                [dz_encoded[j], np.zeros((len(time), 1))], axis=-1
-            )
-            latents_pred = (
-                model.dzdt(
-                    torch.Tensor(z_encoded[j]).reshape(1, len(time), -1),
-                    torch.Tensor(m_test[j]).reshape(1, -1, 1),
-                )
-                .detach()
-                .numpy()
-            ).squeeze()
-            title = "dz/dt"
-        else:
-            latents_data = np.concatenate(
-                [z_encoded[j], m_test[j].reshape(-1, 1)], axis=-1
-            )
-            z0 = np.concatenate((z_encoded[j, 0, :], np.array([m_test[j, 0]])), axis=-1)
-            latents_pred = du.simulate(z0, time, model.dzdt, zlim).squeeze()
-            z_pred[j, :, :] = latents_pred
-            title = "Z(t)"
-
-        for i in range(n_latent + 1):
-            if i < n_latent:
-                labeli = f"z{i}"
-                color = colors[i]
-            else:
-                labeli = "M / dlnr"
-                color = colors[-1]
-            ax[0][i].plot(
-                time,
-                latents_data[:, i],
-                color=color,
-                alpha=min(1, 150 / x_test.shape[0]),
-                lw=0.5,
-            )
-            ax[0][i].set_title(labeli)
-            ax[1][i].plot(
-                time,
-                latents_pred[:, i].squeeze(),
-                color=color,
-                alpha=min(1, 150 / x_test.shape[0]),
-                lw=0.5,
-            )
-            ax[1][i].set_xlabel("Elapsed time")
-
-    # Accoutrements
-    ax[0][0].set_ylabel("Data")
-    ax[1][0].set_ylabel("Prediction")
-    fig.suptitle(title)
-
-    # Optional save
-    if saveas is not None:
-        plt.savefig(saveas)
-
-    # Return fig for further manipulation
-    return fig, z_pred
 
 
 def plot_predictions_dzdt(

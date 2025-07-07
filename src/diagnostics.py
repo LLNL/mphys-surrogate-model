@@ -61,6 +61,39 @@ def get_latent_trajectories_AR(
     return z_pred, z_data, x_pred
 
 
+def get_latent_trajectories_dzdt(
+    n_latent,
+    model,
+    dsd_time,
+    x_test,
+    m_test,
+    x_train,
+    m_train,
+):
+    # Compute limits
+    z_enc_train = model.encoder(torch.Tensor(x_train)).detach().numpy()
+    zlim = np.zeros((n_latent + 1, 2))
+    for il in range(n_latent):
+        zlim[il][0] = z_enc_train[:, :, il].min()
+        zlim[il][1] = z_enc_train[:, :, il].max()
+    zlim[-1][0] = m_train.min()
+    zlim[-1][1] = m_train.max()
+
+    z_pred = np.zeros((x_test.shape[0], len(dsd_time), n_latent + 1))
+    z_data = np.zeros_like(z_pred)
+
+    z_data[:, :, :-1] = model.encoder(torch.Tensor(x_test)).detach().numpy()
+    z_data[:, :, -1] = m_test
+
+    for j in range(x_test.shape[0]):
+        z0 = z_data[j, 0, :]
+        latents_pred = du.simulate(z0, dsd_time, model.dzdt, zlim).squeeze()
+        z_pred[j, :, :] = latents_pred
+    x_pred = model.decoder(torch.Tensor(z_pred[:, :, :-1]))
+
+    return z_pred, z_data, x_pred
+
+
 def get_performance_metrics(x_test, m_test, z_pred, x_pred, tol=1e-8):
     # Extra vars
     n_test = x_test.shape[0]

@@ -18,7 +18,7 @@ from src import models, plotting, training, diagnostics
 params = {
     "data_src": "box",
     "random_seed": 10,
-    "num_epochs": 10,
+    "num_epochs": 100,
     "batch_size": 128,
     "learning_rate": 1e-3,
     "latent_dim": 3,
@@ -484,7 +484,7 @@ if __name__ == "__main__":
     z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_AR(
         params["latent_dim"], best_model, dsd_time, x_test, m_test
     )
-    fig = plotting.plot_latent_trajectories_AR(
+    fig = plotting.plot_latent_trajectories(
         params["latent_dim"], dsd_time, z_pred, z_data
     )
     if params["emily_save"]:
