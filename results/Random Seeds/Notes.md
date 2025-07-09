@@ -11,3 +11,6 @@ time without learning rate decay or early stopping is important. There is also a
 that Emily has discussed where the later epoch models don't perform well. Is this related?
 I think in general, focusing too much on the seed isn't super important. Once you find
 some good general parameters with Optuna, try a couple random seeds.
+
+There are now seed results for all three models. I don't think it's worth putting
+that much more time into this investigation, though the script will remain if necessary.

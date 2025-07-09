@@ -18,9 +18,9 @@ sys.path.append(project_root)
 
 import src.data_utils as du
 
-MODEL_TYPE = "AE-AR"
+# MODEL_TYPE = "AE-AR"
 # MODEL_TYPE = "NNdzdt"
-# MODEL_TYPE = "AE-SINDy"
+MODEL_TYPE = "AE-SINDy"
 
 if MODEL_TYPE == "AE-AR":
     from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
@@ -35,7 +35,7 @@ else:
 
 def train_model(args):
     # Unpack args
-    random_seed, n_bins, train_loader, test_loader = args
+    random_seed, n_bins, train_loader, test_loader, params = args
 
     # Set this once per worker process
     torch.set_num_threads(1)
@@ -191,7 +191,7 @@ if __name__ == "__main__":
     start_time = time.time()
     if parallel_flag:
         worker_args = [
-            (i, n_bins, train_loader, test_loader) for i in range(total_trials)
+            (i, n_bins, train_loader, test_loader, params) for i in range(total_trials)
         ]
         with Pool(processes=n_workers) as pool:
             res = pool.map(train_model, worker_args)
@@ -199,7 +199,7 @@ if __name__ == "__main__":
     else:
         res = np.zeros(total_trials)
         for i in range(total_trials):
-            args = (i, n_bins, train_loader, test_loader)
+            args = (i, n_bins, train_loader, test_loader, params)
             res[i] = train_model(args)
     stop_time = time.time()
     print(f"Duration: {stop_time - start_time}")
