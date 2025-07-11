@@ -18,6 +18,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")
 sys.path.append(project_root)
 
 import src.data_utils as du
+from src import diagnostics
 
 MODEL_TYPE = "AE-AR"
 # MODEL_TYPE = "NNdzdt"
@@ -34,7 +35,7 @@ else:
     raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
 
-def objective(trial, n_bins, train_data, test_data):
+def objective(trial, n_bins, train_data, test_data, dsd_time, x_train, m_train):
     # Set seed
     torch.manual_seed(params["random_seed"])
     np.random.seed(params["random_seed"])
@@ -115,10 +116,16 @@ def objective(trial, n_bins, train_data, test_data):
         print_flag=False,
         optuna_trial=trial,
     )
-    losses = train_output[1]
-    best_train_loss = np.min(losses)
+    best_model = train_output[0]
+    z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_AR(
+        params["latent_dim"], best_model, dsd_time, x_train, m_train
+    )
+    _, train_wass, _ = diagnostics.get_performance_metrics(
+        x_train, m_train, z_pred, x_pred
+    )
+    mean_trainset_wass = np.mean(train_wass)
 
-    return best_train_loss
+    return mean_trainset_wass
 
 
 def optimize_worker(args):
@@ -217,7 +224,13 @@ if __name__ == "__main__":
     # Run study
     start_time = time.time()
     objective_with_args = partial(
-        objective, n_bins=n_bins, train_data=train_data, test_data=test_data
+        objective,
+        n_bins=n_bins,
+        train_data=train_data,
+        test_data=test_data,
+        dsd_time=dsd_time,
+        x_train=x_train,
+        m_train=m_train,
     )
     if parallel_flag:
         worker_args = [
