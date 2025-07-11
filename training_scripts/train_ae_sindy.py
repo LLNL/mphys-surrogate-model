@@ -141,7 +141,10 @@ def train_and_eval(
             pred_x_recon = model.decoder(model.encoder(batch_x))
             z = model.encoder(batch_x)
             zz = z.clone().detach().requires_grad_()
-            pred_dz = model.dzdt(z, batch_M)[:, :, :-1]
+            pred_dz_int = model.dzdt(z, batch_M)
+            if pred_dz_int.dim() == 1:  # Hack solution?
+                continue
+            pred_dz = pred_dz_int[:, :, :-1]
             _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
             _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
 
