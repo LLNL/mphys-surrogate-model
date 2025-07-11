@@ -43,16 +43,18 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
 
     # Hyperparameter options
     lr = trial.suggest_float("lr", 1e-6, 1e-1, log=True)
-    batch_size = trial.suggest_int("batch_size", 4, 256)
     if MODEL_TYPE == "AE-AR":
-        pass
+        batch_size = trial.suggest_int("batch_size", 4, 256)
     elif MODEL_TYPE == "NNdzdt":
         layer1_size = trial.suggest_int("layer1_size", 20, 60)
         layer2_size = trial.suggest_int("layer2_size", 20, 60)
         layer3_size = trial.suggest_int("layer3_size", 20, 60)
+        batch_size = trial.suggest_int("batch_size", 4, 256)
     elif MODEL_TYPE == "AE-SINDy":
         latent_dim = trial.suggest_int("latent_dim", 2, 3)
         poly_order = trial.suggest_int("poly_order", 2, 3)
+        batch_size = trial.suggest_int("batch_size", 6, 256)
+        # When latent_dim == 2 && poly_order == 2, batch_size must be >=6
     else:
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
@@ -180,7 +182,7 @@ def optimize_worker(args):
 
 
 if __name__ == "__main__":
-    total_trials = 24  # On mac with 8 perf. cores, choose multiple of 8 total_trials
+    total_trials = 1000  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
     # Open dataset
