@@ -20,9 +20,9 @@ from src import models, plotting, training, diagnostics
 params = {
     "data_src": "box",
     "random_seed": 10,
-    "num_epochs": 10,
-    "batch_size": 128,
-    "learning_rate": 1e-3,
+    "num_epochs": 1000,
+    "batch_size": 16,
+    "learning_rate": 0.004886432388479633,
     "latent_dim": 3,
     "n_lag": 1,
     "w_recon": 1,
