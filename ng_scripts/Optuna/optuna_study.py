@@ -77,11 +77,13 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
             CNN=params["CNN"],
         )
     elif MODEL_TYPE == "AE-SINDy":
+        params["latent_dim"] = latent_dim
+        params["poly_order"] = poly_order
         model = AESINDy(
             n_channels=1,
             n_bins=n_bins,
-            n_latent=latent_dim,
-            poly_order=poly_order,
+            n_latent=params["latent_dim"],
+            poly_order=params["poly_order"],
             CNN=params["CNN"],
             sequential_thresholding=(
                 True
@@ -146,7 +148,7 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
         )
     elif MODEL_TYPE == "AE-SINDy":
         z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_dzdt(
-            latent_dim,
+            params["latent_dim"],
             best_model,
             test_data.t,
             x_train,
@@ -178,7 +180,7 @@ def optimize_worker(args):
 
 
 if __name__ == "__main__":
-    total_trials = 32  # On mac with 8 perf. cores, choose multiple of 8 total_trials
+    total_trials = 24  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
     # Open dataset
