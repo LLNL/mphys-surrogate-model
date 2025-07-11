@@ -21,8 +21,8 @@ import src.data_utils as du
 from src import diagnostics
 
 # MODEL_TYPE = "AE-AR"
-MODEL_TYPE = "NNdzdt"
-# MODEL_TYPE = "AE-SINDy"
+# MODEL_TYPE = "NNdzdt"
+MODEL_TYPE = "AE-SINDy"
 
 if MODEL_TYPE == "AE-AR":
     from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
@@ -51,7 +51,8 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
         layer2_size = trial.suggest_int("layer2_size", 20, 60)
         layer3_size = trial.suggest_int("layer3_size", 20, 60)
     elif MODEL_TYPE == "AE-SINDy":
-        pass
+        latent_dim = trial.suggest_int("latent_dim", 2, 3)
+        poly_order = trial.suggest_int("poly_order", 2, 3)
     else:
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
@@ -79,8 +80,8 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
         model = AESINDy(
             n_channels=1,
             n_bins=n_bins,
-            n_latent=params["latent_dim"],
-            poly_order=params["poly_order"],
+            n_latent=latent_dim,
+            poly_order=poly_order,
             CNN=params["CNN"],
             sequential_thresholding=(
                 True
@@ -127,6 +128,8 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
         optuna_trial=trial,
     )
     best_model = train_output[0]
+
+    # Calculate error (wass distance) over full dataset
     if MODEL_TYPE == "AE-AR":
         z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_AR(
             params["latent_dim"], best_model, dsd_time, x_train, m_train
@@ -142,7 +145,15 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
             m_train,
         )
     elif MODEL_TYPE == "AE-SINDy":
-        pass
+        z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_dzdt(
+            latent_dim,
+            best_model,
+            test_data.t,
+            x_train,
+            m_train,
+            x_train,
+            m_train,
+        )
     else:
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
     _, train_wass, _ = diagnostics.get_performance_metrics(

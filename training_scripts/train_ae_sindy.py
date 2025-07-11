@@ -31,8 +31,8 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "CNN": False,
-    "sequential_threshold_method": "bimodal_gmm",  # None, bimodal_gmm, knee_detection
-    "sequential_thresholding_interval": 10,  # None
+    "sequential_threshold_method": None,  # None, bimodal_gmm, knee_detection
+    "sequential_thresholding_interval": None,  # None
     "print_frequency": 1,
     "emily_save": True,
     "nipun_save": True,
