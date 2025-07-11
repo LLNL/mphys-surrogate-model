@@ -20,8 +20,8 @@ sys.path.append(project_root)
 import src.data_utils as du
 from src import diagnostics
 
-MODEL_TYPE = "AE-AR"
-# MODEL_TYPE = "NNdzdt"
+# MODEL_TYPE = "AE-AR"
+MODEL_TYPE = "NNdzdt"
 # MODEL_TYPE = "AE-SINDy"
 
 if MODEL_TYPE == "AE-AR":
@@ -35,7 +35,7 @@ else:
     raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
 
-def objective(trial, n_bins, train_data, test_data, dsd_time, x_train, m_train):
+def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m_train):
     # Set seed
     torch.manual_seed(params["random_seed"])
     np.random.seed(params["random_seed"])
@@ -44,6 +44,16 @@ def objective(trial, n_bins, train_data, test_data, dsd_time, x_train, m_train):
     # Hyperparameter options
     lr = trial.suggest_float("lr", 1e-6, 1e-1, log=True)
     batch_size = trial.suggest_int("batch_size", 4, 256)
+    if MODEL_TYPE == "AE-AR":
+        pass
+    elif MODEL_TYPE == "NNdzdt":
+        layer1_size = trial.suggest_int("layer1_size", 20, 60)
+        layer2_size = trial.suggest_int("layer2_size", 20, 60)
+        layer3_size = trial.suggest_int("layer3_size", 20, 60)
+    elif MODEL_TYPE == "AE-SINDy":
+        pass
+    else:
+        raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
     # Fixed parameters
     num_epochs = 10  # Reduced for faster trials
@@ -62,7 +72,7 @@ def objective(trial, n_bins, train_data, test_data, dsd_time, x_train, m_train):
             n_channels=1,
             n_bins=n_bins,
             n_latent=params["latent_dim"],
-            layer_size=params["layer_size"],
+            layer_size=(layer1_size, layer2_size, layer3_size),
             CNN=params["CNN"],
         )
     elif MODEL_TYPE == "AE-SINDy":
@@ -117,9 +127,24 @@ def objective(trial, n_bins, train_data, test_data, dsd_time, x_train, m_train):
         optuna_trial=trial,
     )
     best_model = train_output[0]
-    z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_AR(
-        params["latent_dim"], best_model, dsd_time, x_train, m_train
-    )
+    if MODEL_TYPE == "AE-AR":
+        z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_AR(
+            params["latent_dim"], best_model, dsd_time, x_train, m_train
+        )
+    elif MODEL_TYPE == "NNdzdt":
+        z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_dzdt(
+            params["latent_dim"],
+            best_model,
+            test_data.t,
+            x_train,
+            m_train,
+            x_train,
+            m_train,
+        )
+    elif MODEL_TYPE == "AE-SINDy":
+        pass
+    else:
+        raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
     _, train_wass, _ = diagnostics.get_performance_metrics(
         x_train, m_train, z_pred, x_pred
     )
@@ -142,7 +167,7 @@ def optimize_worker(args):
 
 
 if __name__ == "__main__":
-    total_trials = 1000  # On mac with 8 perf. cores, choose multiple of 8 total_trials
+    total_trials = 32  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
     # Open dataset
@@ -225,6 +250,7 @@ if __name__ == "__main__":
     start_time = time.time()
     objective_with_args = partial(
         objective,
+        params=params,
         n_bins=n_bins,
         train_data=train_data,
         test_data=test_data,
