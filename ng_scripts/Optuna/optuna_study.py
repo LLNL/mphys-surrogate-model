@@ -57,7 +57,7 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
     # Fixed parameters
-    num_epochs = 10  # Reduced for faster trials
+    num_epochs = 20  # Reduced for faster trials
 
     # Initialize the model
     if MODEL_TYPE == "AE-AR":
