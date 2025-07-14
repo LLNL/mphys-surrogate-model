@@ -22,8 +22,8 @@ params = {
     "data_src": "box",
     "random_seed": 10,
     "num_epochs": 1000,
-    "batch_size": 44,
-    "learning_rate": 0.006950305397282986,
+    "batch_size": 114,
+    "learning_rate": 0.007561919746093813,
     "latent_dim": 3,
     "poly_order": 2,
     "lr_sched": True,
@@ -371,7 +371,9 @@ if __name__ == "__main__":
     )
 
     # Compute & set weights based on Champion et al recs
-    lambda1, lambda2, lambda3 = du.champion_calculate_weights(train_data)
+    lambda1, lambda2, lambda3 = du.champion_calculate_weights(
+        train_data, lambda1_metaweight=1.3716059059307586
+    )
     print(f"lambda: 1.0, {lambda1}, {lambda2}")
     params["loss_weight_recon"] = 1.0
     params["loss_weight_sindy_x"] = lambda1
