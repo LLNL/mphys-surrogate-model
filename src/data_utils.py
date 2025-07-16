@@ -550,8 +550,6 @@ def sindy_library_tensor(z, latent_dim, poly_order):
             new_library[:, :, idx] = term
             idx += 1
 
-    if z.shape[0] == 1:
-        new_library = new_library.squeeze()
     return new_library
 
 
@@ -592,7 +590,7 @@ def sindy_simulate(z0, T, sindy_coeffs, poly_order, z_lim):
 def simulate(z0, T, dz_network, z_lim):
     def f(t, z):
         n_latent = z.size
-        dz = dz_network(torch.Tensor(z)).detach().numpy()
+        dz = dz_network(torch.Tensor(z)).squeeze().detach().numpy()
         for il in range(n_latent):
             if (z[il] >= z_lim[il][1]) or (z[il] <= z_lim[il][0]):
                 dz[il] = 0.0
