@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 
 # %%
 (
-    x_train,
-    m_train,
+    x_train, # (#samples, #timesteps, #dims)
+    m_train, # (#samples, #timesteps)
     x_test,
     m_test,
     r_bins_edges,
