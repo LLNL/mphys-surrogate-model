@@ -1,4 +1,5 @@
 import copy
+import json
 import os
 import sys
 import time
@@ -12,10 +13,9 @@ import uuid
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
-
 from src import data_utils as du
-from src import models, plotting, training, diagnostics
+from src import diagnostics, models, plotting, training
+from torch.utils.data import DataLoader
 
 params = {
     "data_src": "erf",
@@ -406,6 +406,19 @@ if __name__ == "__main__":
                 ),
                 pickle_file,
             )
+
+    # Save params
+    params_out_files = []
+    if params["emily_save"]:
+        params_out_files.append(tpsp_mod_dir / (case_name + "_params.json"))
+    if params["nipun_save"]:
+        params_out_files.append(runsp_out_dir / (case_name + "_params.json"))
+    params_save = copy.deepcopy(params)
+    for key, value in params_save.items():
+        if type(value) is np.float32 or type(value) is np.float64:
+            params_save[key] = float(value)
+    for out_file in params_out_files:
+        out_file.write_text(json.dumps(params_save, indent=4))
 
     # Save model
     mdl_out_files = []
