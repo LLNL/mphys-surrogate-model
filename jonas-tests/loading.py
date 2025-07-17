@@ -73,8 +73,10 @@ print(m_train.shape)
 exit()
 
 def run_ae_X(x, m):
-    # DSD+mass data, decoded (predictions from network)
+    # DSD data, decoded (predictions from network)
     DSD_all = np.empty((len(model_label),)+x.shape, dtype=float) 
+    # mass data 
+    M_all = np.empty((len(model_label),)+m.shape, dtype=float) 
     for k, model in enumerate(
         (
             ae_sindy,
@@ -92,7 +94,8 @@ def run_ae_X(x, m):
         for id in range(len(x)): # loop through each initial condition/sample/gridbox
             z0 = np.concatenate((z_enc_train[id, 0, :], np.array([m[id, 0]])), axis=-1)
             latents_pred = du.simulate(z0, dsd_time, model.dzdt, zlim)
-            DSD_all[k, id] = model.decoder(torch.Tensor(latents_pred[:, :-1])).detach().numpy()
+            DSD_all[k, id] = model.decoder(torch.Tensor(latents_pred[:, :-1])).detach().numpy() # add DSD predictions
+            M_all[k, id] = latents_pred[:, -1] # add mass predictions
     n_lag = 1
     for model in (ae_ar,):
         for id in range(len(x)): # loop through each initial condition/sample/gridbox
