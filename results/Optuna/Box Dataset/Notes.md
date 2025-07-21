@@ -1,4 +1,4 @@
-This folder has the results for Optuna trials. Each sub folder is split by
+This folder has the results for Optuna trials for the box dataset. Each sub folder is split by
 model type, and contains a "true" run of the model with the parameters
 found in the optuna run. Optuna is trying to minimize the mean wasserstein 
 distance for the entire training set. Current tests are with box data.
@@ -15,3 +15,5 @@ AE-SINDy_2025-07-13T21/06/35_e5f19b9991f3446f80daca8cf52f3612 folder. While
 the overall results are worse, they're subjectively pretty close. I think 
 this shows that one can do a second order polynomial SINDy and still do a 
 decent job. I think it is still worth playing with regularization.
+
+More consistent Optuna trials are in the ERF dataset folder
