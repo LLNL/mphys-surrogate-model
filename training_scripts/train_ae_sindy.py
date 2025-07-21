@@ -23,15 +23,15 @@ params = {
     "data_src": "erf",
     "random_seed": 10,
     "num_epochs": 1000,
-    "batch_size": 31,
-    "learning_rate": 0.004068056306308995,
+    "batch_size": 25,
+    "learning_rate": 0.004204813405972317,
     "latent_dim": 3,
     "poly_order": 2,
     "lr_sched": True,
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "lambda1_metaweight": 0.7872411581560879,
+    "lambda1_metaweight": 0.500989969537634,
     "CNN": False,
     "sequential_threshold_method": None,  # None, bimodal_gmm, knee_detection
     "sequential_thresholding_interval": None,  # None

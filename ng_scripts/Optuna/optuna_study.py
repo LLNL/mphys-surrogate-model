@@ -56,8 +56,8 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
         layer3_size = trial.suggest_int("layer3_size", 20, 60)
         lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
     elif MODEL_TYPE == "AE-SINDy":
-        latent_dim = trial.suggest_int("latent_dim", 1, 4)
-        poly_order = trial.suggest_int("poly_order", 2, 3)
+        # latent_dim = trial.suggest_int("latent_dim", 1, 4)
+        # poly_order = trial.suggest_int("poly_order", 2, 3)
         lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
     else:
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
@@ -92,8 +92,8 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
             CNN=params["CNN"],
         )
     elif MODEL_TYPE == "AE-SINDy":
-        params["latent_dim"] = latent_dim
-        params["poly_order"] = poly_order
+        # params["latent_dim"] = latent_dim
+        # params["poly_order"] = poly_order
         lambda1, lambda2, lambda3 = du.champion_calculate_weights(
             train_data, lambda1_metaweight=lambda1_metaweight, lambda3=1.0
         )
