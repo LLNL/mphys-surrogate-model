@@ -20,9 +20,9 @@ sys.path.append(project_root)
 import src.data_utils as du
 from src import diagnostics
 
-# MODEL_TYPE = "AE-AR"
+MODEL_TYPE = "AE-AR"
 # MODEL_TYPE = "NNdzdt"
-MODEL_TYPE = "AE-SINDy"
+# MODEL_TYPE = "AE-SINDy"
 
 if MODEL_TYPE == "AE-AR":
     from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
@@ -45,31 +45,45 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
     lr = trial.suggest_float("lr", 1e-6, 1e-1, log=True)
     batch_size = trial.suggest_int("batch_size", 4, 256)
     if MODEL_TYPE == "AE-AR":
-        pass
+        layer1_size = trial.suggest_int("layer1_size", 20, 180)
+        layer2_size = trial.suggest_int("layer2_size", 20, 180)
+        layer3_size = trial.suggest_int("layer3_size", 20, 180)
+        w_dx = trial.suggest_float("w_dx", 0.1, 1.9)
+        w_dz = trial.suggest_float("w_dz", 0.1, 1.9)
     elif MODEL_TYPE == "NNdzdt":
         layer1_size = trial.suggest_int("layer1_size", 20, 60)
         layer2_size = trial.suggest_int("layer2_size", 20, 60)
         layer3_size = trial.suggest_int("layer3_size", 20, 60)
+        lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
     elif MODEL_TYPE == "AE-SINDy":
-        # latent_dim = trial.suggest_int("latent_dim", 2, 3)
-        # poly_order = trial.suggest_int("poly_order", 2, 3)
+        latent_dim = trial.suggest_int("latent_dim", 2, 3)
+        poly_order = trial.suggest_int("poly_order", 2, 3)
         lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
     else:
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
     # Fixed parameters
-    num_epochs = 20  # Reduced for faster trials
+    num_epochs = 30  # Reduced for faster trials
 
     # Initialize the model
     if MODEL_TYPE == "AE-AR":
+        params["w_dx"] = w_dx
+        params["w_dz"] = w_dz
         model = AEAutoregressor(
             n_channels=1,
             n_bins=n_bins,
             n_latent=params["latent_dim"],
+            layer_size=(layer1_size, layer2_size, layer3_size),
             n_lag=params["n_lag"],
             CNN=params["CNN"],
         )
     elif MODEL_TYPE == "NNdzdt":
+        lambda1, lambda2, lambda3 = du.champion_calculate_weights(
+            train_data, lambda1_metaweight=lambda1_metaweight, lambda3=1.0
+        )
+        params["loss_weight_recon"] = lambda3
+        params["loss_weight_sindy_x"] = lambda1
+        params["loss_weight_sindy_z"] = lambda2
         model = AENNdzdt(
             n_channels=1,
             n_bins=n_bins,
@@ -78,8 +92,8 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
             CNN=params["CNN"],
         )
     elif MODEL_TYPE == "AE-SINDy":
-        # params["latent_dim"] = latent_dim
-        # params["poly_order"] = poly_order
+        params["latent_dim"] = latent_dim
+        params["poly_order"] = poly_order
         lambda1, lambda2, lambda3 = du.champion_calculate_weights(
             train_data, lambda1_metaweight=lambda1_metaweight, lambda3=1.0
         )
