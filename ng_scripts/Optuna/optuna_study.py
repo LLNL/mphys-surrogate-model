@@ -20,8 +20,8 @@ sys.path.append(project_root)
 import src.data_utils as du
 from src import diagnostics
 
-MODEL_TYPE = "AE-AR"
-# MODEL_TYPE = "NNdzdt"
+# MODEL_TYPE = "AE-AR"
+MODEL_TYPE = "NNdzdt"
 # MODEL_TYPE = "AE-SINDy"
 
 if MODEL_TYPE == "AE-AR":

@@ -20,17 +20,17 @@ from src import models, plotting, training, diagnostics
 from torch.utils.data import DataLoader
 
 params = {
-    "data_src": "box",
+    "data_src": "erf",
     "random_seed": 0,
     "num_epochs": 1000,
     "batch_size": 4,
-    "learning_rate": 0.003284036210681631,
+    "learning_rate": 0.00314227212817401,
     "latent_dim": 3,
     "lr_sched": True,
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "layer_size": (27, 25, 33),
+    "layer_size": (42, 36, 46),
     "CNN": False,
     "print_frequency": 1,
     "emily_save": True,
@@ -319,7 +319,9 @@ if __name__ == "__main__":
     print(f"Total number of parameters: {total_params}")
 
     # Compute & set weights based on Champion et al recs
-    lambda1, lambda2, lambda3 = du.champion_calculate_weights(train_data)
+    lambda1, lambda2, lambda3 = du.champion_calculate_weights(
+        train_data, lambda1_metaweight=0.5353139650038768
+    )
     print(f"lambda: 1.0, {lambda1}, {lambda2}")
     params["loss_weight_recon"] = 1.0
     params["loss_weight_sindy_x"] = lambda1
