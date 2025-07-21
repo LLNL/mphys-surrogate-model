@@ -1,19 +1,23 @@
-import sys
-import os
-import time
 import copy
+import os
+import sys
+import time
+
 import pysindy as ps
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
-import numpy as np
-import xarray as xr
-import torch
 import pickle as pkl
 import uuid
-from src import data_utils as du, models, training, plotting
+
+import numpy as np
+import torch
+import xarray as xr
+from src import data_utils as du
+from src import models, plotting, training
 from torch.utils.data import DataLoader
+
 from train_ae_ar import AEAutoregressor, train_model
 
 load_params = {

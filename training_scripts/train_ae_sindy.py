@@ -1,4 +1,5 @@
 import copy
+import json
 import os
 import sys
 import time
@@ -15,7 +16,7 @@ import uuid
 import numpy as np
 import torch
 from src import data_utils as du
-from src import models, plotting, thresholding, training, diagnostics
+from src import diagnostics, models, plotting, thresholding, training
 from torch.utils.data import DataLoader
 
 params = {
@@ -30,6 +31,7 @@ params = {
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
+    "lambda1_factor": 0.5,
     "CNN": False,
     "sequential_threshold_method": None,  # None, bimodal_gmm, knee_detection
     "sequential_thresholding_interval": None,  # None
@@ -471,6 +473,19 @@ if __name__ == "__main__":
                 ),
                 pickle_file,
             )
+
+    # Save params
+    params_out_files = []
+    if params["emily_save"]:
+        params_out_files.append(tpsp_mod_dir / (case_name + "_params.json"))
+    if params["nipun_save"]:
+        params_out_files.append(runsp_out_dir / (case_name + "_params.json"))
+    params_save = copy.deepcopy(params)
+    for key, value in params_save.items():
+        if type(value) is np.float32 or type(value) is np.float64:
+            params_save[key] = float(value)
+    for out_file in params_out_files:
+        out_file.write_text(json.dumps(params_save, indent=4))
 
     # Save model
     mdl_out_files = []
