@@ -1,15 +1,21 @@
-from torch.utils.data import Dataset, DataLoader
-import numpy as np
-import xarray as xr
-import torch
 import random
-from scipy.special import binom
-from scipy.integrate import odeint, solve_ivp
 from itertools import combinations_with_replacement
+from pathlib import Path
+
+import numpy as np
+import torch
+import xarray as xr
+from scipy.integrate import odeint, solve_ivp
+from scipy.special import binom
+from torch.utils.data import DataLoader, Dataset
 
 
 def open_box_dataset():
-    ds_all = xr.open_dataset("../data/box64_train.nc", decode_timedelta=True)
+    # Set path
+    dpath = Path(__file__).parent.parent / "data"
+
+    # Train dataset
+    ds_all = xr.open_dataset(dpath / "box64_train.nc", decode_timedelta=True)
     r_bins_edges = ds_all["mass_bin"]
     m_train = ds_all["dvdlnr"].sum(dim="mass_bin_idx")
     x_train = (
@@ -20,7 +26,8 @@ def open_box_dataset():
     n_bins = x_train.shape[2]
     dsd_time = (ds_all["time"] / np.timedelta64(1, "s")).to_numpy()
 
-    ds_test = xr.open_dataset("../data/box64_test.nc", decode_timedelta=True)
+    # Test dataset
+    ds_test = xr.open_dataset(dpath / "box64_test.nc", decode_timedelta=True)
     m_test = ds_test["dvdlnr"].sum(dim="mass_bin_idx")
     x_test = (
         (ds_test["dvdlnr"] / m_test).transpose("run", "time", "mass_bin_idx").to_numpy()
@@ -32,8 +39,9 @@ def open_box_dataset():
 
 def open_erf_dataset(path=None, sample_time=None):
     if path is None:
-        ds_all = xr.open_dataset("../data/congestus_coal_200m_train.nc")
-        ds_test = xr.open_dataset("../data/congestus_coal_200m_test.nc")
+        path = Path(__file__).parent.parent / "data"
+        ds_all = xr.open_dataset(path / "congestus_coal_200m_train.nc")
+        ds_test = xr.open_dataset(path / "congestus_coal_200m_test.nc")
     else:
         ds_all = xr.open_dataset(path + "_train.nc")
         ds_test = xr.open_dataset(path + "_test.nc")
@@ -639,3 +647,22 @@ def calculate_autocorrelation(dsd_data, max_lag=10):
                     autocorr[r, lag] = corr_sum / count
 
     return autocorr
+
+
+def champion_calculate_weights(ds, lambda1_metaweight=0.5, lambda3=1.0):
+    """
+    See Champion et al. supplementary materials for information.
+
+    :param ds: Training dataset
+    :param lambda1_metaweight: lambda1 is specified as "slightly less than", this sets that
+    :param lambda3: Reconstruction weight, currently just set to 1.0 but this function allows this to be
+                    programmatically changed.
+    :return: lambda1, lambda2, lambda3
+    """
+    xx = np.squeeze(ds.x)
+    dx = np.squeeze(ds.dx)
+    xxl2 = np.linalg.norm(xx, ord=2, axis=1) ** 2
+    dxl2 = np.linalg.norm(dx, ord=2, axis=1) ** 2
+    lambda1 = xxl2.sum() / dxl2.sum() * lambda1_metaweight
+    lambda2 = lambda1 / 1e2  # 2 orders of magnitude smaller
+    return lambda1, lambda2, lambda3

@@ -1,0 +1,10 @@
+{
+    "value": 0.0027283814164849648,
+    "params": {
+        "lr": 0.007561919746093813,
+        "batch_size": 114,
+        "lambda1_metaweight": 1.3716059059307586
+    },
+    "optuna_runtime": 757.5625429153442,
+    "random_seed": 10
+}

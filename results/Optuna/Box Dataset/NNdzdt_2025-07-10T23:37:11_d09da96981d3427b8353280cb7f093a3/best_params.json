@@ -1,0 +1,12 @@
+{
+    "value": 0.002216030323256305,
+    "params": {
+        "lr": 0.003284036210681631,
+        "batch_size": 4,
+        "layer1_size": 27,
+        "layer2_size": 25,
+        "layer3_size": 33
+    },
+    "optuna_runtime": 1956.5506918430328,
+    "random_seed": 0
+}
