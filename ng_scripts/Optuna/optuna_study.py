@@ -21,8 +21,8 @@ import src.data_utils as du
 from src import diagnostics
 
 # MODEL_TYPE = "AE-AR"
-MODEL_TYPE = "NNdzdt"
-# MODEL_TYPE = "AE-SINDy"
+# MODEL_TYPE = "NNdzdt"
+MODEL_TYPE = "AE-SINDy"
 
 if MODEL_TYPE == "AE-AR":
     from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
@@ -56,7 +56,7 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
         layer3_size = trial.suggest_int("layer3_size", 20, 60)
         lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
     elif MODEL_TYPE == "AE-SINDy":
-        latent_dim = trial.suggest_int("latent_dim", 2, 3)
+        latent_dim = trial.suggest_int("latent_dim", 1, 4)
         poly_order = trial.suggest_int("poly_order", 2, 3)
         lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
     else:

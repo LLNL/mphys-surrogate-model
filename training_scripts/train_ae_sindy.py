@@ -20,18 +20,18 @@ from src import diagnostics, models, plotting, thresholding, training
 from torch.utils.data import DataLoader
 
 params = {
-    "data_src": "box",
+    "data_src": "erf",
     "random_seed": 10,
     "num_epochs": 1000,
-    "batch_size": 114,
-    "learning_rate": 0.007561919746093813,
+    "batch_size": 31,
+    "learning_rate": 0.004068056306308995,
     "latent_dim": 3,
     "poly_order": 2,
     "lr_sched": True,
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "lambda1_factor": 0.5,
+    "lambda1_metaweight": 0.7872411581560879,
     "CNN": False,
     "sequential_threshold_method": None,  # None, bimodal_gmm, knee_detection
     "sequential_thresholding_interval": None,  # None
@@ -144,8 +144,6 @@ def train_and_eval(
             z = model.encoder(batch_x)
             zz = z.clone().detach().requires_grad_()
             pred_dz_int = model.dzdt(z, batch_M)
-            if pred_dz_int.dim() == 1:  # Hack solution?
-                continue
             pred_dz = pred_dz_int[:, :, :-1]
             _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
             _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
@@ -374,7 +372,7 @@ if __name__ == "__main__":
 
     # Compute & set weights based on Champion et al recs
     lambda1, lambda2, lambda3 = du.champion_calculate_weights(
-        train_data, lambda1_metaweight=1.3716059059307586
+        train_data, lambda1_metaweight=params["lambda1_metaweight"]
     )
     print(f"lambda: 1.0, {lambda1}, {lambda2}")
     params["loss_weight_recon"] = 1.0
