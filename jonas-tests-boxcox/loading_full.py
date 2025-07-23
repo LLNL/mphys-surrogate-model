@@ -1,4 +1,5 @@
 # testing vanilla and split conformal predictions on pretrained model, full pipeline
+# does conformal predictions on log(PSD)
 import sys
 import torch
 import numpy as np
@@ -67,8 +68,16 @@ ae_ar.load_state_dict(ae_ar_checkpoint)
 models = (ae_sindy, ae_nndzdt, ae_ar)
 model_label = ["SINDy", "NN-driven", "AR"]
 
+# regularized logarithm 
+def log_reg(x):
+    return np.log(x+1)
+
+# undoes regularized logarithm
+def exp_reg(y):
+    return np.exp(y)-1
+
 # computes the predicted DSD and mass trajectories
-def run_ae_X(x, m):
+def run_ae_logX(x, m):
     # DSD data, decoded (predictions from network)
     DSD_all = np.empty((len(model_label),)+x.shape, dtype=float) 
     # mass data 
@@ -110,7 +119,7 @@ def run_ae_X(x, m):
                 # decode the DSD and save it
                 DSD_all[2, id][t, :] = model.decoder(res[..., :-1]).detach().numpy()
                 M_all[2, id][t] = res[..., -1].squeeze().detach().item() # save mass
-    return DSD_all, M_all
+    return log_reg(DSD_all), log_reg(M_all)
 
 def one_sided_quantiles(residuals, alpha_lows, alpha_ups):
     """
@@ -160,24 +169,24 @@ DSD_upper_full = DSD_lower_full.copy()
 m_lower_full = np.empty((len(models),len(alphas),)+m_test.shape, dtype=float)
 m_upper_full = m_lower_full.copy()
 print('Predicting the training data.')
-DSD_train_all, M_train_all = run_ae_X(x_train, m_train)
+DSD_train_all, M_train_all = run_ae_logX(x_train, m_train)
 print('Predicting the testing data.')
-DSD_test, M_test = run_ae_X(x_test, m_test)
+DSD_test, M_test = run_ae_logX(x_test, m_test)
 print('Running vanilla conformal predictions.')
 for i in range(len(models)): 
-    DSD_res_signed = DSD_train_all[i] - x_train
-    m_res_signed = M_train_all[i] - m_train
+    DSD_res_signed = DSD_train_all[i] - log_reg(x_train)
+    m_res_signed = M_train_all[i] - log_reg(m_train)
     DSD_q_low, DSD_q_high = one_sided_quantiles(DSD_res_signed, alpha_lows, alpha_ups) 
     m_q_low, m_q_high = one_sided_quantiles(m_res_signed, alpha_lows, alpha_ups) 
-    DSD_lower_full[i] = DSD_test[i, np.newaxis, ...] - DSD_q_high[:, np.newaxis, ...]
-    DSD_upper_full[i] = DSD_test[i, np.newaxis, ...] - DSD_q_low [:, np.newaxis, ...]
-    m_lower_full[i] = M_test[i, np.newaxis, ...] - m_q_high[:, np.newaxis, ...]
-    m_upper_full[i] = M_test[i, np.newaxis, ...] - m_q_low [:, np.newaxis, ...]
+    DSD_lower_full[i] = exp_reg(DSD_test[i, np.newaxis, ...] - DSD_q_high[:, np.newaxis, ...])
+    DSD_upper_full[i] = exp_reg(DSD_test[i, np.newaxis, ...] - DSD_q_low [:, np.newaxis, ...])
+    m_lower_full[i] = exp_reg(M_test[i, np.newaxis, ...] - m_q_high[:, np.newaxis, ...])
+    m_upper_full[i] = exp_reg(M_test[i, np.newaxis, ...] - m_q_low [:, np.newaxis, ...])
 
 # save lower, upper, and representative for DSD
-DSD_bands_full = [DSD_lower_full, DSD_test, DSD_upper_full]
+DSD_bands_full = [DSD_lower_full, exp_reg(DSD_test), DSD_upper_full]
 # save lower, upper, and representative for masses
-m_bands_full = [m_lower_full, m_test, m_upper_full]
+m_bands_full = [m_lower_full, exp_reg(m_test), m_upper_full]
 
 # split
 print('Splitting testing data into calibration and testing data. 50-50 split.')
@@ -206,29 +215,29 @@ DSD_upper_split = DSD_lower_split.copy()
 m_lower_split = np.empty((len(models),len(alphas),)+m_testing.shape, dtype=float)
 m_upper_split = m_lower_split.copy()
 print('Predicting the calibration data.')
-DSD_cal, M_cal = run_ae_X(x_cal, m_cal)
+DSD_cal, M_cal = run_ae_logX(x_cal, m_cal)
 print('Predicting the testing data.')
-DSD_testing, M_testing = run_ae_X(x_testing, m_testing)
+DSD_testing, M_testing = run_ae_logX(x_testing, m_testing)
 print('Running split conformal predictions.')
 for i in range(len(models)):
-    DSD_res_signed = DSD_cal[i] - x_cal
-    M_res_signed = M_cal[i] - m_cal
+    DSD_res_signed = DSD_cal[i] - log_reg(x_cal)
+    M_res_signed = M_cal[i] - log_reg(m_cal)
     DSD_q_low, DSD_q_high = one_sided_quantiles(DSD_res_signed, alpha_lows, alpha_ups) 
     m_q_low, m_q_high = one_sided_quantiles(M_res_signed, alpha_lows, alpha_ups) 
-    DSD_lower_split[i] = DSD_testing[i, np.newaxis, ...] - DSD_q_high[:, np.newaxis, ...]
-    DSD_upper_split[i] = DSD_testing[i, np.newaxis, ...] - DSD_q_low [:, np.newaxis, ...]
-    m_lower_split[i] = M_testing[i, np.newaxis, ...] - m_q_high[:, np.newaxis, ...]
-    m_upper_split[i] = M_testing[i, np.newaxis, ...] - m_q_low [:, np.newaxis, ...]
+    DSD_lower_split[i] = exp_reg(DSD_testing[i, np.newaxis, ...] - DSD_q_high[:, np.newaxis, ...])
+    DSD_upper_split[i] = exp_reg(DSD_testing[i, np.newaxis, ...] - DSD_q_low [:, np.newaxis, ...])
+    m_lower_split[i] = exp_reg(M_testing[i, np.newaxis, ...] - m_q_high[:, np.newaxis, ...])
+    m_upper_split[i] = exp_reg(M_testing[i, np.newaxis, ...] - m_q_low [:, np.newaxis, ...])
     
 # save lower, upper, and representative for DSD
-DSD_bands_split = [DSD_lower_split, DSD_testing, DSD_upper_split]
+DSD_bands_split = [DSD_lower_split, exp_reg(DSD_testing), DSD_upper_split]
 # save lower, upper, and representative for masses
-m_bands_split = [m_lower_split, M_testing, m_upper_split]
+m_bands_split = [m_lower_split, exp_reg(M_testing), m_upper_split]
 
 print('Pickling results.')
 import pickle 
 
-path = '/g/g14/katona1/mphys-surrogate-model/jonas-tests'
+path = '/g/g14/katona1/mphys-surrogate-model/jonas-tests-log'
 
 # full/vanilla: save alpha values, prediction bands for DSDs, and prediction bands for masses (in that order)
 

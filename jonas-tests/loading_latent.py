@@ -9,7 +9,6 @@ from src import data_utils as du
 from training_scripts.train_ae_ar import AEAutoregressor
 from training_scripts.train_ae_sindy import AESINDy
 from training_scripts.train_ae_NNdzdt import AENNdzdt
-import matplotlib.pyplot as plt
 
 # %%
 (
@@ -206,7 +205,7 @@ latent_cal = run_ae_X_latent(x_cal, m_cal)
 print('Predicting the testing data.')
 latent_testing = run_ae_X_latent(x_testing, m_testing)
 print('Running split conformal predictions.')
-for i, m in enumerate(models): 
+for i, model in enumerate(models): 
     res_signed = latent_cal[i] - np.concatenate([model.encoder(torch.Tensor(x_cal)).detach().numpy(), 
                                                  m_cal[..., np.newaxis]], axis=-1)
     q_low, q_high = one_sided_quantiles(res_signed, alpha_lows, alpha_ups) 

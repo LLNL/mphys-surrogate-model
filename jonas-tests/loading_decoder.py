@@ -9,7 +9,6 @@ from src import data_utils as du
 from training_scripts.train_ae_ar import AEAutoregressor
 from training_scripts.train_ae_sindy import AESINDy
 from training_scripts.train_ae_NNdzdt import AENNdzdt
-import matplotlib.pyplot as plt
 
 # %%
 (
