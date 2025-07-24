@@ -1,20 +1,21 @@
 # compute the integrated diff between prediction intervals across latent space
 # these integrals will naturally be a function of time, weighted by the domain size
-
+import os
 import sys
-import numpy as np
-import torch
-import pickle
 import matplotlib.pyplot as plt
+import pickle
+import numpy as np
 
-sys.path.append("/g/g14/katona1/mphys-surrogate-model")
+current_script_directory = os.path.dirname(os.path.abspath(__file__))
+parent_directory = os.path.abspath(os.path.join(current_script_directory, ".."))
+sys.path.append(parent_directory)
 
 from src import data_utils as du
 from training_scripts.train_ae_ar import AEAutoregressor
 from training_scripts.train_ae_sindy import AESINDy
 from training_scripts.train_ae_NNdzdt import AENNdzdt
 
-path = "/g/g14/katona1/mphys-surrogate-model/jonas-tests/cp/latent"
+path = parent_directory + "/results/jonas-cp-tests/latent"
 
 (
     x_train,
@@ -26,7 +27,7 @@ path = "/g/g14/katona1/mphys-surrogate-model/jonas-tests/cp/latent"
     dsd_time,
 ) = du.open_erf_dataset(
     sample_time=np.arange(0, 61, 5),
-    path="/g/g14/katona1/mphys-surrogate-model/data/congestus_coal_200m",
+    path=parent_directory + "/data/congestus_coal_200m",
 )
 
 # load results from vanilla conformal predictions
@@ -112,14 +113,14 @@ fig_split.suptitle(
 fig_m_full.suptitle("Vanilla conformal mass prediction interval width", fontsize=14)
 fig_m_split.suptitle("Split conformal mass prediction interval width", fontsize=14)
 fig_full.savefig(
-    f"/g/g14/katona1/mphys-surrogate-model/jonas-tests/cp/latent/errors_vanilla_DSD.pdf"
+    parent_directory + "/results/jonas-cp-tests/latent/errors_vanilla_DSD.pdf"
 )
 fig_split.savefig(
-    f"/g/g14/katona1/mphys-surrogate-model/jonas-tests/cp/latent/errors_split_DSD.pdf"
+    parent_directory + "/results/jonas-cp-tests/latent/errors_split_DSD.pdf"
 )
 fig_m_full.savefig(
-    f"/g/g14/katona1/mphys-surrogate-model/jonas-tests/cp/latent/errors_vanilla_m.pdf"
+    parent_directory + "/results/jonas-cp-tests/latent/errors_vanilla_m.pdf"
 )
 fig_m_split.savefig(
-    f"/g/g14/katona1/mphys-surrogate-model/jonas-tests/cp/latent/errors_split_m.pdf"
+    parent_directory + "/results/jonas-cp-tests/latent/errors_split_m.pdf"
 )

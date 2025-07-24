@@ -1,9 +1,12 @@
 # check if the SINDy model coefficients are actual zero for mass
+import os
 import sys
-import torch
 import numpy as np
+import torch
 
-sys.path.append("/g/g14/katona1/mphys-surrogate-model")
+current_script_directory = os.path.dirname(os.path.abspath(__file__))
+parent_directory = os.path.abspath(os.path.join(current_script_directory, ".."))
+sys.path.append(parent_directory)
 
 from src import data_utils as du
 from training_scripts.train_ae_sindy import AESINDy
@@ -19,7 +22,7 @@ from training_scripts.train_ae_sindy import AESINDy
     dsd_time,
 ) = du.open_erf_dataset(
     sample_time=np.arange(0, 61, 5),
-    path="/g/g14/katona1/mphys-surrogate-model/data/congestus_coal_200m",
+    path=parent_directory + "/data/congestus_coal_200m",
 )
 
 params = {
@@ -41,7 +44,7 @@ params = {
     "print_frequency": 1,
 }
 
-main_path = "/g/g14/katona1/mphys-surrogate-model/results/poster_erf_results/"
+main_path = parent_directory + "/results/poster_erf_results/"
 ae_sindy_checkpoint = torch.load(
     main_path
     + "ae_sindy/model/FFNN_latent3_order3_tr100_lr0.001_bs32_weights1.0-559.9560546875-55995.60546875_0015405497354173a4eb3a26e57ab675.pth",

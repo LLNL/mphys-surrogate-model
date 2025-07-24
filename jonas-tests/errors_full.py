@@ -1,16 +1,19 @@
 # compute the integrated area between prediction intervals across the entire network output
 # these integrals will naturally be a function of time, weighted by the domain size
 
+import os
 import sys
-import numpy as np
-import pickle
 import matplotlib.pyplot as plt
+import pickle
+import numpy as np
 
-sys.path.append("/g/g14/katona1/mphys-surrogate-model")
+current_script_directory = os.path.dirname(os.path.abspath(__file__))
+parent_directory = os.path.abspath(os.path.join(current_script_directory, ".."))
+sys.path.append(parent_directory)
 
 from src import data_utils as du
 
-path = "/g/g14/katona1/mphys-surrogate-model/jonas-tests/cp/full"
+path = parent_directory + "/results/jonas-cp-tests/full"
 
 (
     x_train,
@@ -22,7 +25,7 @@ path = "/g/g14/katona1/mphys-surrogate-model/jonas-tests/cp/full"
     dsd_time,
 ) = du.open_erf_dataset(
     sample_time=np.arange(0, 61, 5),
-    path="/g/g14/katona1/mphys-surrogate-model/data/congestus_coal_200m",
+    path=parent_directory + "/data/congestus_coal_200m",
 )
 
 # load results from vanilla conformal predictions
@@ -83,9 +86,5 @@ fig_split.suptitle(
     "Split conformal DSD prediction interval width,\n integrated across DSD bins",
     fontsize=14,
 )
-fig_full.savefig(
-    f"/g/g14/katona1/mphys-surrogate-model/jonas-tests/cp/full/errors_vanilla.pdf"
-)
-fig_split.savefig(
-    f"/g/g14/katona1/mphys-surrogate-model/jonas-tests/cp/full/errors_split.pdf"
-)
+fig_full.savefig(parent_directory + "/results/jonas-cp-tests/full/errors_vanilla.pdf")
+fig_split.savefig(parent_directory + "/results/jonas-cp-tests/full/errors_split.pdf")
