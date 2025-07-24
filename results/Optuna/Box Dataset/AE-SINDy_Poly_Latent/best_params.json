@@ -1,0 +1,11 @@
+{
+    "value": 0.002759649635279831,
+    "params": {
+        "lr": 0.006950305397282986,
+        "batch_size": 44,
+        "latent_dim": 3,
+        "poly_order": 2
+    },
+    "optuna_runtime": 1549.6247668266296,
+    "random_seed": 10
+}

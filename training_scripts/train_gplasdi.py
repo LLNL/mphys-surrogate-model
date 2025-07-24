@@ -1,15 +1,17 @@
+import time
+
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import time
-from lasdi.physics import Physics
-from lasdi.latent_space import Autoencoder
-from lasdi.latent_dynamics.sindy import SINDy
-from lasdi.gp import fit_gps, eval_gp
-from lasdi.gplasdi import sample_roms, average_rom
-from lasdi.latent_dynamics.wsindy import wSINDy  # only if you are on wSINDy branch
-import matplotlib.pyplot as plt
 import xarray as xr
-from src import plotting, models
+from lasdi.gp import eval_gp, fit_gps
+from lasdi.gplasdi import average_rom, sample_roms
+from lasdi.latent_dynamics.sindy import SINDy
+from lasdi.latent_dynamics.wsindy import \
+    wSINDy  # only if you are on wSINDy branch
+from lasdi.latent_space import Autoencoder
+from lasdi.physics import Physics
+from src import models, plotting
 
 ae_weight = 1e0
 sindy_weight = 1e2
