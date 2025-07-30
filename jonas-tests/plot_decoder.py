@@ -108,8 +108,8 @@ for k, model in enumerate(model_label):
         ax_full[j][i].set_ylim(0, 0.5)
         ax_split[j][i].set_ylim(0, 0.5)
     for j, t in enumerate(tplt):
-        ax_full[j][0].set_ylabel(f"dmdlnr at t={dsd_time[t]}")
-        ax_split[j][0].set_ylabel(f"dmdlnr at t={dsd_time[t]}")
+        ax_full[j][0].set_ylabel(f"dmdlnr at t={dsd_time[t]} \n [kg liquid/kg air]")
+        ax_split[j][0].set_ylabel(f"dmdlnr at t={dsd_time[t]} \n [kg liquid/kg air]")
     ax_full[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
     ax_split[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
     fig_full.suptitle("Vanilla conformal DSD predictions", fontsize=14)

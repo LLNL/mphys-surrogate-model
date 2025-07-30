@@ -76,6 +76,8 @@ for j, alpha in enumerate(alphas):  # loop through alpha values
     ax_split[j].set_xlabel("time [s]")
     ax_full[j].set_ylim(0.9 * area_full.min(), 1.1 * area_full.max())
     ax_split[j].set_ylim(0.9 * area_split.min(), 1.1 * area_split.max())
+ax_full[0].set_ylabel("mass mixing ratio \n [kg liquid/kg air]")
+ax_split[0].set_ylabel("mass mixing ratio \n [kg liquid/kg air]")
 ax_full[-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 ax_split[-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 fig_full.suptitle(
