@@ -102,9 +102,9 @@ for k, model in enumerate(model_label):
             ax_full[j][i].set_xscale("log")
             ax_split[j][i].set_xscale("log")
         ax_full[0][i].set_title(f"Sample #{test_ids[i]}")
-        ax_full[-1][i].set_xlabel("radius [µm]")
+        ax_full[-1][i].set_xlabel("radius [m]")
         ax_split[0][i].set_title(f"Sample #{test_ids[i]}")
-        ax_split[-1][i].set_xlabel("radius [µm]")
+        ax_split[-1][i].set_xlabel("radius [m]")
         ax_full[j][i].set_ylim(0, 0.5)
         ax_split[j][i].set_ylim(0, 0.5)
     for j, t in enumerate(tplt):
