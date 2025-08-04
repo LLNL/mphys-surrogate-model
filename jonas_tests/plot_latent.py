@@ -14,7 +14,7 @@ from training_scripts.train_ae_ar import AEAutoregressor
 from training_scripts.train_ae_sindy import AESINDy
 from training_scripts.train_ae_NNdzdt import AENNdzdt
 
-path = parent_directory + "/results/jonas-cp-tests/latent"
+path = parent_directory + "/results/jonas_cp_tests/latent"
 
 (
     x_train,
@@ -220,11 +220,11 @@ for k, model in enumerate(model_label):
     fig_split.suptitle("Split conformal latent space predictions", fontsize=14)
     plt.tight_layout()
     fig_full.savefig(
-        f"{parent_directory}/results/jonas-cp-tests/latent/compare_vanilla_{model}.pdf",
+        f"{parent_directory}/results/jonas_cp_tests/latent/compare_vanilla_{model}.pdf",
         bbox_inches="tight",
     )
     fig_split.savefig(
-        f"{parent_directory}/results/jonas-cp-tests/latent/compare_split_{model}.pdf",
+        f"{parent_directory}/results/jonas_cp_tests/latent/compare_split_{model}.pdf",
         bbox_inches="tight",
     )
     fig_full.clf()
@@ -235,10 +235,10 @@ fig_full_m.suptitle("Vanilla conformal latent space predictions", fontsize=14)
 fig_split_m.suptitle("Split conformal latent space predictions", fontsize=14)
 plt.tight_layout()
 fig_full_m.savefig(
-    f"{parent_directory}/results/jonas-cp-tests/latent/compare_vanilla_m.pdf",
+    f"{parent_directory}/results/jonas_cp_tests/latent/compare_vanilla_m.pdf",
     bbox_inches="tight",
 )
 fig_split_m.savefig(
-    f"{parent_directory}/results/jonas-cp-tests/latent/compare_split_m.pdf",
+    f"{parent_directory}/results/jonas_cp_tests/latent/compare_split_m.pdf",
     bbox_inches="tight",
 )

@@ -1,8 +1,8 @@
 import os
 import sys
-import numpy as np
 import pickle
 import matplotlib.pyplot as plt
+import numpy as np
 
 current_script_directory = os.path.dirname(os.path.abspath(__file__))
 parent_directory = os.path.abspath(os.path.join(current_script_directory, ".."))
@@ -10,7 +10,7 @@ sys.path.append(parent_directory)
 
 from src import data_utils as du
 
-path = parent_directory + "/results/jonas-cp-tests/full"
+path = parent_directory + "/results/jonas_cp_tests/decoder"
 
 (
     x_train,
@@ -26,11 +26,11 @@ path = parent_directory + "/results/jonas-cp-tests/full"
 
 # load results from vanilla conformal predictions
 with open(path + "/vanilla.pkl", "rb") as f:
-    alphas, DSD_bands_full, _ = pickle.load(f)
+    alphas, DSD_bands_full = pickle.load(f)
 
 # load results from split conformal predictions
 with open(path + "/split.pkl", "rb") as f:
-    _, idx_testing, DSD_bands_split, _ = pickle.load(f)
+    _, idx_testing, DSD_bands_split = pickle.load(f)
 
 test_ids_raw = [
     0,
@@ -116,11 +116,11 @@ for k, model in enumerate(model_label):
     fig_split.suptitle("Split conformal DSD predictions", fontsize=14)
     plt.tight_layout()
     fig_full.savefig(
-        f"{parent_directory}/results/jonas-cp-tests/full/compare_vanilla_{model}.pdf",
+        f"{parent_directory}/results/jonas_cp_tests/decoder/compare_vanilla_{model}.pdf",
         bbox_inches="tight",
     )
     fig_split.savefig(
-        f"{parent_directory}/results/jonas-cp-tests/full/compare_split_{model}.pdf",
+        f"{parent_directory}/results/jonas_cp_tests/decoder/compare_split_{model}.pdf",
         bbox_inches="tight",
     )
     fig_full.clf()

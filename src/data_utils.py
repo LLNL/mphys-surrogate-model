@@ -100,7 +100,7 @@ output depends on if a calibration set is specified or not
 
 
 def open_mass_dataset(
-    name, data_dir, sample_time=None, test_size=0.2, calib_size=0.0, random_state=1952
+    name, data_dir, sample_time=None, test_size=0.2, calib_size=None, random_state=1952
 ):
     """
     Opens a *.nc named name under data_dir, splits into train/test(/calib),
@@ -121,7 +121,7 @@ def open_mass_dataset(
 
     # 4) calibration split from ds_train if requested
     ds_calib = None
-    if calib_size > 0:
+    if calib_size is not None:
         # convert calib_size relative to the full dataset → relative to train only
         calib_size = calib_size / (1 - test_size)
         ds_train, ds_calib = split_by_index(
@@ -167,7 +167,7 @@ def open_mass_dataset(
 def open_congestus_dataset(
     sample_time=None,
     test_size=0.2,
-    calib_size=0.0,
+    calib_size=None,
     random_state=1952,
     data_dir=Path(__file__).parent.parent / "data",
 ):
@@ -184,7 +184,7 @@ def open_congestus_dataset(
 def open_rico_dataset(
     sample_time=None,
     test_size=0.2,
-    calib_size=0.0,
+    calib_size=None,
     random_state=1952,
     data_dir=Path(__file__).parent.parent / "data",
 ):

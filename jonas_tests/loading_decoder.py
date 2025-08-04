@@ -202,7 +202,7 @@ DSD_bands_split = [DSD_lower_split, DSD_testing, DSD_upper_split]
 
 print("Pickling results.")
 
-path = parent_directory + "/results/jonas-cp-tests"
+path = parent_directory + "/results/jonas_cp_tests"
 
 # full/vanilla: save alpha values and prediction bands for DSDs (in that order)
 

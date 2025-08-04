@@ -13,7 +13,7 @@ sys.path.append(parent_directory)
 
 from src import data_utils as du
 
-path = parent_directory + "/results/jonas-cp-tests/full"
+path = parent_directory + "/results/jonas_cp_tests/full"
 
 (
     x_train,
@@ -88,5 +88,5 @@ fig_split.suptitle(
     "Split conformal DSD prediction interval width,\n integrated across DSD bins",
     fontsize=14,
 )
-fig_full.savefig(parent_directory + "/results/jonas-cp-tests/full/errors_vanilla.pdf")
-fig_split.savefig(parent_directory + "/results/jonas-cp-tests/full/errors_split.pdf")
+fig_full.savefig(parent_directory + "/results/jonas_cp_tests/full/errors_vanilla.pdf")
+fig_split.savefig(parent_directory + "/results/jonas_cp_tests/full/errors_split.pdf")

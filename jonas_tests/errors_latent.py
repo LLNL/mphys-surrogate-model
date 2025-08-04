@@ -15,7 +15,7 @@ from training_scripts.train_ae_ar import AEAutoregressor
 from training_scripts.train_ae_sindy import AESINDy
 from training_scripts.train_ae_NNdzdt import AENNdzdt
 
-path = parent_directory + "/results/jonas-cp-tests/latent"
+path = parent_directory + "/results/jonas_cp_tests/latent"
 
 (
     x_train,
@@ -117,14 +117,14 @@ fig_split.suptitle(
 fig_m_full.suptitle("Vanilla conformal mass prediction interval width", fontsize=14)
 fig_m_split.suptitle("Split conformal mass prediction interval width", fontsize=14)
 fig_full.savefig(
-    parent_directory + "/results/jonas-cp-tests/latent/errors_vanilla_DSD.pdf"
+    parent_directory + "/results/jonas_cp_tests/latent/errors_vanilla_DSD.pdf"
 )
 fig_split.savefig(
-    parent_directory + "/results/jonas-cp-tests/latent/errors_split_DSD.pdf"
+    parent_directory + "/results/jonas_cp_tests/latent/errors_split_DSD.pdf"
 )
 fig_m_full.savefig(
-    parent_directory + "/results/jonas-cp-tests/latent/errors_vanilla_m.pdf"
+    parent_directory + "/results/jonas_cp_tests/latent/errors_vanilla_m.pdf"
 )
 fig_m_split.savefig(
-    parent_directory + "/results/jonas-cp-tests/latent/errors_split_m.pdf"
+    parent_directory + "/results/jonas_cp_tests/latent/errors_split_m.pdf"
 )

@@ -14,7 +14,7 @@ sys.path.append(parent_directory)
 
 from src import data_utils as du
 
-path = parent_directory + "/results/jonas-cp-tests/decoder"
+path = parent_directory + "/results/jonas_cp_tests/decoder"
 
 (
     x_train,
@@ -90,6 +90,6 @@ fig_split.suptitle(
     fontsize=14,
 )
 fig_full.savefig(
-    parent_directory + "/results/jonas-cp-tests/decoder/errors_vanilla.pdf"
+    parent_directory + "/results/jonas_cp_tests/decoder/errors_vanilla.pdf"
 )
-fig_split.savefig(parent_directory + "/results/jonas-cp-tests/decoder/errors_split.pdf")
+fig_split.savefig(parent_directory + "/results/jonas_cp_tests/decoder/errors_split.pdf")
