@@ -209,8 +209,8 @@ for k, model in enumerate(model_label):
         ax_full_m[-1][i].set_xlabel("time [s]")
         ax_split_m[0][i].set_title(f"Sample #{test_ids[i]}")
         ax_split_m[-1][i].set_xlabel("time [s]")
-    ax_full_m[k][0].set_ylabel(model + "\n mass [kg]")
-    ax_split_m[k][0].set_ylabel(model + "\n mass [kg]")
+    ax_full_m[k][0].set_ylabel(model + "\n normalized mass [-]")
+    ax_split_m[k][0].set_ylabel(model + "\n normalized mass [-]")
     for j in range(3):
         ax_full[j][0].set_ylabel(r"$z_{}$ [-]".format(j + 1))
         ax_split[j][0].set_ylabel(r"$z_{}$ [-]".format(j + 1))
