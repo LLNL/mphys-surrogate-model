@@ -36,55 +36,95 @@ from src import data_utils as du
 from src import training
 from training_scripts import train_ae_ar as train
 
-
 # -------------------------------------------------------------------
 #  Argument parsing
 # -------------------------------------------------------------------
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Run cv+ conformal predictions for AE-AR"
-    )
-    parser.add_argument("data_name", help="basename (no .nc) of your dataset")
-    parser.add_argument(
-        "-t",
-        "--test_size",
-        type=float,
-        default=0.2,
-        help="proportion for test split (0 < t < 1), default 0.2",
-    )
-    parser.add_argument(
-        "-k",
-        "--folds",
-        type=int,
-        default=5,
-        help="number of cross-validation folds. default is 5",
-    )
-    parser.add_argument(
-        "-c",
-        "--cpus",
-        type=int,
-        default=None,
-        help="override number of CPUs (default: SLURM_CPUS_PER_TASK or os.cpu_count())",
-    )
-    parser.add_argument(
-        "-e", "--epochs", type=int, default=100, help="number of epochs (default 100)"
-    )
-    parser.add_argument(
-        "-b", "--batches", type=int, default=200, help="batch size (default 200)"
-    )
-    parser.add_argument(
-        "-a",
-        "--alpha",
-        nargs="+",
-        type=float,
-        default=[0.1],
-        help="miscoverage rate(s), each in (0,1), default [0.1]",
-    )
-    return parser.parse_args()
+parser = argparse.ArgumentParser(description="Run cv+ conformal predictions for AE-AR")
+parser.add_argument("data_name", help="basename (no .nc) of your dataset")
+parser.add_argument(
+    "-t",
+    "--test_size",
+    type=float,
+    default=0.2,
+    help="proportion for test split (0 < t < 1), default 0.2",
+)
+parser.add_argument(
+    "-k",
+    "--folds",
+    type=int,
+    default=5,
+    help="number of cross-validation folds. default is 5",
+)
+parser.add_argument(
+    "-c",
+    "--cpus",
+    type=int,
+    default=None,
+    help="override number of CPUs (default: SLURM_CPUS_PER_TASK or os.cpu_count())",
+)
+parser.add_argument(
+    "-e", "--epochs", type=int, default=100, help="number of epochs (default 100)"
+)
+parser.add_argument(
+    "-b", "--batches", type=int, default=200, help="batch size (default 200)"
+)
+parser.add_argument(
+    "-a",
+    "--alpha",
+    nargs="+",
+    type=float,
+    default=[0.1],
+    help="miscoverage rate(s), each in (0,1), default [0.1]",
+)
+args = parser.parse_args()
+
+# model & training hyper‐parameters
+params = {
+    "data_src": args.data_name,
+    "random_seed": 1952,
+    "num_epochs": args.epochs,
+    "batch_size": args.batches,
+    "learning_rate": 0.002482884780966882,
+    "latent_dim": 3,
+    "n_lag": 1,
+    "w_recon": 1,
+    "w_dx": 0.22816989332325596,
+    "w_dz": 0.6719555656053005,
+    "lr_sched": True,
+    "patience": 50,
+    "tol": 1e-8,
+    "wd": 1e-3,
+    "layer_size": (63, 98, 30),
+    "CNN": False,
+    "print_frequency": 1,
+    "n_bins": None,  # set after data load
+}
+
+torch.manual_seed(params["random_seed"])
+np.random.seed(params["random_seed"])
+
+# load the dataset
+sample_time = None
+outputs = du.open_mass_dataset(
+    name=args.data_name,
+    data_dir=Path(__file__).parent.parent.parent / "data",
+    sample_time=sample_time,
+    test_size=args.test_size,
+    calib_size=None,
+    random_state=params["random_seed"],
+)
+params["n_bins"] = outputs["n_bins"]
+
+# alphas & tails
+alphas = args.alpha
+if any(a <= 0 or a >= 1 for a in alphas):
+    raise ValueError("Alpha must lie in (0,1).")
+alpha_lows = [a / 2 for a in alphas]
+alpha_ups = alpha_lows.copy()
 
 
 # -------------------------------------------------------------------
-#  Model / Optimizer / Scheduler initialization (from your original)
+#  Initialization utilities
 # -------------------------------------------------------------------
 def init_model(device, params):
     model = train.AEAutoregressor(
@@ -145,7 +185,7 @@ def one_sided_quantiles(residuals, alpha_lows, alpha_ups):
 
 
 # -------------------------------------------------------------------
-#  Run your three‐part AE‐AR architecture on a batch
+#  Run three‐part AE‐AR architecture on each batch
 #    returns [ decoder_only, latent_only, full ], mass‐trajectories
 # -------------------------------------------------------------------
 def run_all(x, m, model, params):
@@ -263,52 +303,6 @@ def _fold_worker(args):
 #  main() only implements cv+ branch
 # -------------------------------------------------------------------
 def main():
-    args = parse_args()
-
-    # model & training hyper‐parameters
-    params = {
-        "data_src": args.data_name,
-        "random_seed": 1952,
-        "num_epochs": args.epochs,
-        "batch_size": args.batches,
-        "learning_rate": 0.002482884780966882,
-        "latent_dim": 3,
-        "n_lag": 1,
-        "w_recon": 1,
-        "w_dx": 0.22816989332325596,
-        "w_dz": 0.6719555656053005,
-        "lr_sched": True,
-        "patience": 50,
-        "tol": 1e-8,
-        "wd": 1e-3,
-        "layer_size": (63, 98, 30),
-        "CNN": False,
-        "print_frequency": 1,
-        "n_bins": None,  # set after data load
-    }
-
-    torch.manual_seed(params["random_seed"])
-    np.random.seed(params["random_seed"])
-
-    # load the dataset
-    sample_time = None
-    outputs = du.open_mass_dataset(
-        name=args.data_name,
-        data_dir=Path(__file__).parent.parent.parent / "data",
-        sample_time=sample_time,
-        test_size=args.test_size,
-        calib_size=None,
-        random_state=params["random_seed"],
-    )
-    params["n_bins"] = outputs["n_bins"]
-
-    # alphas & tails
-    alphas = args.alpha
-    if any(a <= 0 or a >= 1 for a in alphas):
-        raise ValueError("Alpha must lie in (0,1).")
-    alpha_lows = [a / 2 for a in alphas]
-    alpha_ups = alpha_lows.copy()
-
     # how many workers?
     total_cpus = (
         args.cpus or int(os.environ.get("SLURM_CPUS_PER_TASK", 0)) or os.cpu_count()

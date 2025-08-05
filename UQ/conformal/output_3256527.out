@@ -1,0 +1,246 @@
+Tue Aug  5 16:45:13 PDT 2025
+activating
+starting vanilla cp
+Using cpu device
+Epoch [0/200], Train Loss: 0.2010 | Test Loss: 0.2090 | LR: [0.002482884780966882]| Epoch Time: 2.44448184967041 s
+Recon: 0.1627 | dx: 0.0382 | dz: 0.0001 | 
+Epoch [1/200], Train Loss: 0.1969 | Test Loss: 0.2192 | LR: [0.002482884780966882]| Epoch Time: 1.8364737033843994 s
+Recon: 0.1594 | dx: 0.0373 | dz: 0.0001 | 
+Epoch [2/200], Train Loss: 0.1950 | Test Loss: 0.2265 | LR: [0.002482884780966882]| Epoch Time: 1.4283316135406494 s
+Recon: 0.1578 | dx: 0.0371 | dz: 0.0001 | 
+Epoch [3/200], Train Loss: 0.1931 | Test Loss: 0.2326 | LR: [0.002482884780966882]| Epoch Time: 1.1778931617736816 s
+Recon: 0.1563 | dx: 0.0366 | dz: 0.0001 | 
+Epoch [4/200], Train Loss: 0.1917 | Test Loss: 0.2413 | LR: [0.002482884780966882]| Epoch Time: 1.2090682983398438 s
+Recon: 0.1552 | dx: 0.0364 | dz: 0.0001 | 
+Epoch [5/200], Train Loss: 0.1905 | Test Loss: 0.2434 | LR: [0.002482884780966882]| Epoch Time: 1.2394185066223145 s
+Recon: 0.1542 | dx: 0.0362 | dz: 0.0001 | 
+Epoch [6/200], Train Loss: 0.1894 | Test Loss: 0.2522 | LR: [0.002482884780966882]| Epoch Time: 1.2648627758026123 s
+Recon: 0.1533 | dx: 0.0360 | dz: 0.0001 | 
+Epoch [7/200], Train Loss: 0.1881 | Test Loss: 0.2509 | LR: [0.002482884780966882]| Epoch Time: 1.247650384902954 s
+Recon: 0.1522 | dx: 0.0358 | dz: 0.0001 | 
+Epoch [8/200], Train Loss: 0.1869 | Test Loss: 0.2559 | LR: [0.002482884780966882]| Epoch Time: 1.29384446144104 s
+Recon: 0.1513 | dx: 0.0356 | dz: 0.0001 | 
+Epoch [9/200], Train Loss: 0.1858 | Test Loss: 0.2618 | LR: [0.002482884780966882]| Epoch Time: 1.3165943622589111 s
+Recon: 0.1503 | dx: 0.0353 | dz: 0.0001 | 
+Epoch [10/200], Train Loss: 0.1850 | Test Loss: 0.2616 | LR: [0.002482884780966882]| Epoch Time: 1.2982943058013916 s
+Recon: 0.1497 | dx: 0.0352 | dz: 0.0001 | 
+Epoch [11/200], Train Loss: 0.1838 | Test Loss: 0.2647 | LR: [0.0002482884780966882]| Epoch Time: 1.4076595306396484 s
+Recon: 0.1488 | dx: 0.0349 | dz: 0.0001 | 
+Epoch [12/200], Train Loss: 0.1806 | Test Loss: 0.2644 | LR: [0.0002482884780966882]| Epoch Time: 1.2885913848876953 s
+Recon: 0.1464 | dx: 0.0341 | dz: 0.0001 | 
+Epoch [13/200], Train Loss: 0.1802 | Test Loss: 0.2642 | LR: [0.0002482884780966882]| Epoch Time: 1.395660638809204 s
+Recon: 0.1461 | dx: 0.0340 | dz: 0.0001 | 
+Epoch [14/200], Train Loss: 0.1802 | Test Loss: 0.2648 | LR: [0.0002482884780966882]| Epoch Time: 1.3969142436981201 s
+Recon: 0.1461 | dx: 0.0340 | dz: 0.0001 | 
+Epoch [15/200], Train Loss: 0.1799 | Test Loss: 0.2655 | LR: [0.0002482884780966882]| Epoch Time: 1.38916015625 s
+Recon: 0.1459 | dx: 0.0339 | dz: 0.0001 | 
+Epoch [16/200], Train Loss: 0.1798 | Test Loss: 0.2648 | LR: [0.0002482884780966882]| Epoch Time: 1.3914010524749756 s
+Recon: 0.1458 | dx: 0.0339 | dz: 0.0001 | 
+Epoch [17/200], Train Loss: 0.1798 | Test Loss: 0.2669 | LR: [0.0002482884780966882]| Epoch Time: 1.3746414184570312 s
+Recon: 0.1458 | dx: 0.0339 | dz: 0.0001 | 
+Epoch [18/200], Train Loss: 0.1796 | Test Loss: 0.2671 | LR: [0.0002482884780966882]| Epoch Time: 1.380385398864746 s
+Recon: 0.1456 | dx: 0.0339 | dz: 0.0001 | 
+Epoch [19/200], Train Loss: 0.1795 | Test Loss: 0.2674 | LR: [0.0002482884780966882]| Epoch Time: 1.489055871963501 s
+Recon: 0.1456 | dx: 0.0339 | dz: 0.0001 | 
+Epoch [20/200], Train Loss: 0.1795 | Test Loss: 0.2675 | LR: [0.0002482884780966882]| Epoch Time: 1.3704113960266113 s
+Recon: 0.1455 | dx: 0.0339 | dz: 0.0001 | 
+Epoch [21/200], Train Loss: 0.1794 | Test Loss: 0.2682 | LR: [0.0002482884780966882]| Epoch Time: 1.366260051727295 s
+Recon: 0.1455 | dx: 0.0338 | dz: 0.0001 | 
+Epoch [22/200], Train Loss: 0.1793 | Test Loss: 0.2685 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3678042888641357 s
+Recon: 0.1454 | dx: 0.0338 | dz: 0.0001 | 
+Epoch [23/200], Train Loss: 0.1789 | Test Loss: 0.2687 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3504893779754639 s
+Recon: 0.1451 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [24/200], Train Loss: 0.1789 | Test Loss: 0.2687 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3369367122650146 s
+Recon: 0.1451 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [25/200], Train Loss: 0.1787 | Test Loss: 0.2687 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3409061431884766 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [26/200], Train Loss: 0.1788 | Test Loss: 0.2688 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3316869735717773 s
+Recon: 0.1450 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [27/200], Train Loss: 0.1788 | Test Loss: 0.2688 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3284733295440674 s
+Recon: 0.1450 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [28/200], Train Loss: 0.1788 | Test Loss: 0.2689 | LR: [2.4828847809668823e-05]| Epoch Time: 1.4378283023834229 s
+Recon: 0.1450 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [29/200], Train Loss: 0.1787 | Test Loss: 0.2689 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3363192081451416 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [30/200], Train Loss: 0.1788 | Test Loss: 0.2690 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3295481204986572 s
+Recon: 0.1450 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [31/200], Train Loss: 0.1787 | Test Loss: 0.2692 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3319785594940186 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [32/200], Train Loss: 0.1786 | Test Loss: 0.2691 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3317890167236328 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [33/200], Train Loss: 0.1787 | Test Loss: 0.2692 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3336622714996338 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [34/200], Train Loss: 0.1787 | Test Loss: 0.2692 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3368449211120605 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [35/200], Train Loss: 0.1787 | Test Loss: 0.2692 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3418395519256592 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [36/200], Train Loss: 0.1786 | Test Loss: 0.2692 | LR: [2.4828847809668824e-06]| Epoch Time: 1.4396891593933105 s
+Recon: 0.1448 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [37/200], Train Loss: 0.1787 | Test Loss: 0.2692 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3342804908752441 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [38/200], Train Loss: 0.1786 | Test Loss: 0.2692 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3358886241912842 s
+Recon: 0.1448 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [39/200], Train Loss: 0.1786 | Test Loss: 0.2692 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3339712619781494 s
+Recon: 0.1448 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [40/200], Train Loss: 0.1786 | Test Loss: 0.2692 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3295342922210693 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [41/200], Train Loss: 0.1787 | Test Loss: 0.2692 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3366200923919678 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [42/200], Train Loss: 0.1787 | Test Loss: 0.2692 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3331317901611328 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [43/200], Train Loss: 0.1786 | Test Loss: 0.2692 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3332862854003906 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [44/200], Train Loss: 0.1787 | Test Loss: 0.2692 | LR: [2.482884780966883e-07]| Epoch Time: 1.3388352394104004 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [45/200], Train Loss: 0.1786 | Test Loss: 0.2692 | LR: [2.482884780966883e-07]| Epoch Time: 1.3350322246551514 s
+Recon: 0.1448 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [46/200], Train Loss: 0.1787 | Test Loss: 0.2692 | LR: [2.482884780966883e-07]| Epoch Time: 1.4345030784606934 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [47/200], Train Loss: 0.1787 | Test Loss: 0.2692 | LR: [2.482884780966883e-07]| Epoch Time: 1.334409236907959 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [48/200], Train Loss: 0.1786 | Test Loss: 0.2692 | LR: [2.482884780966883e-07]| Epoch Time: 1.3412208557128906 s
+Recon: 0.1448 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [49/200], Train Loss: 0.1786 | Test Loss: 0.2692 | LR: [2.482884780966883e-07]| Epoch Time: 1.3392248153686523 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Epoch [50/200], Train Loss: 0.1787 | Test Loss: 0.2692 | LR: [2.482884780966883e-07]| Epoch Time: 1.3372697830200195 s
+Recon: 0.1449 | dx: 0.0337 | dz: 0.0001 | 
+Training stopped early.
+Predicting the training data.
+Predicting the testing data.
+Running vanilla conformal predictions.
+starting split cp, train-validation-test split: 60-20-20
+Using cpu device
+Epoch [0/200], Train Loss: 0.1998 | Test Loss: 0.2110 | LR: [0.002482884780966882]| Epoch Time: 2.323369264602661 s
+Recon: 0.1617 | dx: 0.0380 | dz: 0.0001 | 
+Epoch [1/200], Train Loss: 0.1938 | Test Loss: 0.2209 | LR: [0.002482884780966882]| Epoch Time: 1.5483660697937012 s
+Recon: 0.1569 | dx: 0.0368 | dz: 0.0001 | 
+Epoch [2/200], Train Loss: 0.1909 | Test Loss: 0.2325 | LR: [0.002482884780966882]| Epoch Time: 1.2867538928985596 s
+Recon: 0.1545 | dx: 0.0362 | dz: 0.0001 | 
+Epoch [3/200], Train Loss: 0.1888 | Test Loss: 0.2503 | LR: [0.002482884780966882]| Epoch Time: 1.2814102172851562 s
+Recon: 0.1528 | dx: 0.0359 | dz: 0.0001 | 
+Epoch [4/200], Train Loss: 0.1870 | Test Loss: 0.2601 | LR: [0.002482884780966882]| Epoch Time: 1.2842798233032227 s
+Recon: 0.1513 | dx: 0.0356 | dz: 0.0001 | 
+Epoch [5/200], Train Loss: 0.1850 | Test Loss: 0.2732 | LR: [0.002482884780966882]| Epoch Time: 1.2888998985290527 s
+Recon: 0.1497 | dx: 0.0351 | dz: 0.0001 | 
+Epoch [6/200], Train Loss: 0.1838 | Test Loss: 0.2763 | LR: [0.002482884780966882]| Epoch Time: 1.2926201820373535 s
+Recon: 0.1487 | dx: 0.0350 | dz: 0.0001 | 
+Epoch [7/200], Train Loss: 0.1823 | Test Loss: 0.2833 | LR: [0.002482884780966882]| Epoch Time: 1.2946803569793701 s
+Recon: 0.1475 | dx: 0.0347 | dz: 0.0001 | 
+Epoch [8/200], Train Loss: 0.1811 | Test Loss: 0.2887 | LR: [0.002482884780966882]| Epoch Time: 1.293961763381958 s
+Recon: 0.1465 | dx: 0.0345 | dz: 0.0001 | 
+Epoch [9/200], Train Loss: 0.1801 | Test Loss: 0.2897 | LR: [0.002482884780966882]| Epoch Time: 1.4007024765014648 s
+Recon: 0.1457 | dx: 0.0343 | dz: 0.0001 | 
+Epoch [10/200], Train Loss: 0.1788 | Test Loss: 0.2893 | LR: [0.002482884780966882]| Epoch Time: 1.3069050312042236 s
+Recon: 0.1447 | dx: 0.0340 | dz: 0.0001 | 
+Epoch [11/200], Train Loss: 0.1778 | Test Loss: 0.2979 | LR: [0.0002482884780966882]| Epoch Time: 1.303516149520874 s
+Recon: 0.1439 | dx: 0.0338 | dz: 0.0001 | 
+Epoch [12/200], Train Loss: 0.1749 | Test Loss: 0.2961 | LR: [0.0002482884780966882]| Epoch Time: 1.3044219017028809 s
+Recon: 0.1418 | dx: 0.0330 | dz: 0.0001 | 
+Epoch [13/200], Train Loss: 0.1744 | Test Loss: 0.2951 | LR: [0.0002482884780966882]| Epoch Time: 1.307826042175293 s
+Recon: 0.1414 | dx: 0.0329 | dz: 0.0001 | 
+Epoch [14/200], Train Loss: 0.1743 | Test Loss: 0.2967 | LR: [0.0002482884780966882]| Epoch Time: 1.3031527996063232 s
+Recon: 0.1413 | dx: 0.0329 | dz: 0.0001 | 
+Epoch [15/200], Train Loss: 0.1742 | Test Loss: 0.2980 | LR: [0.0002482884780966882]| Epoch Time: 1.3038136959075928 s
+Recon: 0.1412 | dx: 0.0329 | dz: 0.0001 | 
+Epoch [16/200], Train Loss: 0.1740 | Test Loss: 0.2978 | LR: [0.0002482884780966882]| Epoch Time: 1.3048677444458008 s
+Recon: 0.1411 | dx: 0.0328 | dz: 0.0001 | 
+Epoch [17/200], Train Loss: 0.1739 | Test Loss: 0.2989 | LR: [0.0002482884780966882]| Epoch Time: 1.3054218292236328 s
+Recon: 0.1410 | dx: 0.0328 | dz: 0.0001 | 
+Epoch [18/200], Train Loss: 0.1738 | Test Loss: 0.2988 | LR: [0.0002482884780966882]| Epoch Time: 1.305591106414795 s
+Recon: 0.1409 | dx: 0.0328 | dz: 0.0001 | 
+Epoch [19/200], Train Loss: 0.1737 | Test Loss: 0.3004 | LR: [0.0002482884780966882]| Epoch Time: 1.3051035404205322 s
+Recon: 0.1409 | dx: 0.0328 | dz: 0.0001 | 
+Epoch [20/200], Train Loss: 0.1737 | Test Loss: 0.2994 | LR: [0.0002482884780966882]| Epoch Time: 1.4126675128936768 s
+Recon: 0.1408 | dx: 0.0328 | dz: 0.0001 | 
+Epoch [21/200], Train Loss: 0.1735 | Test Loss: 0.3016 | LR: [0.0002482884780966882]| Epoch Time: 1.3108158111572266 s
+Recon: 0.1407 | dx: 0.0327 | dz: 0.0001 | 
+Epoch [22/200], Train Loss: 0.1734 | Test Loss: 0.3023 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3050365447998047 s
+Recon: 0.1406 | dx: 0.0327 | dz: 0.0001 | 
+Epoch [23/200], Train Loss: 0.1731 | Test Loss: 0.3017 | LR: [2.4828847809668823e-05]| Epoch Time: 1.302600383758545 s
+Recon: 0.1404 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [24/200], Train Loss: 0.1730 | Test Loss: 0.3022 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3063929080963135 s
+Recon: 0.1403 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [25/200], Train Loss: 0.1730 | Test Loss: 0.3019 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3040540218353271 s
+Recon: 0.1403 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [26/200], Train Loss: 0.1730 | Test Loss: 0.3020 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3056397438049316 s
+Recon: 0.1403 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [27/200], Train Loss: 0.1730 | Test Loss: 0.3024 | LR: [2.4828847809668823e-05]| Epoch Time: 1.4102272987365723 s
+Recon: 0.1403 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [28/200], Train Loss: 0.1730 | Test Loss: 0.3023 | LR: [2.4828847809668823e-05]| Epoch Time: 1.305757999420166 s
+Recon: 0.1403 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [29/200], Train Loss: 0.1730 | Test Loss: 0.3021 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3062903881072998 s
+Recon: 0.1403 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [30/200], Train Loss: 0.1730 | Test Loss: 0.3026 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3045434951782227 s
+Recon: 0.1403 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [31/200], Train Loss: 0.1730 | Test Loss: 0.3023 | LR: [2.4828847809668823e-05]| Epoch Time: 1.308542013168335 s
+Recon: 0.1403 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [32/200], Train Loss: 0.1729 | Test Loss: 0.3024 | LR: [2.4828847809668823e-05]| Epoch Time: 1.3041050434112549 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [33/200], Train Loss: 0.1729 | Test Loss: 0.3025 | LR: [2.4828847809668824e-06]| Epoch Time: 1.305694580078125 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [34/200], Train Loss: 0.1729 | Test Loss: 0.3026 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3063952922821045 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [35/200], Train Loss: 0.1729 | Test Loss: 0.3027 | LR: [2.4828847809668824e-06]| Epoch Time: 1.303729772567749 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [36/200], Train Loss: 0.1729 | Test Loss: 0.3028 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3042230606079102 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [37/200], Train Loss: 0.1729 | Test Loss: 0.3027 | LR: [2.4828847809668824e-06]| Epoch Time: 1.303903579711914 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [38/200], Train Loss: 0.1729 | Test Loss: 0.3027 | LR: [2.4828847809668824e-06]| Epoch Time: 1.4120399951934814 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [39/200], Train Loss: 0.1729 | Test Loss: 0.3027 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3088562488555908 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [40/200], Train Loss: 0.1729 | Test Loss: 0.3028 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3042516708374023 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [41/200], Train Loss: 0.1729 | Test Loss: 0.3028 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3048391342163086 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [42/200], Train Loss: 0.1729 | Test Loss: 0.3028 | LR: [2.4828847809668824e-06]| Epoch Time: 1.3074157238006592 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [43/200], Train Loss: 0.1729 | Test Loss: 0.3028 | LR: [2.4828847809668824e-06]| Epoch Time: 1.305802583694458 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [44/200], Train Loss: 0.1729 | Test Loss: 0.3028 | LR: [2.482884780966883e-07]| Epoch Time: 1.305366039276123 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [45/200], Train Loss: 0.1729 | Test Loss: 0.3028 | LR: [2.482884780966883e-07]| Epoch Time: 1.3060498237609863 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [46/200], Train Loss: 0.1729 | Test Loss: 0.3028 | LR: [2.482884780966883e-07]| Epoch Time: 1.409104347229004 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [47/200], Train Loss: 0.1729 | Test Loss: 0.3028 | LR: [2.482884780966883e-07]| Epoch Time: 1.3055572509765625 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [48/200], Train Loss: 0.1729 | Test Loss: 0.3028 | LR: [2.482884780966883e-07]| Epoch Time: 1.3038337230682373 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [49/200], Train Loss: 0.1729 | Test Loss: 0.3028 | LR: [2.482884780966883e-07]| Epoch Time: 1.303579568862915 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Epoch [50/200], Train Loss: 0.1729 | Test Loss: 0.3028 | LR: [2.482884780966883e-07]| Epoch Time: 1.3078300952911377 s
+Recon: 0.1402 | dx: 0.0326 | dz: 0.0001 | 
+Training stopped early.
+Predicting the calibration data.
+Predicting the testing data.
+Running split conformal predictions.
+starting cv+ with 25 folds
+Using device: cpu, workers=110, folds=25
+[Fold 6] done.
+[Fold 8] done.
+[Fold 2] done.
+[Fold 4] done.
+[Fold 3] done.
+[Fold 9] done.
+[Fold 10] done.
+[Fold 16] done.
+[Fold 14] done.
+[Fold 1] done.
+[Fold 18] done.
+[Fold 11] done.
+[Fold 20] done.
+[Fold 7] done.
+[Fold 19] done.
+[Fold 15] done.
+[Fold 5] done.
+[Fold 12] done.
+[Fold 13] done.
+[Fold 23] done.
+[Fold 17] done.
+[Fold 24] done.
+[Fold 21] done.
+[Fold 25] done.
+[Fold 22] done.
+Saved conformal results to UQ/conformal/results/ae_ar/congestus_coal_200m_9600_cv+25.pkl.

@@ -18,12 +18,11 @@ import multiprocessing as mp
 
 mp.set_start_method("spawn", force=True)
 
-# then your own imports
 from pathlib import Path
 from contextlib import redirect_stdout
 from sklearn.model_selection import KFold
 
-# your project imports (data_utils, training, thresholding, etc.)
+# project imports (data_utils, training, thresholding, etc.)
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 from src import data_utils as du
@@ -70,7 +69,7 @@ params = {
     "print_frequency": 1,
 }
 
-# -- load your data once --
+# load data once
 outputs = du.open_mass_dataset(
     name=args.data_name,
     data_dir=Path(__file__).parent.parent.parent / "data",
@@ -79,6 +78,21 @@ outputs = du.open_mass_dataset(
     calib_size=None,
     random_state=1952,
 )
+
+# Compute & set weights based on Champion et al recs
+lambda1, lambda2, _ = du.champion_calculate_weights(
+    du.NormedBinDatasetDzDt(
+        outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
+    ),
+    lambda1_metaweight=params["lambda1_metaweight"],
+)
+params["loss_weight_recon"] = 1.0
+params["loss_weight_sindy_x"] = lambda1
+params["loss_weight_sindy_z"] = lambda2
+
+alphas = args.alpha
+alpha_lows = [a / 2 for a in alphas]
+alpha_ups = alpha_lows.copy()
 
 
 def init_model(device, params, outputs):
@@ -106,11 +120,6 @@ def init_model(device, params, outputs):
         weights_only=True,
     )
     model.load_state_dict(ae_sindy_checkpoint)
-    # total_params = sum(p.numel() for p in model.parameters())
-    # total_coeffs = sum(p.numel() for p in model.dzdt.parameters())
-    # print(
-    #     f"Total number of parameters: {total_params}, {total_coeffs} are SINDy coefficients"
-    # )
     return model.to(device)
 
 
@@ -134,7 +143,6 @@ def init_scheduler(opt):
 
 
 def one_sided_quantiles(residuals, alpha_lows, alpha_ups):
-    # (your existing implementation)
     lows = np.array(alpha_lows)
     ups = 1.0 - np.array(alpha_ups)
     all_q = np.concatenate([lows, ups])
@@ -202,7 +210,7 @@ def run_ae_X(x, m, model):
     return DSD_all, M_all
 
 
-def run_all(x, m, model, outputs, params):
+def run_all(x, m, model, params):
     DSD_all = [
         np.empty(x.shape, dtype=float),  # decoder only
         np.empty(
@@ -278,12 +286,11 @@ def _fold_worker(args):
         outputs["x_train"][val_idx],
         outputs["m_train"][val_idx],
         best_model,
-        outputs,
         params,
     )
     # compute predictions on test‐set
     DSD_test_all, M_test_all = run_all(
-        outputs["x_test"], outputs["m_test"], best_model, outputs, params
+        outputs["x_test"], outputs["m_test"], best_model, params
     )
 
     # assemble fold‐wise arrays
@@ -310,22 +317,6 @@ def _fold_worker(args):
 
 
 def main():
-    # Compute & set weights based on Champion et al recs
-    lambda1, lambda2, _ = du.champion_calculate_weights(
-        du.NormedBinDatasetDzDt(
-            outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
-        ),
-        lambda1_metaweight=params["lambda1_metaweight"],
-    )
-    print(f"lambda: 1.0, {lambda1}, {lambda2}")
-    params["loss_weight_recon"] = 1.0
-    params["loss_weight_sindy_x"] = lambda1
-    params["loss_weight_sindy_z"] = lambda2
-
-    alphas = args.alpha
-    alpha_lows = [a / 2 for a in alphas]
-    alpha_ups = alpha_lows.copy()
-
     # decide on CPU‐count
     total_cpus = (
         args.cpus or int(os.environ.get("SLURM_CPUS_PER_TASK", 0)) or os.cpu_count()
@@ -399,14 +390,10 @@ def main():
     lower_m = rep_m[np.newaxis, ...] - qh[:, np.newaxis, ...]
     upper_m = rep_m[np.newaxis, ...] - ql[:, np.newaxis, ...]
 
-    # finally: pickle your lower/upper/intermediates
-    fname = os.path.join(
-        "UQ",
-        "conformal",
-        "results",
-        "ae_SINDy",
-        f"{args.data_name}_cv+{args.folds}.pkl",
-    )
+    # finally: pickle lower/upper/representative bands
+    outdir = Path("UQ/conformal/results/ae_SINDy")
+    outdir.mkdir(parents=True, exist_ok=True)
+    fname = outdir / f"{args.data_name}_cv+{args.folds}.pkl"
     with open(fname, "wb") as f:
         pickle.dump(
             [
