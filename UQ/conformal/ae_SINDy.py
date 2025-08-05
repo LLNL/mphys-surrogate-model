@@ -9,12 +9,13 @@ import torch
 import time
 from pathlib import Path
 from contextlib import redirect_stdout
+import pickle
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 from src import data_utils as du
-from src import training
+from src import training, thresholding
 from training_scripts import train_ae_sindy as train
 
 # load arguments
@@ -30,10 +31,15 @@ parser.add_argument(
 parser.add_argument(
     "-m",
     "--method",
-    default="cv+5",
-    help="conformal predictions method to use (jackknife, split[p], full, cv+[k]), default is cv+5. \
-                        The p in split indicates what *percent* you want to dedicate out of the full data for calibration, while\
-                            the k in cv+[k] indicates how many models to train for cross-validation folds.",
+    default="split30",
+    help="conformal predictions method to use (split[p], full), default is split30. \
+                        The p in split indicates what *percent* you want to dedicate out of the full data for calibration.",
+)
+parser.add_argument(
+    "-e", "--epochs", type=int, default=100, help="number of epochs (default is 100)"
+)
+parser.add_argument(
+    "-b", "--batches", type=int, default=200, help="batch size (default is 200)"
 )
 parser.add_argument(
     "-a",
@@ -48,8 +54,8 @@ args = parser.parse_args()
 params = {
     "data_src": args.data_name,
     "random_seed": 1952,
-    "num_epochs": 500,
-    "batch_size": 100,
+    "num_epochs": args.epochs,
+    "batch_size": args.batches,
     "learning_rate": 0.004204813405972317,
     "latent_dim": 3,
     "poly_order": 2,
@@ -131,53 +137,66 @@ outputs = du.open_mass_dataset(
     random_state=params["random_seed"],
 )
 
-# Initialize the model
-model = train.AESINDy(
-    n_channels=1,
-    n_bins=outputs["n_bins"],
-    n_latent=params["latent_dim"],
-    poly_order=params["poly_order"],
-    CNN=params["CNN"],
-    sequential_thresholding=(
-        True if params["sequential_thresholding_interval"] is not None else False
-    ),
-)
-optimal_path = os.path.join(
-    "results",
-    "Optuna",
-    "ERF Dataset",
-    "AE-SINDy_LimParams",
-    "erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc",
-)
-ae_sindy_checkpoint = torch.load(
-    os.path.join(
-        optimal_path,
-        "erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc.pth",
-    ),
-    weights_only=True,
-)
-model.load_state_dict(ae_sindy_checkpoint)
 
-# Optimizer and scheduling
-optimizer = torch.optim.AdamW(
-    model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
-)
-if params["sequential_threshold_method"] is not None:
-    params["thresholder"] = thresholding.AdaptiveSequentialThresholdingSINDy(
-        model.dzdt,
-        thresholding.AdaptiveThresholdAnalyzer(
-            method=params["sequential_threshold_method"],
-            min_epochs_between=params["sequential_thresholding_interval"],
+# initialize model using optimal weights from results/Optuna
+def init_model(device=device):
+    # Initialize the model
+    model = train.AESINDy(
+        n_channels=1,
+        n_bins=outputs["n_bins"],
+        n_latent=params["latent_dim"],
+        poly_order=params["poly_order"],
+        CNN=params["CNN"],
+        sequential_thresholding=(
+            True if params["sequential_thresholding_interval"] is not None else False
         ),
     )
-sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-early_stopping = training.EarlyStopping(patience=params["patience"])
+    optimal_path = os.path.join(
+        "results",
+        "Optuna",
+        "ERF Dataset",
+        "AE-SINDy_LimParams",
+        "erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc",
+    )
+    ae_sindy_checkpoint = torch.load(
+        os.path.join(
+            optimal_path,
+            "erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc.pth",
+        ),
+        weights_only=True,
+    )
+    model.load_state_dict(ae_sindy_checkpoint)
+    # total_params = sum(p.numel() for p in model.parameters())
+    # total_coeffs = sum(p.numel() for p in model.dzdt.parameters())
+    # print(
+    #     f"Total number of parameters: {total_params}, {total_coeffs} are SINDy coefficients"
+    # )
+    return model.to(device)
 
-total_params = sum(p.numel() for p in model.parameters())
-total_coeffs = sum(p.numel() for p in model.dzdt.parameters())
-print(
-    f"Total number of parameters: {total_params}, {total_coeffs} are SINDy coefficients"
-)
+
+# initialize optimizer
+def init_optimizer(model):
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
+    )
+    if params["sequential_threshold_method"] is not None:
+        params["thresholder"] = thresholding.AdaptiveSequentialThresholdingSINDy(
+            model.dzdt,
+            thresholding.AdaptiveThresholdAnalyzer(
+                method=params["sequential_threshold_method"],
+                min_epochs_between=params["sequential_thresholding_interval"],
+            ),
+        )
+    return optimizer
+
+
+# initialize scheduling
+def init_scheduler(optimizer):
+    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
+    return sched
+
+
+early_stopping = training.EarlyStopping(patience=params["patience"])
 
 # Compute & set weights based on Champion et al recs
 lambda1, lambda2, lambda3 = du.champion_calculate_weights(
@@ -347,31 +366,34 @@ if method == "full":
         dtype=float,
     )
     M_upper_full = M_lower_full.copy()
+
+    model = init_model(device)
+    optimizer = init_optimizer(model)
+    sched = init_scheduler(optimizer)
+
     # suppress output of train_and_eval
-    with open(os.devnull, "w") as fnull:
-        with redirect_stdout(fnull):
-            (
-                best_model,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-            ) = train.train_and_eval(
-                params["num_epochs"],
-                model,
-                train_loader,
-                test_loader,
-                optimizer,
-                sched,
-                params,
-                early_stopping=early_stopping,
-                print_flag=True,
-                device=device,
-            )
+    (
+        best_model,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+    ) = train.train_and_eval(
+        params["num_epochs"],
+        model,
+        train_loader,
+        test_loader,
+        optimizer,
+        sched,
+        params,
+        early_stopping=early_stopping,
+        print_flag=True,
+        device=device,
+    )
     print("Predicting the training data.")
     DSD_train_all, M_train_all = run_all(
         x=outputs["x_train"], m=outputs["m_train"], model=best_model
@@ -405,6 +427,12 @@ if method == "full":
             M_q_low, M_q_high = one_sided_quantiles(M_res_signed, alpha_lows, alpha_ups)
             M_lower_full = M_test_all[np.newaxis, ...] - M_q_high[:, np.newaxis, ...]
             M_upper_full = M_test_all[np.newaxis, ...] - M_q_low[:, np.newaxis, ...]
+    lower = DSD_lower_full
+    upper = DSD_upper_full
+    rep_DSD = DSD_test_all
+    lower_m = M_lower_full
+    upper_m = M_upper_full
+    rep_m = M_test_all
 
 if method == "split":
     # 0) configure data and dataloaders
@@ -449,31 +477,33 @@ if method == "split":
         dtype=float,
     )
     M_upper_full = M_lower_full.copy()
-    # suppress output of train_and_eval
-    with open(os.devnull, "w") as fnull:
-        with redirect_stdout(fnull):
-            (
-                best_model,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-                _,
-            ) = train.train_and_eval(
-                params["num_epochs"],
-                model,
-                train_loader,
-                test_loader,
-                optimizer,
-                sched,
-                params,
-                early_stopping=early_stopping,
-                print_flag=True,
-                device=device,
-            )
+
+    model = init_model(device)
+    optimizer = init_optimizer(model)
+    sched = init_scheduler(optimizer)
+
+    (
+        best_model,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+    ) = train.train_and_eval(
+        params["num_epochs"],
+        model,
+        train_loader,
+        test_loader,
+        optimizer,
+        sched,
+        params,
+        early_stopping=early_stopping,
+        print_flag=True,
+        device=device,
+    )
     print("Predicting the calibration data.")
     DSD_calib_all, M_calib_all = run_all(
         x=outputs["x_calib"], m=outputs["m_calib"], model=best_model
@@ -482,7 +512,7 @@ if method == "split":
     DSD_test_all, M_test_all = run_all(
         x=outputs["x_test"], m=outputs["m_test"], model=best_model
     )
-    print("Running vanilla conformal predictions.")
+    print("Running split conformal predictions.")
     for i in range(3):  # loop through different subsets of the architecture
         if (
             i == 1
@@ -507,121 +537,34 @@ if method == "split":
             M_q_low, M_q_high = one_sided_quantiles(M_res_signed, alpha_lows, alpha_ups)
             M_lower_full = M_test_all[np.newaxis, ...] - M_q_high[:, np.newaxis, ...]
             M_upper_full = M_test_all[np.newaxis, ...] - M_q_low[:, np.newaxis, ...]
+    lower = DSD_lower_full
+    upper = DSD_upper_full
+    rep_DSD = DSD_test_all
+    lower_m = M_lower_full
+    upper_m = M_upper_full
+    rep_m = M_test_all
 
-if method == "cv+":
-    from sklearn.model_selection import KFold
+"""
+Save:
+-alpha values,
+-indices for test data, 
+-(lower and upper interval DSD values, and representative ("center") DSDs), and
+-(lower and upper interval mass values, and representative ("center") mass),
+in that order.
+"""
 
-    kf = KFold(n_splits=k, shuffle=True, random_state=1952)
-
-    # collect residuals for each fold and each architecture subset of shape (n_test, T, D)
-    DSD_resid = [[], [], []]
-    M_resid = []
-    # collect per-fold predictions and each architecture subset of shape (n_test, T, D)
-    DSD_pred = [[], [], []]
-    M_pred = []
-
-    # 0) configure test data and test dataloader
-    test_data = du.NormedBinDatasetDzDt(
-        outputs["x_test"], outputs["dsd_time"], outputs["m_test"]
+with open(
+    os.path.join(
+        "UQ", "conformal", "results", "ae_SINDy", args.data_name + "_" + method + ".pkl"
+    ),
+    "wb",
+) as f:
+    pickle.dump(
+        [
+            alphas,
+            outputs["idx_test"],
+            (lower, upper, rep_DSD),
+            (lower_m, upper_m, rep_m),
+        ],
+        f,
     )
-    test_loader = torch.utils.data.DataLoader(
-        test_data, batch_size=len(test_data), shuffle=True
-    )
-    print(f"Running {k}-fold cross validation.")
-    for j, idx in enumerate(kf.split(outputs["x_train"])):
-        train_idx = idx[0]
-        val_idx = idx[1]
-        # 0) configure data and dataloaders
-        train_data = du.NormedBinDatasetDzDt(
-            outputs["x_train"][train_idx],
-            outputs["dsd_time"],
-            outputs["m_train"][train_idx],
-        )
-        train_loader = torch.utils.data.DataLoader(
-            train_data, batch_size=params["batch_size"], shuffle=True
-        )
-        calib_data = du.NormedBinDatasetDzDt(
-            outputs["x_train"][val_idx],
-            outputs["dsd_time"],
-            outputs["m_train"][val_idx],
-        )
-        calib_loader = torch.utils.data.DataLoader(
-            calib_data, batch_size=len(val_idx), shuffle=True
-        )
-
-        # 1) fit on fold‐k train
-        # suppress output of train_and_eval
-        with open(os.devnull, "w") as fnull:
-            with redirect_stdout(fnull):
-                (
-                    best_model,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                    _,
-                ) = train.train_and_eval(
-                    params["num_epochs"],
-                    model,
-                    train_loader,
-                    test_loader,
-                    optimizer,
-                    sched,
-                    params,
-                    early_stopping=early_stopping,
-                    print_flag=True,
-                    device=device,
-                )
-        # 2) predict on validation (calibration) fold
-        DSD_calib_all, M_calib_all = run_all(
-            x=outputs["x_train"][val_idx],
-            m=outputs["m_train"][val_idx],
-            model=best_model,
-        )
-        DSD_test_all, M_test_all = run_all(
-            x=outputs["x_test"], m=outputs["m_test"], model=best_model
-        )
-        for i in range(3):  # loop through different subsets of the architecture
-            # 3) signed residuals on calibration fold
-            if (
-                i == 1
-            ):  # in latent case, you should do it relative to latent space. Otherwise, not
-                DSD_resid[i].append(
-                    DSD_calib_all[i]
-                    - best_model.encoder(torch.Tensor(outputs["x_train"][val_idx]))
-                    .detach()
-                    .numpy()
-                )
-            else:
-                DSD_resid[i].append(DSD_calib_all[i] - outputs["x_train"][val_idx])
-            # 4) predict on the TEST set
-            DSD_pred[i].append(DSD_test_all[i])
-            if i == 2:  # also check mass in full architecture case
-                M_resid.append(M_calib_all - outputs["m_train"][val_idx])
-                M_pred.append(M_test_all)
-        print(f"Finished with fold {j+1}.")
-    rep_DSD = [[], [], []]
-    for i in range(3):
-        # 5) pool residuals and compute global quantiles
-        resid_pool = np.concatenate(DSD_resid[i], axis=0)
-        ql, qh = one_sided_quantiles(resid_pool, alpha_lows, alpha_ups)
-
-        # 6) stack & intersect across folds
-        rep_DSD[i] = np.median(
-            np.stack(DSD_pred[i], axis=0), axis=0
-        )  # intersect via median of K-fold predictions
-        lower = rep_DSD[i][np.newaxis, ...] - qh[:, np.newaxis, ...]
-        upper = rep_DSD[i][np.newaxis, ...] - ql[:, np.newaxis, ...]
-    # for mass
-    resid_pool = np.concatenate(M_resid, axis=0)
-    ql, qh = one_sided_quantiles(resid_pool, alpha_lows, alpha_ups)
-
-    # 6) stack & intersect across folds
-    rep_traj = np.median(
-        np.stack(M_pred, axis=0), axis=0
-    )  # intersect via median of K-fold predictions
-    lower = rep_traj[np.newaxis, ...] - qh[:, np.newaxis, ...]
-    upper = rep_traj[np.newaxis, ...] - ql[:, np.newaxis, ...]

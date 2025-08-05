@@ -70,13 +70,13 @@ def open_erf_dataset(path=None, sample_time=None):
 def split_by_index(ds: xr.Dataset, dim: str, test_size: float, random_state: int = 0):
     """
     Splits a Dataset along one integer dimension into train/test.
-    Returns (ds_train, ds_test).
+    Returns (ds_train, idx_train, ds_test, idx_test).
     """
     idx = np.arange(ds.sizes[dim])
     train_idx, test_idx = train_test_split(
         idx, test_size=test_size, random_state=random_state
     )
-    return ds.isel({dim: train_idx}), ds.isel({dim: test_idx})
+    return ds.isel({dim: train_idx}), train_idx, ds.isel({dim: test_idx}), test_idx
 
 
 def prepare(ds_sub: xr.Dataset, m_scale: float):
@@ -115,7 +115,7 @@ def open_mass_dataset(
         ds = ds.isel(t=sample_time)
 
     # 3) train/test split on 'loc'
-    ds_train, ds_test = split_by_index(
+    ds_train, idx_train, ds_test, idx_test = split_by_index(
         ds, dim="loc", test_size=test_size, random_state=random_state
     )
 
@@ -124,7 +124,7 @@ def open_mass_dataset(
     if calib_size is not None:
         # convert calib_size relative to the full dataset → relative to train only
         calib_size = calib_size / (1 - test_size)
-        ds_train, ds_calib = split_by_index(
+        ds_train, idx_train, ds_calib, idx_calib = split_by_index(
             ds_train, dim="loc", test_size=calib_size, random_state=random_state
         )
 
@@ -147,8 +147,10 @@ def open_mass_dataset(
     outputs = {
         "x_train": x_train,
         "m_train": m_train,
+        "idx_train": idx_train,
         "x_test": x_test,
         "m_test": m_test,
+        "idx_test": idx_test,
         "r_bins_edges": ds["rbin_l"].to_numpy(),
         "n_bins": x_train.shape[-1],
         "dsd_time": ds["t"].to_numpy() - ds["t"].to_numpy()[0],
@@ -156,7 +158,7 @@ def open_mass_dataset(
 
     if ds_calib is not None:
         x_calib, m_calib = prepare(ds_calib, m_scale)
-        outputs.update({"x_calib": x_calib, "m_calib": m_calib})
+        outputs.update({"x_calib": x_calib, "m_calib": m_calib, "idx_calib": idx_calib})
 
     return outputs
 
@@ -230,7 +232,7 @@ def open_congestus_calib_train_rico_test(
         ds_rico = ds_rico.isel(t=slice(0, nt_cong))
 
     # --- 3) split congestus into train/calib
-    ds_train, ds_calib = split_by_index(
+    ds_train, idx_train, ds_calib, idx_calib = split_by_index(
         ds_cong, dim="loc", test_size=calib_size, random_state=random_state
     )
 
@@ -253,10 +255,13 @@ def open_congestus_calib_train_rico_test(
     return {
         "x_train": x_train,
         "m_train": m_train,
+        "idx_train": idx_train,
         "x_calib": x_calib,
         "m_calib": m_calib,
+        "idx_calib": idx_calib,
         "x_test": x_test,
         "m_test": m_test,
+        "idx_test": idx_test,
         "r_bins_edges": r_bins,
         "n_bins": n_bins,
         "dsd_time": dsd_time,
@@ -294,7 +299,7 @@ def open_congestus_train_rico_calib_test(
     ds_train = ds_cong
 
     # split rico into calib / test
-    rico_calib, rico_test = split_by_index(
+    rico_calib, idx_calib, rico_test, idx_test = split_by_index(
         ds_rico, dim="loc", test_size=test_size, random_state=random_state
     )
     ds_calib = rico_calib
@@ -315,10 +320,13 @@ def open_congestus_train_rico_calib_test(
     return {
         "x_train": x_train,
         "m_train": m_train,
+        "idx_train": idx_train,
         "x_calib": x_calib,
         "m_calib": m_calib,
+        "idx_calib": idx_calib,
         "x_test": x_test,
         "m_test": m_test,
+        "idx_test": idx_test,
         "r_bins_edges": r_bins,
         "n_bins": n_bins,
         "dsd_time": dsd_time,
@@ -372,8 +380,10 @@ def open_congestus_train_rico_test(
     return {
         "x_train": x_train,  # shape: (n_train_loc, nt, n_bins)
         "m_train": m_train,  # shape: (n_train_loc, nt)
+        "idx_train": idx_train,
         "x_test": x_test,  # shape: (n_test_loc,  nt, n_bins)
         "m_test": m_test,  # shape: (n_test_loc,  nt)
+        "idx_test": idx_test,
         "r_bins_edges": r_bins_edges,  # 1D array, length = n_bins+1 or n_bins
         "n_bins": n_bins,
         "dsd_time": dsd_time,  # 1D array, length = nt
