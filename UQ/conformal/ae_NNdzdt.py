@@ -1,5 +1,5 @@
 """
-Script takes in data filepath and does conformal predictions on AE-AR model.
+Script takes in data filepath and does conformal predictions on AE-NNdzdt model.
 """
 import os
 import sys
@@ -14,7 +14,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 from src import data_utils as du
-from src import diagnostics, models, plotting, training
+from src import training
 from training_scripts import train_ae_NNdzdt as train
 
 # load arguments
@@ -48,7 +48,7 @@ args = parser.parse_args()
 params = {
     "data_src": args.data_name,
     "random_seed": 1952,
-    "num_epochs": 20,
+    "num_epochs": 500,
     "batch_size": 100,
     "learning_rate": 0.00314227212817401,
     "latent_dim": 3,
@@ -162,6 +162,17 @@ early_stopping = training.EarlyStopping(patience=params["patience"])
 total_params = sum(p.numel() for p in model.parameters())
 print(f"Total number of parameters: {total_params}")
 
+# Compute & set weights based on Champion et al recs
+lambda1, lambda2, lambda3 = du.champion_calculate_weights(
+    du.NormedBinDatasetDzDt(
+        outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
+    ),
+    lambda1_metaweight=0.5353139650038768,
+)
+print(f"lambda: 1.0, {lambda1}, {lambda2}")
+params["loss_weight_recon"] = 1.0
+params["loss_weight_sindy_x"] = lambda1
+params["loss_weight_sindy_z"] = lambda2
 
 """
 Helper utility functions
@@ -178,68 +189,53 @@ def encode_decode_ae(x, model):
 
 
 # run latent space dynamics
-def run_ae_X_latent(x, m, model, n_lag=params["n_lag"]):
+def run_ae_X_latent(x, m, model):
     # for DSD_mass data, not decoded (so still within the latent space)
     latents_all = np.empty(
         (x.shape[0], x.shape[1], params["latent_dim"] + 1),
         dtype=float,
     )
+    z_enc_train = model.encoder(torch.Tensor(x)).detach().numpy()
+    zlim = np.zeros((3 + 1, 2))  # DSD bins
+    for il in range(3):
+        zlim[il][0] = z_enc_train[:, :, il].min()
+        zlim[il][1] = z_enc_train[:, :, il].max()
+    zlim[-1][0] = m.min()
+    zlim[-1][1] = m.max()
+
     for id in range(len(x)):  # loop through each initial condition/sample/gridbox
-        x0 = x[id, :n_lag, :]
-        m0 = m[id, :n_lag]
-        # encode DSD
-        latents_all[id][:n_lag, :-1] = model.encoder(torch.Tensor(x0)).detach().numpy()
-        latents_all[id][:n_lag, -1] = m0
-        for t in range(n_lag, x.shape[1]):
-            latent_DSD = torch.Tensor(
-                latents_all[id][t - n_lag : t, :-1].reshape(
-                    -1, n_lag, latents_all[id][t, :-1].shape[0]
-                )
-            )
-            mass_t = torch.Tensor(
-                latents_all[id][t - n_lag : t, -1].reshape(1, 1, 1)
-            )  # reshape mass
-            # run autoregressor in latent space
-            res = model.autoregressor(torch.cat([latent_DSD, mass_t], dim=2))
-            latents_all[id][t] = res.detach().numpy()
+        z0 = np.concatenate((z_enc_train[id, 0, :], np.array([m[id, 0]])), axis=-1)
+        latents_all[id] = du.simulate(z0, outputs["dsd_time"], model.dzdt, zlim)
     return latents_all
 
 
 # run full network
 # computes the predicted DSD and mass trajectories
-def run_ae_X(x, m, model, n_lag=params["n_lag"]):
+def run_ae_X(x, m, model):
     # DSD data, decoded (predictions from network)
     DSD_all = np.empty(x.shape, dtype=float)
     # mass data
     M_all = np.empty(m.shape, dtype=float)
+    z_enc_train = model.encoder(torch.Tensor(x)).detach().numpy()
+    zlim = np.zeros((3 + 1, 2))  # DSD bins
+    for il in range(3):
+        zlim[il][0] = z_enc_train[:, :, il].min()
+        zlim[il][1] = z_enc_train[:, :, il].max()
+    zlim[-1][0] = m.min()
+    zlim[-1][1] = m.max()
+
     for id in range(len(x)):  # loop through each initial condition/sample/gridbox
-        x0 = x[id, :n_lag, :]
-        m0 = m[id, :n_lag]
-        DSD_all[id][:n_lag, :] = (
-            model.decoder(model.encoder(torch.Tensor(x0))).detach().numpy()
-        )
-        M_all[id][:n_lag] = m0
-        for t in range(n_lag, x.shape[1]):
-            latent_DSD = model.encoder(
-                torch.Tensor(
-                    DSD_all[id][t - n_lag : t].reshape(
-                        -1, n_lag, DSD_all[id][t].shape[0]
-                    )
-                )
-            )  # encode DSD
-            mass_t = torch.Tensor(
-                M_all[id][t - n_lag : t].reshape(1, 1, 1)
-            )  # reshape mass
-            # run autoregressor in latent space
-            res = model.autoregressor(torch.cat([latent_DSD, mass_t], dim=2))
-            # decode the DSD and save it
-            DSD_all[id][t, :] = model.decoder(res[..., :-1]).detach().numpy()
-            M_all[id][t] = res[..., -1].squeeze().detach().item()  # save mass
+        z0 = np.concatenate((z_enc_train[id, 0, :], np.array([m[id, 0]])), axis=-1)
+        latents_pred = du.simulate(z0, outputs["dsd_time"], model.dzdt, zlim)
+        DSD_all[id] = (
+            model.decoder(torch.Tensor(latents_pred[:, :-1])).detach().numpy()
+        )  # add DSD predictions
+        M_all[id] = latents_pred[:, -1]  # add mass predictions
     return DSD_all, M_all
 
 
 # runs all three parts of the architecture above and returns data
-def run_all(x, m, model, n_lag=params["n_lag"]):
+def run_all(x, m, model):
     DSD_all = [
         np.empty(x.shape, dtype=float),  # decoder only
         np.empty(
@@ -252,8 +248,8 @@ def run_all(x, m, model, n_lag=params["n_lag"]):
         dtype=float,
     )
     DSD_all[0] = encode_decode_ae(x, model=model)
-    DSD_all[1] = run_ae_X_latent(x, m, model=model, n_lag=n_lag)[..., :-1]
-    DSD_all[2], M_all = run_ae_X(x, m, model=model, n_lag=n_lag)
+    DSD_all[1] = run_ae_X_latent(x, m, model=model)[..., :-1]
+    DSD_all[2], M_all = run_ae_X(x, m, model=model)
     return DSD_all, M_all
 
 
@@ -299,14 +295,14 @@ The data splits used are different for each method, so we will configure those s
 
 if method == "full":
     # 0) configure data and dataloaders
-    train_data = du.NormedBinDatasetAR(
-        outputs["x_train"], outputs["m_train"], lag=params["n_lag"]
+    train_data = du.NormedBinDatasetDzDt(
+        outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
     )
     train_loader = torch.utils.data.DataLoader(
         train_data, batch_size=params["batch_size"], shuffle=True
     )
-    test_data = du.NormedBinDatasetAR(
-        outputs["x_test"], outputs["m_test"], lag=params["n_lag"]
+    test_data = du.NormedBinDatasetDzDt(
+        outputs["x_test"], outputs["dsd_time"], outputs["m_test"]
     )
     test_loader = torch.utils.data.DataLoader(
         test_data, batch_size=len(test_data), shuffle=True
@@ -395,20 +391,20 @@ if method == "full":
 
 if method == "split":
     # 0) configure data and dataloaders
-    train_data = du.NormedBinDatasetAR(
-        outputs["x_train"], outputs["m_train"], lag=params["n_lag"]
+    train_data = du.NormedBinDatasetDzDt(
+        outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
     )
     train_loader = torch.utils.data.DataLoader(
         train_data, batch_size=params["batch_size"], shuffle=True
     )
-    calib_data = du.NormedBinDatasetAR(
-        outputs["x_calib"], outputs["m_calib"], lag=params["n_lag"]
+    calib_data = du.NormedBinDatasetDzDt(
+        outputs["x_calib"], outputs["dsd_time"], outputs["m_calib"]
     )
     calib_loader = torch.utils.data.DataLoader(
         calib_data, batch_size=len(calib_data), shuffle=True
     )
-    test_data = du.NormedBinDatasetAR(
-        outputs["x_test"], outputs["m_test"], lag=params["n_lag"]
+    test_data = du.NormedBinDatasetDzDt(
+        outputs["x_test"], outputs["dsd_time"], outputs["m_test"]
     )
     test_loader = torch.utils.data.DataLoader(
         test_data, batch_size=len(test_data), shuffle=True
@@ -508,8 +504,8 @@ if method == "cv+":
     M_pred = []
 
     # 0) configure test data and test dataloader
-    test_data = du.NormedBinDatasetAR(
-        outputs["x_test"], outputs["m_test"], lag=params["n_lag"]
+    test_data = du.NormedBinDatasetDzDt(
+        outputs["x_test"], outputs["dsd_time"], outputs["m_test"]
     )
     test_loader = torch.utils.data.DataLoader(
         test_data, batch_size=len(test_data), shuffle=True
@@ -519,18 +515,18 @@ if method == "cv+":
         train_idx = idx[0]
         val_idx = idx[1]
         # 0) configure data and dataloaders
-        train_data = du.NormedBinDatasetAR(
+        train_data = du.NormedBinDatasetDzDt(
             outputs["x_train"][train_idx],
+            outputs["dsd_time"],
             outputs["m_train"][train_idx],
-            lag=params["n_lag"],
         )
         train_loader = torch.utils.data.DataLoader(
             train_data, batch_size=params["batch_size"], shuffle=True
         )
-        calib_data = du.NormedBinDatasetAR(
+        calib_data = du.NormedBinDatasetDzDt(
             outputs["x_train"][val_idx],
+            outputs["dsd_time"],
             outputs["m_train"][val_idx],
-            lag=params["n_lag"],
         )
         calib_loader = torch.utils.data.DataLoader(
             calib_data, batch_size=len(val_idx), shuffle=True
