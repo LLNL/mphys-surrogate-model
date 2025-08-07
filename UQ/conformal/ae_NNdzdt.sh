@@ -26,6 +26,6 @@ python3 UQ/conformal/ae_NNdzdt.py congestus_coal_200m_9600 -m full -e 200 -b 100
 p=20 # validation split percent
 echo "starting split cp, train-validation-test split: $((80 - p))-${p}-20"
 python3 UQ/conformal/ae_NNdzdt.py congestus_coal_200m_9600 -m "split${p}" -e 200 -b 100 -a 0.1 0.05 0.02
-k=25 # number of cross-validation folds
+k=20 # number of cross-validation folds
 echo "starting cv+ with ${k} folds"
 python3 UQ/conformal/ae_NNdzdt_cv.py congestus_coal_200m_9600 -k "${k}" -e 200 -b 100 -a 0.1 0.05 0.02

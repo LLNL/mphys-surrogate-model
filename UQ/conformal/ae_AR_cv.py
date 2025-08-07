@@ -231,7 +231,7 @@ def run_all(x, m, model, params):
 #  Worker for a single fold – re‐inits model/training entirely
 # -------------------------------------------------------------------
 def _fold_worker(args):
-    fold_id, train_idx, val_idx, args_ns, params, outputs, device = args
+    fold_id, train_idx, val_idx, params, outputs, device = args
 
     # re‐init everything inside child
     model = init_model(device, params)
@@ -309,16 +309,8 @@ def main():
     )
 
     # pick device
-    device = torch.device(
-        "cuda"
-        if torch.cuda.is_available()
-        else (
-            "mps"
-            if torch.backends.mps.is_available() and params["batch_size"] > 1000
-            else "cpu"
-        )
-    )
-    print(f"Using device: {device}, workers={total_cpus}, folds={args.folds}")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"→ launching {args.folds}-fold evaluation on {total_cpus} {device} cores")
 
     # build CV splits
     from sklearn.model_selection import KFold
@@ -328,7 +320,7 @@ def main():
 
     # prepare fold arguments
     fold_args = [
-        (fold_id, train_idx, val_idx, args, params, outputs, device)
+        (fold_id, train_idx, val_idx, params, outputs, device)
         for fold_id, (train_idx, val_idx) in enumerate(splits)
     ]
 
@@ -392,13 +384,14 @@ def main():
     # ----------------------------------------------------------------
     #  Save everything
     # ----------------------------------------------------------------
-    out_dir = Path("UQ/conformal/results/ae_ar")
+    out_dir = Path("UQ/conformal/results/ae_AR")
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = out_dir / f"{args.data_name}_cv+{args.folds}.pkl"
     with open(fname, "wb") as fh:
         pickle.dump(
             [
                 alphas,
+                args.test_size,
                 outputs["idx_test"],
                 (lower, upper, rep_DSD),
                 (lower_m, upper_m, rep_m),

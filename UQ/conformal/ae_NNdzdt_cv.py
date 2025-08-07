@@ -198,12 +198,12 @@ def run_all(x, m, model, outputs, params):
     return [D0, L1, D2], M2
 
 
-def fold_worker(args):
+def _fold_worker(args):
     """
     Trains on train_idx, calibrates on val_idx, predicts on test set.
     Returns residuals and predictions for each sub-network.
     """
-    (fold_id, train_idx, val_idx, outputs, params, device, ds_seed) = args
+    (fold_id, train_idx, val_idx, outputs, params, device) = args
 
     # rebuild model & optimizer & scheduler
     model = init_model(outputs, params, device)
@@ -281,16 +281,7 @@ def fold_worker(args):
 def main():
     # ----------------------------------------------------------------------------
     # Device selection
-    device = torch.device(
-        "cuda"
-        if torch.cuda.is_available()
-        else (
-            "mps"
-            if torch.backends.mps.is_available() and args.batches > 1000
-            else "cpu"
-        )
-    )
-    print(f"Using device: {device}")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ----------------------------------------------------------------------------
     # Determine CPU count
@@ -298,6 +289,7 @@ def main():
         total_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK", 0)) or os.cpu_count()
     else:
         total_cpus = args.cpus
+    print(f"→ launching {args.folds}-fold evaluation on {total_cpus} {device} cores")
 
     # ----------------------------------------------------------------------------
     # Build fold splits
@@ -307,13 +299,13 @@ def main():
     # ----------------------------------------------------------------------------
     # Launch parallel folds with spawn context
     fold_args = [
-        (i, tr_idx, val_idx, outputs, params, device, params["random_seed"])
+        (i, tr_idx, val_idx, outputs, params, device)
         for i, (tr_idx, val_idx) in enumerate(splits)
     ]
 
     ctx = get_context("spawn")
     with ctx.Pool(processes=total_cpus) as pool:
-        results = pool.map(fold_worker, fold_args)
+        results = pool.map(_fold_worker, fold_args)
 
     # ----------------------------------------------------------------------------
     # Aggregate residuals & predictions
@@ -357,6 +349,7 @@ def main():
         pickle.dump(
             [
                 args.alpha,
+                args.test_size,
                 outputs["idx_test"],
                 (lower_D, upper_D, rep_D),
                 (lower_m, upper_m, rep_m),

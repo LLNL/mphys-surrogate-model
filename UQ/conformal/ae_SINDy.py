@@ -553,6 +553,8 @@ Save:
 in that order.
 """
 
+if method == "split":  # add split percent if needed
+    method += str(int(100 * calib_size))
 with open(
     os.path.join(
         "UQ", "conformal", "results", "ae_SINDy", args.data_name + "_" + method + ".pkl"
@@ -562,6 +564,7 @@ with open(
     pickle.dump(
         [
             alphas,
+            test_size,
             outputs["idx_test"],
             (lower, upper, rep_DSD),
             (lower_m, upper_m, rep_m),

@@ -1,0 +1,351 @@
+"""
+Script plots conformal prediction results on the AE-AR architecture at specified times, gridboxes/samples, and subsets of the network.
+"""
+import os
+import sys
+import argparse
+import pickle
+from pathlib import Path
+import matplotlib.pyplot as plt
+import numpy as np
+
+current_script_directory = os.path.dirname(os.path.abspath(__file__))
+parent_directory = os.path.abspath(os.path.join(current_script_directory, ".."))
+sys.path.append(parent_directory)  # parent_directory = ~/mphys-surrogate-model
+
+from src import data_utils as du
+
+params = {
+    "random_seed": 1952,
+    "latent_dim": 3,
+}
+
+# load arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("data_name", help="basename (no .nc) of your dataset")
+parser.add_argument(
+    "-s",
+    "--subset",
+    type=str,
+    required=True,
+    choices=["decoder", "latent", "full", "mass"],
+    help="which subset of the network you want to plot conformal predictions on: decoder, latent, full, or mass"
+    "-decoder: the reconstruction/autoencoder only"
+    "-latent: the dynamics in the latent space only"
+    "-full: the entire network architecture (reconstruction+dynamics)"
+    "-mass: plot the (normalized) mass as a function of time",
+)
+parser.add_argument(
+    "-a",
+    "--model",
+    type=str,
+    required=True,
+    choices=["AR", "NNdzdt", "SINDy"],
+    help="the dynamic model/architecture used (required): AR, NNdzdt, or SINDy",
+)
+parser.add_argument(
+    "-t",
+    "--tplt",
+    type=str,
+    required=True,
+    help="the indices of which times to plot (required), space separated, inputed as a string",
+)
+parser.add_argument(
+    "-m",
+    "--method",
+    type=str,
+    required=True,
+    help="which conformal predictions to plot (required): full, split[p], or cv+[k]",
+)
+parser.add_argument(
+    "-u",
+    "--uncertainty",
+    type=str,
+    default="conformal",
+    choices=["conformal", "ensemble"],
+    help="whether you would like to plot intervals from conformal or ensemble/bootsrapped predictions. Default is conformal.",
+)
+parser.add_argument(
+    "-g",
+    "--ids",
+    type=int,
+    nargs="+",
+    required=True,
+    help="the indices of which samples/gridboxes to plot (required), space separated."
+    "indices are respect to the full dataset, NOT with respect to the testing data",
+)
+args = parser.parse_args()
+
+method = args.method
+if method[:5] == "split":
+    calib_size = float(method[5:])
+    method = "split"
+if method[:3] == "cv+":
+    method = "cv+"
+if method not in [
+    "split",
+    "full",
+    "cv+",
+]:  # raise error if method is not one of the list above
+    raise ValueError("Conformal predictions method specified has not been implemented.")
+
+# load results from conformal predictions
+cp_results_file = args.data_name + "_" + args.method + ".pkl"
+pickle_path = os.path.join(
+    parent_directory,
+    "UQ",
+    args.uncertainty,
+    "results",
+    "ae_" + args.model,
+    cp_results_file,
+)
+with open(pickle_path, "rb") as f:
+    alphas, test_size, _, DSD_bands, m_bands = pickle.load(f)
+
+# load data
+outputs = du.open_mass_dataset(
+    name=args.data_name,
+    data_dir=Path(parent_directory) / "data",
+    sample_time=None,
+    test_size=test_size,
+    calib_size=0.01 * calib_size,
+    random_state=params["random_seed"],
+)
+
+
+"""
+Get indices to plot relative to the test data. 
+If any are not in there, then return error.
+"""
+pos_map = {value: idx for idx, value in enumerate(outputs["idx_test"])}
+
+ids = args.ids
+# Check for missing elements
+missing = [a for a in ids if a not in pos_map]
+if missing:
+    raise KeyError(f"These ids are not in the testing data: {missing}")
+
+# All present ⇒ return their positions
+ids_rel_to_test = [pos_map[a] for a in ids]
+tplt = np.fromstring(args.tplt, dtype=int, sep=" ")
+subset = args.subset
+
+if subset == "decoder":
+    lower = DSD_bands[0][0]
+    upper = DSD_bands[1][0]
+    rep = DSD_bands[2][0]
+elif subset == "latent":
+    lower = DSD_bands[0][1]
+    upper = DSD_bands[1][1]
+    rep = DSD_bands[2][1]
+elif subset == "full":
+    lower = DSD_bands[0][2]
+    upper = DSD_bands[1][2]
+    rep = DSD_bands[2][2]
+elif subset == "mass":
+    lower = m_bands[0]
+    upper = m_bands[1]
+    rep = m_bands[2]
+else:
+    raise KeyError("Subset of architecture indicated (via -s) has not been implemented")
+
+# use alphas to get color arguments for fill_between (the prediction intervals on the plot)
+cmap = plt.get_cmap("autumn_r")  # 0→yellow, 1→red
+colors = cmap(
+    np.tanh(np.pi * np.array(alphas))
+)  # take tanh to ensure that it is mostly red until very close to 0
+
+if subset == "latent":
+    # load model
+    import torch
+
+    if args.model == "AR":
+        from training_scripts import train_ae_ar as train
+
+        params.update({"n_lag": 1, "layer_size": (63, 98, 30), "CNN": False})
+
+        model = train.AEAutoregressor(
+            n_channels=1,
+            n_bins=outputs["n_bins"],
+            n_latent=params["latent_dim"],
+            n_lag=params["n_lag"],
+            layer_size=params["layer_size"],
+            CNN=params["CNN"],
+        )
+        optimal_path = os.path.join(
+            "results",
+            "Optuna",
+            "ERF Dataset",
+            "AE-AR_2025-07-20T22:45:33_605d8b8697694137a65cab3b1012fffc",
+            "erf_FFNN_latent3_order(63, 98, 30)_tr1000_lr0.002482884780966882_bs4_weights0.22816989332325596-0.6719555656053005_7c43ff3e659b47358fa327f690871ed7",
+        )
+        ae_ar_checkpoint = torch.load(
+            os.path.join(
+                optimal_path,
+                "erf_FFNN_latent3_order(63, 98, 30)_tr1000_lr0.002482884780966882_bs4_weights0.22816989332325596-0.6719555656053005_7c43ff3e659b47358fa327f690871ed7.pth",
+            ),
+            weights_only=True,
+        )
+        model.load_state_dict(ae_ar_checkpoint)
+    if args.model == "NNdzdt":
+        from training_scripts import train_ae_NNdzdt as train
+
+        params.update({"layer_size": (42, 36, 46), "CNN": False})
+
+        model = train.AENNdzdt(
+            n_channels=1,
+            n_bins=outputs["n_bins"],
+            n_latent=params["latent_dim"],
+            layer_size=params["layer_size"],
+            CNN=params["CNN"],
+        )
+        optimal_path = os.path.join(
+            "results",
+            "Optuna",
+            "ERF Dataset",
+            "NNdzdt_2025-07-20T23:31:20_3a400c596947422389559813cd41dfe6",
+            "erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3",
+        )
+        ae_NNdzdt_checkpoint = torch.load(
+            os.path.join(
+                optimal_path,
+                "erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3.pth",
+            ),
+            weights_only=True,
+        )
+        model.load_state_dict(ae_NNdzdt_checkpoint)
+    if args.model == "SINDy":
+        from training_scripts import train_ae_sindy as train
+
+        params.update(
+            {"poly_order": 2, "CNN": False, "sequential_thresholding_interval": None}
+        )
+
+        model = train.AESINDy(
+            n_channels=1,
+            n_bins=outputs["n_bins"],
+            n_latent=params["latent_dim"],
+            poly_order=params["poly_order"],
+            CNN=params["CNN"],
+            sequential_thresholding=(
+                True
+                if params["sequential_thresholding_interval"] is not None
+                else False
+            ),
+        )
+        optimal_path = os.path.join(
+            "results",
+            "Optuna",
+            "ERF Dataset",
+            "AE-SINDy_LimParams",
+            "erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc",
+        )
+        ae_sindy_checkpoint = torch.load(
+            os.path.join(
+                optimal_path,
+                "erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc.pth",
+            ),
+            weights_only=True,
+        )
+        model.load_state_dict(ae_sindy_checkpoint)
+    z_enc_test = model.encoder(torch.Tensor(outputs["x_test"])).detach().numpy()
+    # columns correspond to test_ids, rows correpsond to latent dimension
+    (fig, ax) = plt.subplots(
+        ncols=len(ids),
+        nrows=3,
+        figsize=(2.5 * len(ids), 2 * 3),
+        sharey=True,
+    )  # Rows correspond to latent variables.
+    for i, id in enumerate(ids_rel_to_test):
+        for j in range(3):
+            ax[j][i].plot(outputs["dsd_time"], z_enc_test[id, :, j], label="Data")
+            for k_alpha, alpha in enumerate(alphas):
+                ax[j][i].fill_between(
+                    outputs["dsd_time"],
+                    lower[k_alpha, id, :, j],
+                    upper[k_alpha, id, :, j],
+                    color=colors[k_alpha],
+                    alpha=0.3,
+                    label=f"{100*(1-alpha)}% coverage",
+                )
+            ax[j][i].plot(
+                outputs["dsd_time"], rep[id, :, j], label="Model"
+            )  # representative band
+        ax[0][i].set_title(f"Sample #{ids[i]}")
+        ax[-1][i].set_xlabel("time [s]")
+    for j in range(3):
+        ax[j][0].set_ylabel(r"$z_{}$ [-]".format(j + 1))
+    ax[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+elif subset == "mass":
+    (fig, ax) = plt.subplots(
+        ncols=len(ids),
+        nrows=1,
+        figsize=(2.5 * len(ids), 2 * 3),
+        sharey=True,
+    )
+    for i, id in enumerate(ids_rel_to_test):
+        ax[i].plot(outputs["dsd_time"], outputs["m_test"][id], label="Data")
+        for k_alpha, alpha in enumerate(
+            alphas
+        ):  # ensure masses are always non-negative
+            ax[i].fill_between(
+                outputs["dsd_time"],
+                np.maximum(0, lower[k_alpha, id]),
+                upper[k_alpha, id],
+                color=colors[k_alpha],
+                alpha=0.3,
+                label=f"{100*(1-alpha)}% coverage",
+            )
+        ax[i].plot(outputs["dsd_time"], rep[id], label="Model")  # representative band
+        ax[i].set_title(f"Sample #{ids[i]}")
+        ax[i].set_xlabel("time [s]")
+    ax[0].set_ylabel("Normalized mass [-]")
+    ax[-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+else:
+    (fig, ax) = plt.subplots(
+        ncols=len(ids),
+        nrows=len(tplt),
+        figsize=(2.5 * len(ids), 2 * len(tplt)),
+        sharey=True,
+    )
+    for i, id in enumerate(ids_rel_to_test):
+        for j, t in enumerate(tplt):
+            ax[j][i].step(
+                outputs["r_bins_edges"], outputs["x_test"][id, t], label="Data"
+            )
+            for k_alpha, alpha in enumerate(alphas):
+                ax[j][i].fill_between(
+                    outputs["r_bins_edges"],
+                    np.maximum(0, lower[k_alpha, id, t]),
+                    upper[k_alpha, id, t],
+                    step="pre",
+                    color=colors[k_alpha],
+                    alpha=0.3,
+                    label=f"{100*(1-alpha)}% coverage",
+                )
+            ax[j][i].step(
+                outputs["r_bins_edges"], rep[id, t], label="Model"
+            )  # representative band
+            ax[j][i].set_xscale("log")
+        ax[0][i].set_title(f"Sample #{ids[i]}")
+        ax[-1][i].set_xlabel("radius [m]")
+        ax[j][i].set_ylim(0, 0.5)
+        ax[j][i].set_ylim(0, 0.5)
+    for j, t in enumerate(tplt):
+        ax[j][0].set_ylabel(
+            f'dmdlnr at t={outputs["dsd_time"][t]} \n [kg liquid/kg air]'
+        )
+    ax[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+fig.suptitle(f"AE-{args.model} conformal predictions, {subset}", fontsize=14)
+fig.savefig(
+    os.path.join(
+        parent_directory,
+        "results",
+        "UQ",
+        args.uncertainty,
+        "ae_" + args.model,
+        f"{args.data_name}_{args.method}_{subset}.pdf",
+    ),
+    bbox_inches="tight",
+)
+fig.clf()

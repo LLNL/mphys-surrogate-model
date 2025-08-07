@@ -233,13 +233,11 @@ def _fold_worker(args):
     This runs in its own process.  Make absolutely sure no
     DataLoader inside here uses num_workers>0.
     """
-    fold_id, train_idx, val_idx, outputs, params, alphas = args
+    fold_id, train_idx, val_idx, outputs, params, device = args
 
     # pin torch to 1 thread
     torch.set_num_threads(1)
     torch.set_num_interop_threads(1)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # initialize model/opt/sched
     model = init_model(device, params, outputs)
@@ -317,11 +315,13 @@ def _fold_worker(args):
 
 
 def main():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     # decide on CPU‐count
     total_cpus = (
         args.cpus or int(os.environ.get("SLURM_CPUS_PER_TASK", 0)) or os.cpu_count()
     )
-    print(f"→ launching {args.folds}-fold evaluation on {total_cpus} CPU cores")
+    print(f"→ launching {args.folds}-fold evaluation on {total_cpus} {device} cores")
 
     # prepare CV splits (on train set)
     kf = KFold(n_splits=args.folds, shuffle=True, random_state=params["random_seed"])
@@ -329,7 +329,7 @@ def main():
 
     # pack arguments for each fold
     fold_args = [
-        (fold_id, tr_idx, val_idx, outputs, params, (alpha_lows, alpha_ups))
+        (fold_id, tr_idx, val_idx, outputs, params, device)
         for fold_id, (tr_idx, val_idx) in enumerate(splits)
     ]
 
@@ -398,6 +398,7 @@ def main():
         pickle.dump(
             [
                 alphas,
+                args.test_size,
                 outputs["idx_test"],
                 (lower, upper, rep_DSD),
                 (lower_m, upper_m, rep_m),
