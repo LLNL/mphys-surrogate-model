@@ -1,6 +1,7 @@
 """
-Script plots conformal prediction results on the AE-X architecture at specified times, gridboxes/samples, and subsets of the network.
+Script for testing how accurate the conformal predictions actually are in terms of coverage
 """
+
 import os
 import sys
 import argparse
@@ -10,7 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 current_script_directory = os.path.dirname(os.path.abspath(__file__))
-parent_directory = os.path.abspath(os.path.join(current_script_directory, ".."))
+parent_directory = os.path.abspath(os.path.join(current_script_directory, "../.."))
 sys.path.append(parent_directory)  # parent_directory = ~/mphys-surrogate-model
 
 from src import data_utils as du
@@ -29,7 +30,7 @@ parser.add_argument(
     type=str,
     required=True,
     choices=["decoder", "latent", "full", "mass"],
-    help="which subset of the network you want to plot conformal predictions on: decoder, latent, full, or mass"
+    help="which subset of the network you want to test coverage for conformal predictions on: decoder, latent, full, or mass"
     "-decoder: the reconstruction/autoencoder only"
     "-latent: the dynamics in the latent space only"
     "-full: the entire network architecture (reconstruction+dynamics)"
@@ -44,35 +45,11 @@ parser.add_argument(
     help="the dynamic model/architecture used (required): AR, NNdzdt, or SINDy",
 )
 parser.add_argument(
-    "-t",
-    "--tplt",
-    type=str,
-    required=True,
-    help="the indices of which times to plot (required), space separated, inputed as a string",
-)
-parser.add_argument(
     "-m",
     "--method",
     type=str,
     required=True,
     help="which conformal predictions to plot (required): full, split[p], or cv+[k]",
-)
-parser.add_argument(
-    "-u",
-    "--uncertainty",
-    type=str,
-    default="conformal",
-    choices=["conformal", "ensemble"],
-    help="whether you would like to plot intervals from conformal or ensemble/bootsrapped predictions. Default is conformal.",
-)
-parser.add_argument(
-    "-g",
-    "--ids",
-    type=int,
-    nargs="+",
-    required=True,
-    help="the indices of which samples/gridboxes to plot (required), space separated."
-    "indices are respect to the full dataset, NOT with respect to the testing data",
 )
 args = parser.parse_args()
 
@@ -95,7 +72,7 @@ cp_results_file = args.data_name + "_" + args.method + ".pkl"
 pickle_path = os.path.join(
     parent_directory,
     "UQ",
-    args.uncertainty,
+    "conformal",
     "results",
     "ae_" + args.model,
     cp_results_file,
@@ -122,24 +99,8 @@ else:
         random_state=params["random_seed"],
     )
 
-
-"""
-Get indices to plot relative to the test data. 
-If any are not in there, then return error.
-"""
-pos_map = {value: idx for idx, value in enumerate(outputs["idx_test"])}
-
-ids = args.ids
-# Check for missing elements
-missing = [a for a in ids if a not in pos_map]
-if missing:
-    raise KeyError(f"These ids are not in the testing data: {missing}")
-
-# if present, then return their positions
-ids_rel_to_test = [pos_map[a] for a in ids]
-tplt = np.fromstring(args.tplt, dtype=int, sep=" ")
+# get prediction bands
 subset = args.subset
-
 if subset == "decoder":
     lower = DSD_bands[0][0]
     upper = DSD_bands[1][0]
@@ -159,14 +120,8 @@ elif subset == "mass":
 else:
     raise KeyError("Subset of architecture indicated (via -s) has not been implemented")
 
-# use alphas to get color arguments for fill_between (the prediction intervals on the plot)
-cmap = plt.get_cmap("autumn_r")  # 0→yellow, 1→red
-colors = cmap(
-    np.tanh(np.pi * np.array(alphas))
-)  # take tanh to ensure that it is mostly red until very close to 0
-
+# if we are testing conformal predictions on the latent space, we need to load the model
 if subset == "latent":
-    # load model
     import torch
     from src import training
 
@@ -477,103 +432,40 @@ if subset == "latent":
             device=device,
         )
     z_enc_test = model.encoder(torch.Tensor(outputs["x_test"])).detach().numpy()
-    # columns correspond to test_ids, rows correpsond to latent dimension
-    (fig, ax) = plt.subplots(
-        ncols=len(ids),
-        nrows=3,
-        figsize=(2.5 * len(ids), 2 * 3),
-        sharey=True,
-    )  # Rows correspond to latent variables.
-    for i, id in enumerate(ids_rel_to_test):
-        for j in range(3):
-            ax[j][i].plot(outputs["dsd_time"], z_enc_test[id, :, j], label="Data")
-            for k_alpha, alpha in enumerate(alphas):
-                ax[j][i].fill_between(
-                    outputs["dsd_time"],
-                    lower[k_alpha, id, :, j],
-                    upper[k_alpha, id, :, j],
-                    color=colors[k_alpha],
-                    alpha=0.3,
-                    label=f"{100*(1-alpha)}% coverage",
-                )
-            ax[j][i].plot(
-                outputs["dsd_time"], rep[id, :, j], label="Model"
-            )  # representative band
-        ax[0][i].set_title(f"Sample #{ids[i]}")
-        ax[-1][i].set_xlabel("time [s]")
-    for j in range(3):
-        ax[j][0].set_ylabel(r"$z_{}$ [-]".format(j + 1))
-    ax[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
-elif subset == "mass":
-    (fig, ax) = plt.subplots(
-        ncols=len(ids),
-        nrows=1,
-        figsize=(2.5 * len(ids), 2 * 3),
-        sharey=True,
-    )
-    for i, id in enumerate(ids_rel_to_test):
-        ax[i].plot(outputs["dsd_time"], outputs["m_test"][id], label="Data")
-        for k_alpha, alpha in enumerate(
-            alphas
-        ):  # ensure masses are always non-negative
-            ax[i].fill_between(
-                outputs["dsd_time"],
-                np.maximum(0, lower[k_alpha, id]),
-                upper[k_alpha, id],
-                color=colors[k_alpha],
-                alpha=0.3,
-                label=f"{100*(1-alpha)}% coverage",
-            )
-        ax[i].plot(outputs["dsd_time"], rep[id], label="Model")  # representative band
-        ax[i].set_title(f"Sample #{ids[i]}")
-        ax[i].set_xlabel("time [s]")
-    ax[0].set_ylabel("Normalized mass [-]")
-    ax[-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
-else:
-    (fig, ax) = plt.subplots(
-        ncols=len(ids),
-        nrows=len(tplt),
-        figsize=(2.5 * len(ids), 2 * len(tplt)),
-        sharey=True,
-    )
-    for i, id in enumerate(ids_rel_to_test):
-        for j, t in enumerate(tplt):
-            ax[j][i].step(
-                outputs["r_bins_edges"], outputs["x_test"][id, t], label="Data"
-            )
-            for k_alpha, alpha in enumerate(alphas):
-                ax[j][i].fill_between(
-                    outputs["r_bins_edges"],
-                    np.maximum(0, lower[k_alpha, id, t]),
-                    upper[k_alpha, id, t],
-                    step="pre",
-                    color=colors[k_alpha],
-                    alpha=0.3,
-                    label=f"{100*(1-alpha)}% coverage",
-                )
-            ax[j][i].step(
-                outputs["r_bins_edges"], rep[id, t], label="Model"
-            )  # representative band
-            ax[j][i].set_xscale("log")
-        ax[0][i].set_title(f"Sample #{ids[i]}")
-        ax[-1][i].set_xlabel("radius [m]")
-        ax[j][i].set_ylim(0, 0.5)
-        ax[j][i].set_ylim(0, 0.5)
-    for j, t in enumerate(tplt):
-        ax[j][0].set_ylabel(
-            f'dmdlnr at t={outputs["dsd_time"][t]} \n [kg liquid/kg air]'
+
+"""
+Now we test the conformal prediction coverage!
+"""
+N = len(outputs["x_test"])  # number of samples/initial conditions
+# loop across alphas
+for i, alpha in enumerate(alphas):
+    print(f"testing for coverage 1-alpha={100*(1-alpha)}%")
+    # test if it falls within the bands
+    if subset == "latent":
+        testing = (z_enc_test >= lower[i]) & (z_enc_test <= upper[i])
+    elif subset == "mass":
+        testing = (outputs["m_test"] >= lower[i]) & (outputs["m_test"] <= upper[i])
+    else:
+        testing = (outputs["x_test"] >= lower[i]) & (outputs["x_test"] <= upper[i])
+    # get fraction that fall within the bands
+    counter = np.count_nonzero(testing, axis=0) / N
+    if subset == "mass":
+        print(
+            f"Mean percent of real test trajectories that fall within: {100*np.mean(counter)}"
         )
-    ax[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
-fig.suptitle(f"AE-{args.model} conformal predictions, {subset}", fontsize=14)
-fig.savefig(
-    os.path.join(
-        parent_directory,
-        "results",
-        "UQ",
-        args.uncertainty,
-        "ae_" + args.model,
-        f"{args.data_name}_{args.method}_{subset}.pdf",
-    ),
-    bbox_inches="tight",
-)
-fig.clf()
+        print(
+            f"Median percent of real test trajectories that fall within: {100*np.median(counter)}"
+        )
+        print(
+            f"Standard deviation of percent of real test trajectories that fall within: {100*np.std(counter)}"
+        )
+    else:
+        print(
+            f"Mean percent of real test trajectories that fall within: {100*np.mean(counter, axis=(0, 1))}"
+        )
+        print(
+            f"Median percent of real test trajectories that fall within: {100*np.median(counter, axis=(0, 1))}"
+        )
+        print(
+            f"Standard deviation of percent of real test trajectories that fall within: {100*np.std(counter, axis=(0, 1))}"
+        )

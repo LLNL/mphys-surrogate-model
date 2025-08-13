@@ -24,7 +24,6 @@ os.environ["MKL_THREADING_LAYER"] = "GNU"
 from pathlib import Path
 from multiprocessing import get_context
 from sklearn.model_selection import KFold
-from contextlib import redirect_stdout
 
 # -- Make sure project root is on PYTHONPATH -----------------------------------
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))

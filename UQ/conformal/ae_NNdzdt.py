@@ -8,7 +8,6 @@ import argparse
 import torch
 import time
 from pathlib import Path
-from contextlib import redirect_stdout
 import pickle
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
