@@ -1,0 +1,197 @@
+Wed Aug 13 10:30:14 PDT 2025
+activating
+testing vanilla cp
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 88.69542404812269
+Median percent of real test trajectories that fall within: 88.70967741935483
+Standard deviation of percent of real test trajectories that fall within: 3.050022469946876
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 94.08898235060815
+Median percent of real test trajectories that fall within: 94.35483870967742
+Standard deviation of percent of real test trajectories that fall within: 2.450237149576716
+testing for coverage 1-alpha=98.0%
+Mean percent of real test trajectories that fall within: 97.27058269434163
+Median percent of real test trajectories that fall within: 97.58064516129032
+Standard deviation of percent of real test trajectories that fall within: 1.6036792602791887
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 98.334834413009
+Median percent of real test trajectories that fall within: 98.38709677419355
+Standard deviation of percent of real test trajectories that fall within: 1.1629581760152297
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 82.28891239203246
+Median percent of real test trajectories that fall within: 83.06451612903226
+Standard deviation of percent of real test trajectories that fall within: 10.883012702650403
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 88.66120218579233
+Median percent of real test trajectories that fall within: 90.32258064516128
+Standard deviation of percent of real test trajectories that fall within: 11.588005251374545
+testing for coverage 1-alpha=98.0%
+Mean percent of real test trajectories that fall within: 94.11686938127973
+Median percent of real test trajectories that fall within: 95.96774193548387
+Standard deviation of percent of real test trajectories that fall within: 12.257157829569664
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 95.65926317644985
+Median percent of real test trajectories that fall within: 97.58064516129032
+Standard deviation of percent of real test trajectories that fall within: 12.397149705466278
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 89.67456868059227
+Median percent of real test trajectories that fall within: 89.51612903225806
+Standard deviation of percent of real test trajectories that fall within: 3.2889746749179625
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 94.51968204653623
+Median percent of real test trajectories that fall within: 94.35483870967742
+Standard deviation of percent of real test trajectories that fall within: 2.284889360046865
+testing for coverage 1-alpha=98.0%
+Mean percent of real test trajectories that fall within: 97.36911686938129
+Median percent of real test trajectories that fall within: 97.58064516129032
+Standard deviation of percent of real test trajectories that fall within: 1.5631480887171207
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 98.44762195928082
+Median percent of real test trajectories that fall within: 98.38709677419355
+Standard deviation of percent of real test trajectories that fall within: 1.1468318672593305
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 86.84558434690642
+Median percent of real test trajectories that fall within: 86.29032258064517
+Standard deviation of percent of real test trajectories that fall within: 2.833573756134863
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 91.43310417768377
+Median percent of real test trajectories that fall within: 91.93548387096774
+Standard deviation of percent of real test trajectories that fall within: 2.2488097647478003
+testing for coverage 1-alpha=98.0%
+Mean percent of real test trajectories that fall within: 95.17451084082495
+Median percent of real test trajectories that fall within: 95.96774193548387
+Standard deviation of percent of real test trajectories that fall within: 2.046918797774927
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 97.6203067160233
+Median percent of real test trajectories that fall within: 98.38709677419355
+Standard deviation of percent of real test trajectories that fall within: 1.3575354471701138
+testing split cp, train-validation-test split: 60-20-20
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 87.5977078926494
+Median percent of real test trajectories that fall within: 87.90322580645162
+Standard deviation of percent of real test trajectories that fall within: 4.640951618047939
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 92.6580678212586
+Median percent of real test trajectories that fall within: 92.74193548387096
+Standard deviation of percent of real test trajectories that fall within: 3.7509225166424383
+testing for coverage 1-alpha=98.0%
+Mean percent of real test trajectories that fall within: 96.08672659968272
+Median percent of real test trajectories that fall within: 96.7741935483871
+Standard deviation of percent of real test trajectories that fall within: 2.687032728406301
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 97.3158216552089
+Median percent of real test trajectories that fall within: 97.58064516129032
+Standard deviation of percent of real test trajectories that fall within: 2.1800517441243805
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 85.29878371232152
+Median percent of real test trajectories that fall within: 87.09677419354838
+Standard deviation of percent of real test trajectories that fall within: 11.365673716603542
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 90.76767142605323
+Median percent of real test trajectories that fall within: 91.93548387096774
+Standard deviation of percent of real test trajectories that fall within: 11.887886934091895
+testing for coverage 1-alpha=98.0%
+Mean percent of real test trajectories that fall within: 94.89687995769432
+Median percent of real test trajectories that fall within: 96.7741935483871
+Standard deviation of percent of real test trajectories that fall within: 12.465348026339546
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 95.84435043187025
+Median percent of real test trajectories that fall within: 97.58064516129032
+Standard deviation of percent of real test trajectories that fall within: 12.546535726119862
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 87.84146119777894
+Median percent of real test trajectories that fall within: 88.70967741935483
+Standard deviation of percent of real test trajectories that fall within: 4.22804560705066
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 92.78882700951877
+Median percent of real test trajectories that fall within: 93.54838709677419
+Standard deviation of percent of real test trajectories that fall within: 3.285464975062208
+testing for coverage 1-alpha=98.0%
+Mean percent of real test trajectories that fall within: 95.97166677683765
+Median percent of real test trajectories that fall within: 95.96774193548387
+Standard deviation of percent of real test trajectories that fall within: 2.4120763072057865
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 97.2928923188789
+Median percent of real test trajectories that fall within: 97.58064516129032
+Standard deviation of percent of real test trajectories that fall within: 1.8927036497512373
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 84.24114225277629
+Median percent of real test trajectories that fall within: 83.87096774193549
+Standard deviation of percent of real test trajectories that fall within: 2.4633483390991717
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 89.27815970386041
+Median percent of real test trajectories that fall within: 88.70967741935483
+Standard deviation of percent of real test trajectories that fall within: 2.356147097342261
+testing for coverage 1-alpha=98.0%
+Mean percent of real test trajectories that fall within: 93.29719725013223
+Median percent of real test trajectories that fall within: 93.54838709677419
+Standard deviation of percent of real test trajectories that fall within: 1.8502114102093938
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 95.9809624537282
+Median percent of real test trajectories that fall within: 95.96774193548387
+Standard deviation of percent of real test trajectories that fall within: 1.9010902973191308
+testing cv+ with 20 folds
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 89.10732581967213
+Median percent of real test trajectories that fall within: 89.51612903225806
+Standard deviation of percent of real test trajectories that fall within: 3.053025931792274
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 94.40276308831305
+Median percent of real test trajectories that fall within: 94.35483870967742
+Standard deviation of percent of real test trajectories that fall within: 2.4097029618934953
+testing for coverage 1-alpha=98.0%
+Mean percent of real test trajectories that fall within: 97.6258841221576
+Median percent of real test trajectories that fall within: 97.58064516129032
+Standard deviation of percent of real test trajectories that fall within: 1.4133377172615182
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 98.60668131940774
+Median percent of real test trajectories that fall within: 98.38709677419355
+Standard deviation of percent of real test trajectories that fall within: 1.0823040696166775
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 86.10523532522475
+Median percent of real test trajectories that fall within: 87.09677419354838
+Standard deviation of percent of real test trajectories that fall within: 11.474592409318348
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 91.33615371055878
+Median percent of real test trajectories that fall within: 92.74193548387096
+Standard deviation of percent of real test trajectories that fall within: 12.118777943329858
+testing for coverage 1-alpha=98.0%
+Mean percent of real test trajectories that fall within: 95.62400846113167
+Median percent of real test trajectories that fall within: 97.58064516129032
+Standard deviation of percent of real test trajectories that fall within: 12.491895056724013
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 96.88436453375637
+Median percent of real test trajectories that fall within: 99.19354838709677
+Standard deviation of percent of real test trajectories that fall within: 12.561803777269034
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 91.82145690111054
+Median percent of real test trajectories that fall within: 91.93548387096774
+Standard deviation of percent of real test trajectories that fall within: 3.081489206135081
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 95.88676626123743
+Median percent of real test trajectories that fall within: 95.96774193548387
+Standard deviation of percent of real test trajectories that fall within: 2.0895157431678464
+testing for coverage 1-alpha=98.0%
+Mean percent of real test trajectories that fall within: 98.08715626652567
+Median percent of real test trajectories that fall within: 98.38709677419355
+Standard deviation of percent of real test trajectories that fall within: 1.3290995609439327
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 98.94504395822318
+Median percent of real test trajectories that fall within: 99.19354838709677
+Standard deviation of percent of real test trajectories that fall within: 0.9964545753646628
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 92.66261237440507
+Median percent of real test trajectories that fall within: 93.54838709677419
+Standard deviation of percent of real test trajectories that fall within: 2.544803817060114
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 97.26335272342676
+Median percent of real test trajectories that fall within: 97.58064516129032
+Standard deviation of percent of real test trajectories that fall within: 1.1888179347628947
+testing for coverage 1-alpha=98.0%
+Mean percent of real test trajectories that fall within: 99.3786356425172
+Median percent of real test trajectories that fall within: 99.19354838709677
+Standard deviation of percent of real test trajectories that fall within: 0.44754920359097683
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 99.9074563722898
+Median percent of real test trajectories that fall within: 100.0
+Standard deviation of percent of real test trajectories that fall within: 0.29561977492064884

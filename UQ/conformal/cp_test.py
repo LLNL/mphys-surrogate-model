@@ -7,7 +7,6 @@ import sys
 import argparse
 import pickle
 from pathlib import Path
-import matplotlib.pyplot as plt
 import numpy as np
 
 current_script_directory = os.path.dirname(os.path.abspath(__file__))
@@ -125,7 +124,7 @@ if subset == "latent":
     import torch
     from src import training
 
-    params.update({"num_epochs": 200, "batch_size": 100})
+    params.update({"num_epochs": 200, "batch_size": 200})
 
     # Set device
     device = torch.device(
