@@ -561,10 +561,13 @@ else:
         ax[j][i].set_ylim(0, 0.5)
     for j, t in enumerate(tplt):
         ax[j][0].set_ylabel(
-            f'dmdlnr at t={outputs["dsd_time"][t]} \n [kg liquid/kg air]'
+            rf'$\frac{{dm}}{{d\ln r}}$ at t={outputs["dsd_time"][t]}'
+            "\n[kg liquid/kg air]"
         )
     ax[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
-fig.suptitle(f"AE-{args.model} conformal predictions, {subset}", fontsize=14)
+fig.suptitle(
+    f"AE-{args.model} conformal predictions, {method}, {subset} network", fontsize=14
+)
 fig.savefig(
     os.path.join(
         parent_directory,
@@ -572,7 +575,7 @@ fig.savefig(
         "UQ",
         args.uncertainty,
         "ae_" + args.model,
-        f"{args.data_name}_{args.method}_{subset}.pdf",
+        f"{args.data_name}_{args.method}_{subset}_{'_'.join(str(x) for x in ids)}.pdf",
     ),
     bbox_inches="tight",
 )

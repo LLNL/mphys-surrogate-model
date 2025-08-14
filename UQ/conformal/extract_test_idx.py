@@ -34,4 +34,4 @@ outputs = du.open_mass_dataset(
     test_size=args.test_size,
     random_state=params["random_seed"],
 )
-print(outputs["idx_test"])
+print(*outputs["idx_test"])
