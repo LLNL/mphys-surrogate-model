@@ -152,6 +152,7 @@ def open_mass_dataset(
         "m_test": m_test,
         "idx_test": idx_test,
         "r_bins_edges": ds["rbin_l"].to_numpy(),
+        "r_bins_edges_r": ds["rbin_r"].to_numpy(),
         "n_bins": x_train.shape[-1],
         "dsd_time": ds["t"].to_numpy() - ds["t"].to_numpy()[0],
     }

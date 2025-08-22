@@ -1,5 +1,6 @@
 """
 Script plots conformal prediction results on the AE-X architecture at specified times, gridboxes/samples, and subsets of the network.
+Same as plotting.py, except 
 """
 import os
 import sys
@@ -148,6 +149,8 @@ ids_rel_to_test = [pos_map[a] for a in ids]
 tplt = np.fromstring(args.tplt, dtype=int, sep=" ")
 subset = args.subset
 
+colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
+
 if subset == "decoder":
     lower = DSD_bands[0][0]
     upper = DSD_bands[1][0]
@@ -166,12 +169,6 @@ elif subset == "mass":
     rep = m_bands[2]
 else:
     raise KeyError("Subset of architecture indicated (via -s) has not been implemented")
-
-# use alphas to get color arguments for fill_between (the prediction intervals on the plot)
-cmap = plt.get_cmap("autumn_r")  # 0→yellow, 1→red
-colors = cmap(
-    np.tanh(np.pi * np.array(alphas))
-)  # take tanh to ensure that it is mostly red until very close to 0
 
 if subset == "latent":
     # load model
