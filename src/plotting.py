@@ -497,7 +497,7 @@ def plot_full_testset_performance_recon(model, x_test, tol, saveas=None):
     return fig
 
 
-def plot_full_testset_performance_pred(test_kl, test_wass, test_wass_un, saveas=None):
+def plot_full_testset_performance_pred(test_kl, test_wass, test_mass_diff, saveas=None):
     # Plot
     fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(34, 8), layout="constrained")
     # ---
@@ -510,6 +510,7 @@ def plot_full_testset_performance_pred(test_kl, test_wass, test_wass_un, saveas=
         label=f"log10(KL Divergence) (Mean={np.mean(np.log10(test_kl)):.2f})",
         extend="both",
     )
+    print(f"KL Divergence (Mean={np.mean(test_kl):.2e})")
     ax.set_ylabel(f"Time")
     # ---
     ax = axes[1]
@@ -521,18 +522,20 @@ def plot_full_testset_performance_pred(test_kl, test_wass, test_wass_un, saveas=
         label=f"Wasserstein Distance (Mean={np.mean(test_wass):.2e})",
         extend="both",
     )
+    print(f"Wasserstein Distance (Mean={np.mean(test_wass):.2e})")
     ax.set_xlabel(f"Test Member")
     ax.set_ylabel(f"Time")
     # ---
     ax = axes[2]
-    wsm = ax.matshow(test_wass_un.T, vmin=0.0005, vmax=0.008)
+    wsm = ax.matshow(test_mass_diff.T, vmin=-0.02, vmax=0.02)
     fig.colorbar(
         wsm,
         ax=ax,
         location="top",
-        label=f"Unnormalized Wasserstein Distance (Mean={np.mean(test_wass_un):.2e})",
+        label=f"Total Mass Difference (MAE={np.mean(np.abs(test_mass_diff)):.2e})",
         extend="both",
     )
+    print(f"Total Mass Difference (MAE={np.mean(np.abs(test_mass_diff)):.2e})")
     ax.set_xlabel(f"Test Member")
     ax.set_ylabel(f"Time")
 

@@ -1,244 +1,165 @@
-import copy
+import json
 import os
 import sys
-import time
-
-import pysindy as ps
+from pathlib import Path
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
-import pickle as pkl
-import uuid
-
 import numpy as np
 import torch
-import xarray as xr
 from src import data_utils as du
-from src import models, plotting, training
+from src import models, plotting, training, diagnostics
 from torch.utils.data import DataLoader
 
-from train_ae_ar import AEAutoregressor, train_model
+from train_ae_ar import AEAutoregressor
+from train_ae_NNdzdt import AENNdzdt
+from train_ae_sindy import AESINDy
 
-load_params = {
-    "data_src": "box",
-    "random_seed": 10,
-    "num_epochs": 30,
-    "batch_size": 128,
-    "learning_rate": 1e-3,
-    "latent_dim": 3,
-    "n_lag": 1,
-    "w_recon": 1,
-    "w_dx": 1,
-    "w_dz": 1,
-    "lr_sched": True,
-    "patience": 50,
-    "tol": 1e-8,
-    "wd": 1e-3,
-    "layer_size": (20, 20, 10),
-    "CNN": False,
-    "print_frequency": 1,
-    "id": "f1b52d06fe99407ba234710eb604a61d",
+MODEL_DIRS = {
+    "AR": "../results/Optuna/ERF Dataset/AE-AR_2025-07-20T22:45:33_605d8b8697694137a65cab3b1012fffc/erf_FFNN_latent3_order(63, 98, 30)_tr1000_lr0.002482884780966882_bs4_weights0.22816989332325596-0.6719555656053005_7c43ff3e659b47358fa327f690871ed7",
+    "SINDy": "../results/Optuna/ERF Dataset/AE-SINDy_LimParams/erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc",
+    "NNdzdt": "../results/Optuna/ERF Dataset/NNdzdt_2025-07-20T23:31:20_3a400c596947422389559813cd41dfe6/erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3",
 }
-output_directory = "../trained_models/ae_ar_normed"
-test_ids = [0, 10, 20, 30]
-tplt = [0, 30, -1]
-# tplt = [0, 2, 5, 8, -1]
-if load_params["CNN"]:
-    prefix = "CNN"
-else:
-    prefix = "FFNN"
-
-case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}_{}".format(
-    load_params["latent_dim"],
-    load_params["layer_size"],
-    load_params["num_epochs"],
-    load_params["learning_rate"],
-    load_params["batch_size"],
-    load_params["w_dx"],
-    load_params["w_dz"],
-    load_params["id"],
-)
-print("Loading " + output_directory + "/" + case_name)
+DATA_DIRS = {
+    "val": "../data/congestus_coal_200m_test.nc",
+    "9600": "../data/erf_data/congestus/noadv_coal_200m_9600.nc",
+    "14400": "../data/erf_data/congestus/noadv_coal_200m_14400.nc",
+    "RICO": "../data/erf_data/RICO/noadv_coal_200m.nc",
+    "train": "../data/congestus_coal_200m_train.nc",
+}
+TEST_SIZES = {
+    "val": 0.99,
+    "9600": 0.2,
+    "14400": 0.02,
+    "RICO": 0.1,
+    "train": 0.01,
+}
 
 
-params = load_params.copy()
-params["data_src"] = "erf"
-# params["lr_sched"] = False
-params["batch_size"] = 128
-# params["wd"] = 0.0
-params["learning_rate"] = 1e-3
-# params["w_dx"] = 0
-# params["w_recon"] = 0
-params["num_epochs"] = 50
-if params["data_src"] == "box":
-    (
-        x_train,
-        m_train,
-        x_test,
-        m_test,
-        r_bins_edges,
-        n_bins,
-        dsd_time,
-    ) = du.open_box_dataset()
-elif params["data_src"] == "erf":
-    (
-        x_train,
-        m_train,
-        x_test,
-        m_test,
-        r_bins_edges,
-        n_bins,
-        dsd_time,
-    ) = du.open_erf_dataset()
-    x_test = x_test[:, :, :-1]
-    x_train = x_train[:, :, :-1]
-    r_bins_edges = r_bins_edges[:-1]
-    n_bins = n_bins - 1
+def load_best_params(model_type):
+    load_dir = MODEL_DIRS[model_type]
+    with open(os.path.join(load_dir, "../best_params.json")) as f:
+        best_params = json.load(f)
+    params = best_params["params"]
+    return params
 
-train_data = du.NormedBinDatasetAR(x_train, m_train, lag=params["n_lag"])
-train_loader = torch.utils.data.DataLoader(
-    train_data, batch_size=params["batch_size"], shuffle=True
-)
-test_data = du.NormedBinDatasetAR(x_test, m_test, lag=params["n_lag"])
-test_loader = torch.utils.data.DataLoader(
-    test_data, batch_size=len(test_data), shuffle=True
-)
 
-#
-model = AEAutoregressor(
-    n_channels=1,
-    n_bins=n_bins,
-    n_latent=params["latent_dim"],
-    n_lag=params["n_lag"],
-    CNN=params["CNN"],
-)
-model.load_state_dict(torch.load(output_directory + "/model/" + case_name + ".pth"))
-#
-# plotting.plot_reconstructions(
-#         model,
-#         test_ids,
-#         x_test,
-#         r_bins_edges,
-#         #saveas=output_directory + "/plots/" + case_name + "_reconstructions_erf.png",
-#     )
-#
-# plotting.plot_predictions_AE_AR(
-#         model,
-#         test_ids,
-#         dsd_time,
-#         tplt,
-#         x_test,
-#         m_test,
-#         r_bins_edges,
-#         #saveas=output_directory + "/plots/" + case_name + "_predictions_erf.png",
-#     )
-#
-# plotting.plot_latent_trajectories_AR(
-#         params["latent_dim"],
-#         model,
-#         dsd_time,
-#         x_test,
-#         m_test,
-#         # saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
-#     )
-#
-# plotting.viz_3d_latent_space(
-#     model,
-#     x_test,
-#     dsd_time,
-#     output_directory + "/plots/",
-#     case_name + "_erfeval",
-# )
+def get_model(model_type, n_bins=64):
+    params = load_best_params(model_type)
+    if model_type == "AR":
+        model = AEAutoregressor(
+            n_channels=1,
+            n_bins=n_bins,
+            n_latent=3,
+            n_lag=1,
+            layer_size=(
+                params["layer1_size"],
+                params["layer2_size"],
+                params["layer3_size"],
+            ),
+            CNN=False,
+        )
+    elif model_type == "SINDy":
+        model = AESINDy(
+            n_channels=1,
+            n_bins=n_bins,
+            n_latent=3,
+            poly_order=2,
+            CNN=False,
+            sequential_thresholding=False,
+        )
+    elif model_type == "NNdzdt":
+        model = AENNdzdt(
+            n_channels=1,
+            n_bins=n_bins,
+            n_latent=3,
+            layer_size=(
+                params["layer1_size"],
+                params["layer2_size"],
+                params["layer3_size"],
+            ),
+            CNN=False,
+        )
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+    return model
 
-# model.autoregressor = models.Autoregressive(
-#             n_bins=params["latent_dim"] + 1,
-#             n_bins_in=params["latent_dim"] * params["n_lag"] + 1,
-#             layer_size=params["layer_size"],
-#         )
 
-# refit AR portion of model
-divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
-criterion = torch.nn.MSELoss()
-# optimizer = torch.optim.AdamW(
-#     model.autoregressor.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
-# )
-optimizer = torch.optim.AdamW(
-    model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
-)
-sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-early_stopping = training.EarlyStopping(patience=params["patience"])
+if __name__ == "__main__":
+    model_type = "SINDy"  # AR, NNdzdt, SINDy
+    which_data = "9600"  # "val", "9600", "14400", "RICO"
+    for model_type in ["SINDy", "NNdzdt"]:
+        for which_data in ["val", "9600", "14400", "RICO"]:
+            print(f"Loading {model_type} model...")
 
-total_params = sum(p.numel() for p in model.parameters())
-ar_params = sum(p.numel() for p in model.autoregressor.parameters())
-print(f"Retraining {ar_params} of {total_params} parameters")
+            # load model & params
+            model = get_model(model_type, n_bins=64)
+            model_dir = Path(MODEL_DIRS[model_type])
+            model_files = list(model_dir.glob(f"*.pth"))
+            if not model_files:
+                raise FileNotFoundError(
+                    f"No model files found in {MODEL_DIRS[model_type]}"
+                )
+            model.load_state_dict(torch.load(model_files[0], weights_only=True))
+            model.eval()
 
-best_model, (
-    losses,
-    recon_losses,
-    dx_losses,
-    dz_losses,
-    test_losses,
-    test_recon_losses,
-    test_dx_losses,
-    test_dz_losses,
-) = train_model(
-    params,
-    model,
-    train_loader,
-    test_loader,
-    divergence,
-    criterion,
-    optimizer,
-    early_stopping,
-    sched,
-)
+            # load data
+            print(f"Evaluating {which_data} data...")
+            train_data = du.open_mass_dataset(
+                "_",
+                "_",
+                filepath=DATA_DIRS["train"],
+                test_size=TEST_SIZES["train"],
+                sample_time=np.arange(0, 61, 5),
+            )
+            data_pth = DATA_DIRS[which_data]
+            data = du.open_mass_dataset(
+                "_",
+                "_",
+                filepath=data_pth,
+                test_size=TEST_SIZES[which_data],
+                sample_time=np.arange(0, 61, 5),
+                m_scale=train_data["m_scale"],
+            )
+            x_test = data["x_test"]
+            m_test = data["m_test"]
+            x_train = train_data["x_train"]
+            m_train = train_data["m_train"]
+            r_bins_edges = data["r_bins_edges"]
+            dsd_time = data["dsd_time"]
 
-plotting.plot_losses(
-    losses,
-    test_losses=test_losses,
-    sub_losses=[
-        params["w_dx"] * dx_losses,
-        params["w_dz"] * dz_losses,
-        params["w_recon"] * recon_losses,
-    ],
-    labels=["X: t -> t+1", "Z: t -> t+1", "Recon"],
-    title=f"Training Loss, lag {params['n_lag']}",
-    # saveas=output_directory + "/plots/" + case_name + "_losses.png",
-)
+            # Tests
+            if model_type == "AR":
+                z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_AR(
+                    3, model, dsd_time, x_test, m_test
+                )
+            else:
+                z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_dzdt(
+                    3,
+                    model,
+                    dsd_time,
+                    x_test,
+                    m_test,
+                    x_train,
+                    m_train,
+                )
+            (
+                test_kl,
+                test_wass,
+                test_wun,
+                test_mass_diff,
+            ) = diagnostics.get_performance_metrics(x_test, m_test, z_pred, x_pred)
 
-plotting.plot_reconstructions(
-    model,
-    test_ids,
-    x_test,
-    r_bins_edges,
-    # saveas=output_directory + "/plots/" + case_name + "_reconstructions_erf.png",
-)
+            # plot full testset performance
+            fig = plotting.plot_full_testset_performance_pred(
+                test_kl, test_wass, test_mass_diff
+            )
+            fig.show()
 
-plotting.plot_predictions_AE_AR(
-    best_model,
-    test_ids,
-    dsd_time,
-    tplt,
-    x_test,
-    m_test,
-    r_bins_edges,
-    # saveas=output_directory + "/plots/" + case_name + "_predictions.png",
-)
-# Plot trajectories of the latent variables
-plotting.plot_latent_trajectories_AR(
-    params["latent_dim"],
-    best_model,
-    dsd_time,
-    x_test,
-    m_test,
-    # saveas=output_directory + "/plots/" + case_name + "_trajectories.png",
-)
-
-plotting.viz_3d_latent_space(
-    model,
-    x_test,
-    dsd_time,
-    output_directory + "/plots/",
-    case_name + "_erf-retrain",
-)
+            # Plot quantiles from test set
+            tplt = [0, 5, -1]
+            fig = plotting.plot_testset_quantiles_pred(
+                x_test, x_pred, test_wass, tplt, dsd_time, r_bins_edges
+            )
+            fig.show()

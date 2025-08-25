@@ -8,6 +8,7 @@ import xarray as xr
 from scipy.integrate import odeint, solve_ivp
 from scipy.special import binom
 from torch.utils.data import DataLoader, Dataset
+from sklearn.model_selection import train_test_split
 
 
 def open_box_dataset():
@@ -61,6 +62,352 @@ def open_erf_dataset(path=None, sample_time=None):
     m_test = (m_test / m_scale).to_numpy()
 
     return (x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time)
+
+
+# define code for taking xarray Dataset and doing train-test split on it
+
+
+def split_by_index(ds: xr.Dataset, dim: str, test_size: float, random_state: int = 0):
+    """
+    Splits a Dataset along one integer dimension into train/test.
+    Returns (ds_train, idx_train, ds_test, idx_test).
+    """
+    idx = np.arange(ds.sizes[dim])
+    train_idx, test_idx = train_test_split(
+        idx, test_size=test_size, random_state=random_state
+    )
+    return ds.isel({dim: train_idx}), train_idx, ds.isel({dim: test_idx}), test_idx
+
+
+def prepare(ds_sub: xr.Dataset, m_scale: float):
+    """
+    From a dataset returns (x, m) arrays:
+        x[loc, t, bin] = normalized DSD across bins
+        m[loc, t]      = mass fraction / m_scale
+    """
+    dmdlnr = ds_sub["dmdlnr"]
+    # sum over bin → shape (t, loc); then transpose → (loc, t)
+    m = dmdlnr.sum(dim="bin").transpose("loc", "t")
+    # x has shape (loc, t, bin)
+    x = (dmdlnr / m).transpose("loc", "t", "bin")
+    return x.to_numpy(), (m / m_scale).to_numpy()
+
+
+"""
+Opens any dataset (e.g., RICO or Congestus) and does a specified train(-calibrate-)test split.
+output depends on if a calibration set is specified or not
+"""
+
+
+def open_mass_dataset(
+    name,
+    data_dir,
+    filepath=None,
+    sample_time=None,
+    test_size=0.2,
+    calib_size=None,
+    random_state=1952,
+    m_scale=None,
+):
+    """
+    Opens a *.nc named name under data_dir, splits into train/test(/calib),
+    normalizes dmdlnr to get DSD and returns numpy arrays.
+    """
+    # 1) load
+    if filepath is None:
+        filepath = (data_dir / name).with_suffix(".nc")
+    ds = xr.open_dataset(filepath)
+
+    # 2) optional subsample in time
+    if sample_time is not None:
+        ds = ds.isel(t=sample_time)
+
+    # 3) train/test split on 'loc'
+    ds_train, idx_train, ds_test, idx_test = split_by_index(
+        ds, dim="loc", test_size=test_size, random_state=random_state
+    )
+
+    # 4) calibration split from ds_train if requested
+    ds_calib = None
+    if calib_size is not None:
+        # convert calib_size relative to the full dataset → relative to train only
+        calib_size = calib_size / (1 - test_size)
+        ds_train, idx_train, ds_calib, idx_calib = split_by_index(
+            ds_train, dim="loc", test_size=calib_size, random_state=random_state
+        )
+
+    # 5) compute global m_scale from full ds_train (before calib‐split)
+    if m_scale is None:
+        ds_for_scale = (
+            ds_train if ds_calib is None else xr.concat([ds_train, ds_calib], dim="loc")
+        )
+        m_scale = (
+            ds_for_scale["dmdlnr"]
+            .sum(dim="bin")
+            .transpose("loc", "t")
+            .max()
+            .item()  # scalar
+        )
+
+    x_train, m_train = prepare(ds_train, m_scale)
+    x_test, m_test = prepare(ds_test, m_scale)
+
+    # gather outputs
+    outputs = {
+        "x_train": x_train,
+        "m_train": m_train,
+        "idx_train": idx_train,
+        "x_test": x_test,
+        "m_test": m_test,
+        "idx_test": idx_test,
+        "r_bins_edges": ds["rbin_l"].to_numpy(),
+        "n_bins": x_train.shape[-1],
+        "dsd_time": ds["t"].to_numpy() - ds["t"].to_numpy()[0],
+        "m_scale": m_scale,
+    }
+
+    if ds_calib is not None:
+        x_calib, m_calib = prepare(ds_calib, m_scale)
+        outputs.update({"x_calib": x_calib, "m_calib": m_calib, "idx_calib": idx_calib})
+
+    return outputs
+
+
+# use open_mass_dataset to define congestus and RICO data loaders
+
+
+def open_congestus_dataset(
+    sample_time=None,
+    test_size=0.2,
+    calib_size=None,
+    random_state=1952,
+    data_dir=Path(__file__).parent.parent / "data",
+):
+    return open_mass_dataset(
+        name="congestus_coal_200m",
+        data_dir=data_dir,
+        sample_time=sample_time,
+        test_size=test_size,
+        calib_size=calib_size,
+        random_state=random_state,
+    )
+
+
+def open_rico_dataset(
+    sample_time=None,
+    test_size=0.2,
+    calib_size=None,
+    random_state=1952,
+    data_dir=Path(__file__).parent.parent / "data",
+):
+    return open_mass_dataset(
+        name="rico_coal_200m",
+        data_dir=data_dir,
+        sample_time=sample_time,
+        test_size=test_size,
+        calib_size=calib_size,
+        random_state=random_state,
+    )
+
+
+# Train and calibrate on congestus, test on RICO
+def open_congestus_calib_train_rico_test(
+    calib_size=0.3,
+    sample_time=None,
+    random_state=1952,
+    data_dir=Path(__file__).parent.parent / "data",
+):
+    """
+    1) Loads congestus_coal_200m.nc and splits *all* of it into train/calib
+       according to calib_size.
+    2) Loads rico_coal_200m.nc in full as the sacred test set.
+    3) Computes m_scale from the entire congestus dataset (train+calib).
+    4) Returns dict of numpy arrays:
+       x_train, m_train, x_calib, m_calib, x_test, m_test, r_bins, n_bins, dsd_time
+    """
+    # --- 1) load both datasets
+    cong_path = (data_dir / "congestus_coal_200m").with_suffix(".nc")
+    rico_path = (data_dir / "rico_coal_200m").with_suffix(".nc")
+
+    ds_cong = xr.open_dataset(cong_path)
+    ds_rico = xr.open_dataset(rico_path)
+
+    # --- 2) optional time‐subsample
+    if sample_time is not None:
+        ds_cong = ds_cong.isel(t=sample_time)
+        ds_rico = ds_rico.isel(t=sample_time)
+    else:
+        # default: keep all congestus timesteps, trim rico to match
+        nt_cong = ds_cong.sizes["t"]
+        ds_rico = ds_rico.isel(t=slice(0, nt_cong))
+
+    # --- 3) split congestus into train/calib
+    ds_train, idx_train, ds_calib, idx_calib = split_by_index(
+        ds_cong, dim="loc", test_size=calib_size, random_state=random_state
+    )
+
+    # --- 4) test set is the *entire* rico dataset
+    ds_test = ds_rico
+
+    # --- 5) compute global m_scale from congestus only
+    m_scale = ds_cong["dmdlnr"].sum(dim="bin").transpose("loc", "t").max().item()
+
+    # --- 6) prepare arrays
+    x_train, m_train = prepare(ds_train, m_scale)
+    x_calib, m_calib = prepare(ds_calib, m_scale)
+    x_test, m_test = prepare(ds_test, m_scale)
+
+    # --- 7) other metadata
+    r_bins = ds_cong["rbin_l"].to_numpy()
+    n_bins = x_train.shape[-1]
+    dsd_time = ds_cong["t"].to_numpy() - ds_cong["t"].to_numpy()[0]
+
+    return {
+        "x_train": x_train,
+        "m_train": m_train,
+        "idx_train": idx_train,
+        "x_calib": x_calib,
+        "m_calib": m_calib,
+        "idx_calib": idx_calib,
+        "x_test": x_test,
+        "m_test": m_test,
+        "idx_test": idx_test,
+        "r_bins_edges": r_bins,
+        "n_bins": n_bins,
+        "dsd_time": dsd_time,
+    }
+
+
+# Train on congestus, calibrate and test on RICO
+def open_congestus_train_rico_calib_test(
+    test_size=0.3,
+    sample_time=None,
+    random_state=1952,
+    data_dir=Path(__file__).parent.parent / "data",
+):
+    """
+    1) Loads congestus_coal_200m.nc as the *entire* training set.
+    2) Loads rico_coal_200m.nc and splits it into calib/test by test_size.
+    3) Computes m_scale from (congestus + rico_calib).
+    4) Returns dict of numpy arrays:
+       x_train, m_train, x_calib, m_calib, x_test, m_test, r_bins, n_bins, dsd_time
+    """
+    cong_path = (data_dir / "congestus_coal_200m").with_suffix(".nc")
+    rico_path = (data_dir / "rico_coal_200m").with_suffix(".nc")
+
+    ds_cong = xr.open_dataset(cong_path)
+    ds_rico = xr.open_dataset(rico_path)
+
+    if sample_time is not None:
+        ds_cong = ds_cong.isel(t=sample_time)
+        ds_rico = ds_rico.isel(t=sample_time)
+    else:
+        nt_cong = ds_cong.sizes["t"]
+        ds_rico = ds_rico.isel(t=slice(0, nt_cong))
+
+    # train = all congestus
+    ds_train = ds_cong
+
+    # split rico into calib / test
+    rico_calib, idx_calib, rico_test, idx_test = split_by_index(
+        ds_rico, dim="loc", test_size=test_size, random_state=random_state
+    )
+    ds_calib = rico_calib
+    ds_test = rico_test
+
+    # m_scale from everything except the sacred test set
+    ds_for_scale = xr.concat([ds_train, ds_calib], dim="loc")
+    m_scale = ds_for_scale["dmdlnr"].sum(dim="bin").transpose("loc", "t").max().item()
+
+    x_train, m_train = prepare(ds_train, m_scale)
+    x_calib, m_calib = prepare(ds_calib, m_scale)
+    x_test, m_test = prepare(ds_test, m_scale)
+
+    r_bins = ds_cong["rbin_l"].to_numpy()
+    n_bins = x_train.shape[-1]
+    dsd_time = ds_cong["t"].to_numpy() - ds_cong["t"].to_numpy()[0]
+
+    return {
+        "x_train": x_train,
+        "m_train": m_train,
+        "idx_train": idx_train,
+        "x_calib": x_calib,
+        "m_calib": m_calib,
+        "idx_calib": idx_calib,
+        "x_test": x_test,
+        "m_test": m_test,
+        "idx_test": idx_test,
+        "r_bins_edges": r_bins,
+        "n_bins": n_bins,
+        "dsd_time": dsd_time,
+    }
+
+
+def open_congestus_train_rico_test(
+    sample_time=None, random_state=1952, data_dir=Path(__file__).parent.parent / "data"
+):
+    """
+    1) Load all congestus_coal_200m.nc (61 timesteps).
+    2) Load all rico_coal_200m.nc (101 timesteps).
+    3) If sample_time is provided, apply to both. Otherwise trim RICO
+       to the first nt_cong timesteps (default nt_cong=61).
+    4) Compute m_scale from congestus only.
+    5) Prepare and return numpy arrays:
+       x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time
+    """
+    cong_path = (data_dir / "congestus_coal_200m").with_suffix(".nc")
+    rico_path = (data_dir / "rico_coal_200m").with_suffix(".nc")
+
+    ds_cong = xr.open_dataset(cong_path)
+    ds_rico = xr.open_dataset(rico_path)
+
+    # --- time alignment ---
+    if sample_time is not None:
+        ds_cong = ds_cong.isel(t=sample_time)
+        ds_rico = ds_rico.isel(t=sample_time)
+    else:
+        # trim rico to first nt_cong timesteps
+        nt_cong = ds_cong.sizes["t"]
+        ds_rico = ds_rico.isel(t=slice(0, nt_cong))
+
+    # --- define train/test sets ---
+    ds_train = ds_cong
+    ds_test = ds_rico
+
+    # --- compute normalization scale from congestus only ---
+    m_scale = ds_train["dmdlnr"].sum(dim="bin").transpose("loc", "t").max().item()
+
+    # --- prepare numpy arrays ---
+    x_train, m_train = prepare(ds_train, m_scale)
+    x_test, m_test = prepare(ds_test, m_scale)
+
+    # --- metadata ---
+    r_bins_edges = ds_cong["rbin_l"].to_numpy()
+    n_bins = x_train.shape[-1]
+    # relative time axis (seconds or minutes as in the file)
+    dsd_time = ds_cong["t"].to_numpy() - ds_cong["t"].to_numpy()[0]
+
+    return {
+        "x_train": x_train,  # shape: (n_train_loc, nt, n_bins)
+        "m_train": m_train,  # shape: (n_train_loc, nt)
+        "idx_train": idx_train,
+        "x_test": x_test,  # shape: (n_test_loc,  nt, n_bins)
+        "m_test": m_test,  # shape: (n_test_loc,  nt)
+        "idx_test": idx_test,
+        "r_bins_edges": r_bins_edges,  # 1D array, length = n_bins+1 or n_bins
+        "n_bins": n_bins,
+        "dsd_time": dsd_time,  # 1D array, length = nt
+    }
+
+
+"""
+The following function generates indices for the bootstrap replicate of a provided training dataset.
+In other words, it resamples the sample indices with replacement.
+"""
+
+
+def resampled_indices(test_data):
+    return np.random.randint(0, len(test_data), size=len(test_data))
 
 
 # Create torch dataset
