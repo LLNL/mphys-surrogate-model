@@ -491,18 +491,30 @@ if subset == "latent":
     )  # Rows correspond to latent variables.
     for i, id in enumerate(ids_rel_to_test):
         for j in range(3):
-            ax[j][i].plot(outputs["dsd_time"], z_enc_test[id, :, j], label="Data")
             for k_alpha, alpha in zip(reversed(range(len(alphas))), reversed(alphas)):
                 ax[j][i].fill_between(
                     outputs["dsd_time"],
                     lower[k_alpha, id, :, j],
                     upper[k_alpha, id, :, j],
                     color=colors[k_alpha],
-                    alpha=0.3,
+                    alpha=0.8,
                     label=f"{100*(1-alpha)}% coverage",
                 )
             ax[j][i].plot(
-                outputs["dsd_time"], rep[id, :, j], label="Model"
+                outputs["dsd_time"],
+                z_enc_test[id, :, j],
+                label="Data",
+                color="black",
+                linestyle="solid",
+                linewidth=1.5,
+            )
+            ax[j][i].plot(
+                outputs["dsd_time"],
+                rep[id, :, j],
+                label="Model",
+                color="black",
+                linestyle="dashed",
+                linewidth=1.5,
             )  # representative band
         ax[0][i].set_title(f"Sample #{ids[i]}")
         ax[-1][i].set_xlabel("time [s]")
@@ -517,7 +529,6 @@ elif subset == "mass":
         sharey=True,
     )
     for i, id in enumerate(ids_rel_to_test):
-        ax[i].plot(outputs["dsd_time"], outputs["m_test"][id], label="Data")
         for k_alpha, alpha in enumerate(
             alphas
         ):  # ensure masses are always non-negative
@@ -526,15 +537,31 @@ elif subset == "mass":
                 np.maximum(0, lower[k_alpha, id]),
                 upper[k_alpha, id],
                 color=colors[k_alpha],
-                alpha=0.3,
+                alpha=0.8,
                 label=f"{100*(1-alpha)}% coverage",
             )
-        ax[i].plot(outputs["dsd_time"], rep[id], label="Model")  # representative band
+        ax[i].plot(
+            outputs["dsd_time"],
+            outputs["m_test"][id],
+            label="Data",
+            color="black",
+            linestyle="solid",
+            linewidth=1.5,
+        )
+        ax[i].plot(
+            outputs["dsd_time"],
+            rep[id],
+            label="Model",
+            color="black",
+            linestyle="dashed",
+            linewidth=1.5,
+        )  # representative band
         ax[i].set_title(f"Sample #{ids[i]}")
         ax[i].set_xlabel("time [s]")
     ax[0].set_ylabel("Normalized mass [-]")
     ax[-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 else:
+    bin_mids = 0.5 * (outputs["r_bins_edges"] + outputs["r_bins_edges_r"])
     (fig, ax) = plt.subplots(
         ncols=len(ids),
         nrows=len(tplt),
@@ -543,9 +570,6 @@ else:
     )
     for i, id in enumerate(ids_rel_to_test):
         for j, t in enumerate(tplt):
-            ax[j][i].step(
-                outputs["r_bins_edges"], outputs["x_test"][id, t], label="Data"
-            )
             for k_alpha, alpha in zip(reversed(range(len(alphas))), reversed(alphas)):
                 ax[j][i].fill_between(
                     outputs["r_bins_edges"],
@@ -553,11 +577,24 @@ else:
                     upper[k_alpha, id, t],
                     step="pre",
                     color=colors[k_alpha],
-                    alpha=0.3,
+                    alpha=0.8,
                     label=f"{100*(1-alpha)}% coverage",
                 )
-            ax[j][i].step(
-                outputs["r_bins_edges"], rep[id, t], label="Model"
+            ax[j][i].plot(
+                bin_mids,
+                outputs["x_test"][id, t],
+                label="Data",
+                color="black",
+                linestyle="solid",
+                linewidth=1.5,
+            )
+            ax[j][i].plot(
+                bin_mids,
+                rep[id, t],
+                label="Model",
+                color="black",
+                linestyle="dashed",
+                linewidth=1.5,
             )  # representative band
             ax[j][i].set_xscale("log")
         ax[0][i].set_title(f"Sample #{ids[i]}")
@@ -566,8 +603,8 @@ else:
         ax[j][i].set_ylim(0, 0.5)
     for j, t in enumerate(tplt):
         ax[j][0].set_ylabel(
-            rf'$\frac{{dm}}{{d\ln r}}$ at t={outputs["dsd_time"][t]} s'
-            "\n[kg liquid/kg air]"
+            rf"Normalized $\frac{{dm}}{{d\ln r}}$ [-] at"
+            f'\n t={outputs["dsd_time"][t]} s [kg liquid/kg air]'
         )
     ax[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 if args.title == "y":
@@ -575,6 +612,7 @@ if args.title == "y":
         f"AE-{args.model} conformal predictions, {method}, {subset} network",
         fontsize=14,
     )
+fig.subplots_adjust(hspace=0.7)
 fig.savefig(
     os.path.join(
         parent_directory,
