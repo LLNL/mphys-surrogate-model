@@ -88,7 +88,7 @@ def get_model(model_type, n_bins=64):
 
 if __name__ == "__main__":
     model_type = "SINDy"  # AR, NNdzdt, SINDy
-    which_data = "9600"  # "val", "9600", "14400", "RICO"
+    which_data = "val"  # "val", "9600", "14400", "RICO"
     for model_type in ["SINDy", "NNdzdt"]:
         for which_data in ["val", "9600", "14400", "RICO"]:
             print(f"Loading {model_type} model...")
