@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, Dataset
 
 def open_box_dataset():
     # Set path
-    dpath = Path(__file__).parent.parent / "data"
+    dpath = Path(__file__).parent.parent / "data" / "pysdm"
 
     # Train dataset
     ds_all = xr.open_dataset(dpath / "box64_train.nc", decode_timedelta=True)
