@@ -199,7 +199,14 @@ def plot_single_prediction_AE_AR(
     return fig
 
 
-def plot_latent_trajectories(n_latent, dsd_time, z_pred, z_data, saveas=None):
+def plot_latent_trajectories(
+    n_latent,
+    dsd_time,
+    z_pred,
+    z_data,
+    saveas=None,
+    n_samples=None,
+):
     # Set up figure
     (fig, ax) = plt.subplots(
         nrows=2,
@@ -211,7 +218,10 @@ def plot_latent_trajectories(n_latent, dsd_time, z_pred, z_data, saveas=None):
     )
     colors = ["blue", "orange", "green", "pink", "purple", "gray"]
 
-    for j in range(z_pred.shape[0]):
+    if n_samples is None:
+        n_samples = z_pred.shape[0]
+
+    for j in range(n_samples):
         for i in range(n_latent + 1):
             if i < n_latent:
                 labeli = f"z{i}"
@@ -224,7 +234,7 @@ def plot_latent_trajectories(n_latent, dsd_time, z_pred, z_data, saveas=None):
                 z_data[j, :, i],
                 label=labeli,
                 color=color,
-                alpha=min(1, 150 / z_pred.shape[0]),
+                alpha=min(1, 150 / n_samples),
                 lw=0.5,
             )
             ax[1][i].plot(
@@ -232,10 +242,18 @@ def plot_latent_trajectories(n_latent, dsd_time, z_pred, z_data, saveas=None):
                 z_pred[j, :, i],
                 label=labeli,
                 color=color,
-                alpha=min(1, 150 / z_pred.shape[0]),
+                alpha=min(1, 150 / n_samples),
                 lw=0.5,
             )
-            ax[0][i].set_xlabel("Elapsed time")
+            # ax[0][i].plot(
+            #         dsd_time,
+            #         z_pred[j, :, i],
+            #         label=labeli,
+            #         color=colors[i+1],
+            #         alpha=min(1, 150 / z_pred.shape[0]),
+            #         lw=0.5,
+            #     )
+            ax[-1][i].set_xlabel("Elapsed time (s)")
 
     # Accoutrements
     for i in range(n_latent):
@@ -245,6 +263,7 @@ def plot_latent_trajectories(n_latent, dsd_time, z_pred, z_data, saveas=None):
     ax[0][0].set_ylabel("Data")
     ax[1][0].set_ylabel("Model")
     fig.suptitle(f"Test set predicted Z(t)")
+    plt.tight_layout()
 
     # Optional save
     if saveas is not None:
@@ -497,9 +516,18 @@ def plot_full_testset_performance_recon(model, x_test, tol, saveas=None):
     return fig
 
 
-def plot_full_testset_performance_pred(test_kl, test_wass, test_wass_un, saveas=None):
+def plot_full_testset_performance_pred(
+    test_kl, test_wass, test_mass_diff, saveas=None, figsize=None
+):
     # Plot
-    fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(34, 8), layout="constrained")
+    if figsize is None:
+        fig, axes = plt.subplots(
+            nrows=3, ncols=1, figsize=(34, 8), layout="constrained"
+        )
+    else:
+        fig, axes = plt.subplots(
+            nrows=3, ncols=1, figsize=figsize, layout="constrained"
+        )
     # ---
     ax = axes[0]
     klm = ax.matshow(np.log10(test_kl.T), vmin=-5, vmax=-2)
@@ -510,6 +538,7 @@ def plot_full_testset_performance_pred(test_kl, test_wass, test_wass_un, saveas=
         label=f"log10(KL Divergence) (Mean={np.mean(np.log10(test_kl)):.2f})",
         extend="both",
     )
+    print(f"KL Divergence (Mean={np.mean(test_kl):.2e})")
     ax.set_ylabel(f"Time")
     # ---
     ax = axes[1]
@@ -521,18 +550,20 @@ def plot_full_testset_performance_pred(test_kl, test_wass, test_wass_un, saveas=
         label=f"Wasserstein Distance (Mean={np.mean(test_wass):.2e})",
         extend="both",
     )
+    print(f"Wasserstein Distance (Mean={np.mean(test_wass):.2e})")
     ax.set_xlabel(f"Test Member")
     ax.set_ylabel(f"Time")
     # ---
     ax = axes[2]
-    wsm = ax.matshow(test_wass_un.T, vmin=0.0005, vmax=0.008)
+    wsm = ax.matshow(test_mass_diff.T, vmin=-0.05, vmax=0.05)
     fig.colorbar(
         wsm,
         ax=ax,
         location="top",
-        label=f"Unnormalized Wasserstein Distance (Mean={np.mean(test_wass_un):.2e})",
+        label=f"Total Mass Difference (MAE={np.mean(np.abs(test_mass_diff)):.2e})",
         extend="both",
     )
+    print(f"Total Mass Difference (MAE={np.mean(np.abs(test_mass_diff)):.2e})")
     ax.set_xlabel(f"Test Member")
     ax.set_ylabel(f"Time")
 
@@ -559,6 +590,7 @@ def plot_testset_quantiles_pred(
     tm_argsort = np.argsort(-test_metric_timemean)
     qtile_idx = (np.array(qtiles) * n_test).astype(int)
     qtile_mems = tm_argsort[qtile_idx]
+    print(qtile_mems)
 
     # Set up figure
     (fig, ax) = plt.subplots(

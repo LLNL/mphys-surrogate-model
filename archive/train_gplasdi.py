@@ -7,8 +7,7 @@ import xarray as xr
 from lasdi.gp import eval_gp, fit_gps
 from lasdi.gplasdi import average_rom, sample_roms
 from lasdi.latent_dynamics.sindy import SINDy
-from lasdi.latent_dynamics.wsindy import \
-    wSINDy  # only if you are on wSINDy branch
+from lasdi.latent_dynamics.wsindy import wSINDy  # only if you are on wSINDy branch
 from lasdi.latent_space import Autoencoder
 from lasdi.physics import Physics
 from src import models, plotting
