@@ -181,9 +181,7 @@ def train_and_eval(
 
             # Calculate test loss
             loss_dz = criterion(pred_dz, dz)
-            loss_dx = criterion(
-                pred_dx, batch_dx
-            )  # TODO: Why does ae-ar have divergence here but this has criterion?. Check train loss too
+            loss_dx = criterion(pred_dx, batch_dx)
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
                 torch.log(batch_x + parameters["tol"]),
@@ -269,7 +267,6 @@ if __name__ == "__main__":
     # torch.backends.cudnn.benchmark = True
     print(f"Using {device} device")
 
-    start_time = time.time()
     # Open dataset
     if params["data_src"] == "box":
         (
@@ -319,7 +316,7 @@ if __name__ == "__main__":
     print(f"Total number of parameters: {total_params}")
 
     # Compute & set weights based on Champion et al recs
-    lambda1, lambda2, lambda3 = du.champion_calculate_weights(
+    lambda1, lambda2, _ = du.champion_calculate_weights(
         train_data, lambda1_metaweight=0.5353139650038768
     )
     print(f"lambda: 1.0, {lambda1}, {lambda2}")

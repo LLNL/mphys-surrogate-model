@@ -303,7 +303,6 @@ if __name__ == "__main__":
     # torch.backends.cudnn.benchmark = True
     print(f"Using {device} device")
 
-    start_time = time.time()
     # Open dataset
     if params["data_src"] == "box":
         (

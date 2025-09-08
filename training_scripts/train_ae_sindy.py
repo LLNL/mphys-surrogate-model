@@ -192,9 +192,6 @@ def train_and_eval(
                     f"active coefficients={n_active} / {total_coeffs}"
                 )
             threshold_events.append(epoch)
-            coeffs = (
-                model.dzdt.get_coeffs()
-            )  # TODO: This var doesn't do anything, delete?
 
         # Save train losses
         losses[epoch] = mean_epoch_loss[0] / len(train_loader)
@@ -219,9 +216,7 @@ def train_and_eval(
 
             # Calculate test loss
             loss_dz = criterion(pred_dz, dz)
-            loss_dx = criterion(
-                pred_dx, batch_dx
-            )  # TODO: Same as ae-nn, do we want divergence here?
+            loss_dx = criterion(pred_dx, batch_dx)
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
                 torch.log(batch_x + parameters["tol"]),
@@ -307,7 +302,6 @@ if __name__ == "__main__":
     # torch.backends.cudnn.benchmark = True
     print(f"Using {device} device")
 
-    start_time = time.time()
     # Open dataset
     if params["data_src"] == "box":
         (
@@ -371,7 +365,7 @@ if __name__ == "__main__":
     )
 
     # Compute & set weights based on Champion et al recs
-    lambda1, lambda2, lambda3 = du.champion_calculate_weights(
+    lambda1, lambda2, _ = du.champion_calculate_weights(
         train_data, lambda1_metaweight=params["lambda1_metaweight"]
     )
     print(f"lambda: 1.0, {lambda1}, {lambda2}")
