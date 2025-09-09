@@ -356,7 +356,7 @@ if __name__ == "__main__":
             ),
         )
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-    early_stopping = training.EarlyStopping(patience=params["patience"])
+    early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
 
     total_params = sum(p.numel() for p in model.parameters())
     total_coeffs = sum(p.numel() for p in model.dzdt.parameters())
