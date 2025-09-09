@@ -16,7 +16,7 @@ import uuid
 import numpy as np
 import torch
 from src import data_utils as du
-from src import diagnostics, models, plotting, thresholding, training
+from src import diagnostics, models, plotting, training
 from torch.utils.data import DataLoader
 
 params = {
@@ -33,8 +33,6 @@ params = {
     "wd": 1e-3,
     "lambda1_metaweight": 0.500989969537634,
     "CNN": False,
-    "sequential_threshold_method": None,  # None, bimodal_gmm, knee_detection
-    "sequential_thresholding_interval": None,  # None
     "print_frequency": 1,
     "emily_save": True,
     "nipun_save": True,
@@ -61,7 +59,6 @@ class AESINDy(torch.nn.Module):
         n_latent=10,
         poly_order=2,
         CNN=False,
-        sequential_thresholding=False,
     ):
         super(AESINDy, self).__init__()
         self.poly_order = poly_order
@@ -86,7 +83,7 @@ class AESINDy(torch.nn.Module):
         self.dzdt = models.SINDyDeriv(
             n_latent=n_latent + 1,
             poly_order=poly_order,
-            use_thresholds=sequential_thresholding,
+            use_thresholds=False,
         )
 
     def forward(self, bin0, M):
@@ -121,7 +118,6 @@ def train_and_eval(
     recon_losses = np.zeros(n_epochs) * np.nan
     dx_losses = np.zeros(n_epochs) * np.nan
     dz_losses = np.zeros(n_epochs) * np.nan
-    threshold_events = []
     test_losses = np.zeros(n_epochs) * np.nan
     test_recon_losses = np.zeros(n_epochs) * np.nan
     test_dx_losses = np.zeros(n_epochs) * np.nan
@@ -170,28 +166,6 @@ def train_and_eval(
             optimizer.zero_grad(set_to_none=True)
             loss.backward(retain_graph=True)
             optimizer.step()
-
-        # Check for adaptive thresholding
-        if parameters["sequential_threshold_method"] is not None:
-            (
-                thresholded,
-                threshold,
-                n_active,
-                analysis,
-            ) = parameters[
-                "thresholder"
-            ].maybe_apply_threshold(epoch, loss.item())
-        else:
-            thresholded = False
-
-        if thresholded:
-            if print_flag:
-                print(
-                    f"Epoch {epoch}: Applied {analysis.get('threshold_method', 'unknown')} "
-                    f"thresholding with threshold={threshold:.6f}, "
-                    f"active coefficients={n_active} / {total_coeffs}"
-                )
-            threshold_events.append(epoch)
 
         # Save train losses
         losses[epoch] = mean_epoch_loss[0] / len(train_loader)
@@ -338,23 +312,12 @@ if __name__ == "__main__":
         n_latent=params["latent_dim"],
         poly_order=params["poly_order"],
         CNN=params["CNN"],
-        sequential_thresholding=(
-            True if params["sequential_thresholding_interval"] is not None else False
-        ),
     )
 
     # Optimizer and scheduling
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
     )
-    if params["sequential_threshold_method"] is not None:
-        params["thresholder"] = thresholding.AdaptiveSequentialThresholdingSINDy(
-            model.dzdt,
-            thresholding.AdaptiveThresholdAnalyzer(
-                method=params["sequential_threshold_method"],
-                min_epochs_between=params["sequential_thresholding_interval"],
-            ),
-        )
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
     early_stopping = training.EarlyStopping(patience=params["patience"])
 

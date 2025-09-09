@@ -27,7 +27,6 @@ if MODEL_TYPE == "AE-AR":
 elif MODEL_TYPE == "NNdzdt":
     from training_scripts.train_ae_NNdzdt import AENNdzdt, params, train_and_eval
 elif MODEL_TYPE == "AE-SINDy":
-    from src import thresholding
     from training_scripts.train_ae_sindy import AESINDy, params, train_and_eval
 else:
     raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
@@ -69,22 +68,7 @@ def train_model(args):
             n_latent=params["latent_dim"],
             poly_order=params["poly_order"],
             CNN=params["CNN"],
-            sequential_thresholding=(
-                True
-                if params["sequential_thresholding_interval"] is not None
-                else False
-            ),
         )
-        if params["sequential_threshold_method"] is not None:
-            # For now, code just has to be copied from train_ae_sindy.py because
-            # initializing thresholder requires access to model
-            params["thresholder"] = thresholding.AdaptiveSequentialThresholdingSINDy(
-                model.dzdt,
-                thresholding.AdaptiveThresholdAnalyzer(
-                    method=params["sequential_threshold_method"],
-                    min_epochs_between=params["sequential_thresholding_interval"],
-                ),
-            )
     else:
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
