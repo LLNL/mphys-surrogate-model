@@ -16,7 +16,7 @@ import uuid
 import numpy as np
 import torch
 from src import data_utils as du
-from src import diagnostics, models, plotting, training
+from src import diagnostics, models, plotting
 
 params = {
     "data_src": "erf",
@@ -337,7 +337,7 @@ if __name__ == "__main__":
         model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
     )
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-    early_stopping = training.EarlyStopping(patience=params["patience"])
+    early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total number of parameters: {total_params}")

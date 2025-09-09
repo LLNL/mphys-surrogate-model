@@ -9,8 +9,7 @@ sys.path.append(project_root)
 import numpy as np
 import torch
 from src import data_utils as du
-from src import models, plotting, training, diagnostics
-from torch.utils.data import DataLoader
+from src import diagnostics, plotting
 
 from train_ae_ar import AEAutoregressor
 from train_ae_NNdzdt import AENNdzdt
@@ -87,7 +86,6 @@ def get_model(model_type, n_bins=64):
 
 
 if __name__ == "__main__":
-    model_type = "SINDy"  # AR, NNdzdt, SINDy
     which_data = "val"  # "val", "9600", "14400", "RICO"
     for model_type in ["SINDy", "NNdzdt"]:
         for which_data in ["val", "9600", "14400", "RICO"]:
