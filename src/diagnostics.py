@@ -1,20 +1,14 @@
 import os
 import sys
 
-import matplotlib.pyplot as plt
 import numpy as np
-import plotly.graph_objects as go
-import plotly.io as pio
 import torch
 from scipy.stats import wasserstein_distance
 
 from src import data_utils as du
-import plotly.graph_objects as go
-import plotly.io as pio
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
-from src import models
 
 
 def get_latent_trajectories_AR(
