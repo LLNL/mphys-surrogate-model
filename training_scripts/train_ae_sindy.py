@@ -16,7 +16,7 @@ import uuid
 import numpy as np
 import torch
 from src import data_utils as du
-from src import diagnostics, models, plotting, thresholding, training
+from src import diagnostics, models, plotting, thresholding
 from torch.utils.data import DataLoader
 
 params = {
