@@ -9,12 +9,9 @@ import torch
 from scipy.stats import wasserstein_distance
 
 from src import data_utils as du
-import plotly.graph_objects as go
-import plotly.io as pio
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
-from src import models
 
 
 def plot_losses(
@@ -150,55 +147,6 @@ def plot_predictions_AE_AR(
     return fig
 
 
-def plot_single_prediction_AE_AR(
-    model, id, dsd_time, x_test, m_test, r_bins_edges, n_lag=1, saveas=None
-):
-    (fig, ax) = plt.subplots(
-        1,
-        1,
-        figsize=(6, 3),
-    )
-    model.eval()
-    x0 = x_test[id, :n_lag, :]
-    m0 = m_test[id, 0]
-    x_pred = np.zeros_like(x_test[id])
-    x_pred[:n_lag, :] = model.decoder(model.encoder(torch.Tensor(x0))).detach().numpy()
-    for t in range(n_lag, x_test.shape[1]):
-        x_pred[t, :] = (
-            model(
-                torch.Tensor(x_pred[t - n_lag : t, :]).reshape(
-                    -1, n_lag, x_pred[t].shape[0]
-                ),
-                torch.Tensor([m0]).reshape(1, 1, 1),
-            )
-            .detach()
-            .numpy()[0][0]
-        )
-
-    l1 = ax.step(r_bins_edges, x_test[id, 0, :], label="t=0s, Data", color="grey")
-    l2 = ax.step(r_bins_edges, x_test[id, -1, :], label=f"t={dsd_time[-1]}s Data")
-    l3 = ax.step(
-        r_bins_edges,
-        x_pred[-1, :],
-        ls="--",
-        linewidth=3,
-        label=f"t={dsd_time[-1]}s Model",
-    )
-
-    ax.set_xscale("log")
-    ax.set_xlabel("radius (um)")
-
-    ax.set_ylabel("PSD")
-    ax.legend()
-    plt.suptitle(
-        f"VAE Autoregressive model, lag {n_lag}: Multi time step; out of sample"
-    )
-    if saveas is not None:
-        plt.savefig(saveas)
-
-    return fig
-
-
 def plot_latent_trajectories(
     n_latent,
     dsd_time,
@@ -245,14 +193,6 @@ def plot_latent_trajectories(
                 alpha=min(1, 150 / n_samples),
                 lw=0.5,
             )
-            # ax[0][i].plot(
-            #         dsd_time,
-            #         z_pred[j, :, i],
-            #         label=labeli,
-            #         color=colors[i+1],
-            #         alpha=min(1, 150 / z_pred.shape[0]),
-            #         lw=0.5,
-            #     )
             ax[-1][i].set_xlabel("Elapsed time (s)")
 
     # Accoutrements
@@ -271,69 +211,6 @@ def plot_latent_trajectories(
 
     # Return fig for further manipulation
     return fig
-
-
-def plot_single_latent_trajectory_AR(
-    n_latent, model, dsd_time, x_test, m_test, j=0, n_lag=1, saveas=None
-):
-    (fig, ax) = plt.subplots(ncols=1, nrows=1, figsize=(6, 6))
-    colors = ["blue", "orange", "green", "pink", "purple", "gray"]
-    x0 = x_test[j, :n_lag, :]
-    mj = m_test[j, :]
-    z0 = np.array(
-        [
-            model.encoder(torch.Tensor(x0[t]).reshape(1, -1)).detach().numpy()[0]
-            for t in range(n_lag)
-        ]
-    )
-    z_pred = np.zeros((x_test.shape[1], n_latent + 1))
-    z_enc = np.zeros((x_test.shape[1], n_latent + 1))
-    z_enc[:, -1] = mj
-    z_enc[:n_lag, :-1] = z0
-    z_pred[:n_lag, :-1] = z0
-    z_pred[:n_lag, -1] = mj[0]
-    for t in range(n_lag, x_test.shape[1]):
-        lagged_input = torch.cat(
-            (
-                torch.Tensor(z_pred[t - n_lag : t, :-1]).reshape(n_lag * n_latent),
-                torch.Tensor([mj[0]]),
-            )
-        )
-        z_pred[t, :] = model.autoregressor(lagged_input).detach().numpy()
-        z_enc[t, :-1] = (
-            model.encoder(torch.Tensor(x_test[j, t, :]).reshape(1, -1))
-            .detach()
-            .numpy()[0]
-        )
-
-    for i in range(n_latent + 1):
-        if i < n_latent:
-            labeli = f"z{i}"
-            color = colors[i]
-        else:
-            labeli = "M / dlnr"
-            color = colors[-1]
-        ax.plot(
-            dsd_time,
-            z_enc[:, i],
-            label=labeli,
-            color=color,
-            lw=2,
-        )
-        ax.plot(
-            dsd_time,
-            z_pred[:, i],
-            label=labeli + " pred",
-            color=color,
-            ls="--",
-            lw=2,
-        )
-    ax.set_xlabel("Elapsed time")
-    ax.set_ylabel("Latent variable value")
-    ax.legend()
-    ax.set_xlim([0, dsd_time.max()])
-    plt.title(f"Autoregressive Z(t), lag {n_lag}")
-    plt.show()
 
 
 def plot_predictions_dzdt(
@@ -582,7 +459,7 @@ def plot_testset_quantiles_pred(
     tplt,
     dsd_time,
     r_bins_edges,
-    qtiles=[0, 0.25, 0.5, 0.75, 0.9999],
+    qtiles=(0, 0.25, 0.5, 0.75, 0.9999),
     saveas=None,
 ):
     n_test = x_test.shape[0]
