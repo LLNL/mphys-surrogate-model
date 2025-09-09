@@ -34,7 +34,6 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "layer_size": (63, 98, 30),
-    "CNN": False,
     "print_frequency": 1,
     "emily_save": True,
     "nipun_save": True,
@@ -54,25 +53,13 @@ divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 # Model
 # ----------------------------------------------------------------------------------------------------------------------
 class AEAutoregressor(torch.nn.Module):
-    def __init__(
-        self, n_channels=2, n_bins=100, n_latent=10, layer_size=None, n_lag=1, CNN=False
-    ):
+    def __init__(self, n_channels=2, n_bins=100, n_latent=10, layer_size=None, n_lag=1):
         super(AEAutoregressor, self).__init__()
-
         self.n_lag = n_lag
-        if CNN:
-            self.encoder = models.CNNEncoder(
-                n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
-            )
-            self.decoder = models.CNNDecoder(
-                n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
-            )
-
-        else:
-            self.encoder = models.FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
-            self.decoder = models.FFNNDecoder(
-                n_bins=n_bins, n_latent=n_latent, distribution=True
-            )
+        self.encoder = models.FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
+        self.decoder = models.FFNNDecoder(
+            n_bins=n_bins, n_latent=n_latent, distribution=True
+        )
         self.autoregressor = models.Autoregressive(
             n_bins=n_latent + 1,
             n_bins_in=n_latent * self.n_lag + 1,
@@ -343,7 +330,6 @@ if __name__ == "__main__":
         n_latent=params["latent_dim"],
         n_lag=params["n_lag"],
         layer_size=params["layer_size"],
-        CNN=params["CNN"],
     )
 
     # Optimizer and scheduling
@@ -388,10 +374,7 @@ if __name__ == "__main__":
     best_model.eval()
     best_model = best_model.to("cpu")
     id = str(uuid.uuid4().hex)
-    if params["CNN"]:
-        prefix = params["data_src"] + "_CNN"
-    else:
-        prefix = params["data_src"] + "_FFNN"
+    prefix = params["data_src"] + "_FFNN"
     case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}_{}".format(
         params["latent_dim"],
         params["layer_size"],

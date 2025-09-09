@@ -32,7 +32,6 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "lambda1_metaweight": 0.500989969537634,
-    "CNN": False,
     "sequential_threshold_method": None,  # None, bimodal_gmm, knee_detection
     "sequential_thresholding_interval": None,  # None
     "print_frequency": 1,
@@ -60,29 +59,15 @@ class AESINDy(torch.nn.Module):
         n_bins=100,
         n_latent=10,
         poly_order=2,
-        CNN=False,
         sequential_thresholding=False,
     ):
         super(AESINDy, self).__init__()
         self.poly_order = poly_order
-
-        if CNN:
-            self.encoder = models.CNNEncoder(
-                n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
-            )
-            self.decoder = models.CNNDecoder(
-                n_channels=n_channels,
-                n_bins=n_bins,
-                n_latent=n_latent,
-                distribution=True,
-            )
-
-        else:
-            assert n_channels == 1
-            self.encoder = models.FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
-            self.decoder = models.FFNNDecoder(
-                n_bins=n_bins, n_latent=n_latent, distribution=True
-            )
+        assert n_channels == 1
+        self.encoder = models.FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
+        self.decoder = models.FFNNDecoder(
+            n_bins=n_bins, n_latent=n_latent, distribution=True
+        )
         self.dzdt = models.SINDyDeriv(
             n_latent=n_latent + 1,
             poly_order=poly_order,
@@ -337,7 +322,6 @@ if __name__ == "__main__":
         n_bins=n_bins,
         n_latent=params["latent_dim"],
         poly_order=params["poly_order"],
-        CNN=params["CNN"],
         sequential_thresholding=(
             True if params["sequential_thresholding_interval"] is not None else False
         ),
@@ -405,10 +389,7 @@ if __name__ == "__main__":
     best_model.eval()
     best_model = best_model.to("cpu")
     id = str(uuid.uuid4().hex)
-    if params["CNN"]:
-        prefix = params["data_src"] + "_CNN"
-    else:
-        prefix = params["data_src"] + "_FFNN"
+    prefix = params["data_src"] + "_FFNN"
     case_name = prefix + "_latent{}_order{}_tr{}_lr{}_bs{}_weights{}-{}-{}_{}".format(
         params["latent_dim"],
         params["poly_order"],

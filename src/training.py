@@ -24,14 +24,9 @@ def train_network_e2e(
 ):
     device = torch.device(device)
 
-    if params["CNN"]:
-        autoencoder_network = models.CNNAutoEncoder(
-            n_channels=1, n_bins=params["input_dim"], n_latent=params["latent_dim"]
-        )
-    else:
-        autoencoder_network = models.FFNNAutoEncoder(
-            n_bins=params["input_dim"], n_latent=params["latent_dim"]
-        )
+    autoencoder_network = models.FFNNAutoEncoder(
+        n_bins=params["input_dim"], n_latent=params["latent_dim"]
+    )
 
     num_params = models.count_parameters(autoencoder_network)
     (encoder_weights, encoder_biases) = autoencoder_network.encoder.get_weights()
@@ -84,7 +79,6 @@ def train_network_e2e(
             sindy_coeffs_tensor,
             autoencoder_network,
             device,
-            cnn=params["CNN"],
         )
         train_loss.append(epoch_loss)
         for key in epoch_losses.keys():
@@ -100,7 +94,6 @@ def train_network_e2e(
             sindy_coeffs_tensor,
             autoencoder_network,
             device,
-            cnn=params["CNN"],
         )
 
         val_loss.append(val_epoch_loss)
@@ -121,7 +114,7 @@ def train_network_e2e(
             initialize_sindy(autoencoder_network, params, X, T)
         ).float()
 
-    printerval = 1 if params["CNN"] else 10
+    printerval = 10
     reset_optimizer_state(optimizer)
     early_stopping = EarlyStopping(patience=params["patience"], verbose=True)
 
@@ -138,7 +131,6 @@ def train_network_e2e(
             sindy_coeffs_tensor,
             autoencoder_network,
             device,
-            cnn=params["CNN"],
         )
         train_loss.append(epoch_loss)
         for key in epoch_losses.keys():
@@ -154,7 +146,6 @@ def train_network_e2e(
             sindy_coeffs_tensor,
             autoencoder_network,
             device,
-            cnn=params["CNN"],
         )
 
         val_loss.append(val_epoch_loss)
@@ -193,7 +184,6 @@ def train_network_e2e(
             sindy_coeffs_tensor,
             autoencoder_network,
             device,
-            cnn=params["CNN"],
         )
 
         train_loss.append(epoch_loss)
@@ -210,7 +200,6 @@ def train_network_e2e(
             sindy_coeffs_tensor,
             autoencoder_network,
             device,
-            cnn=params["CNN"],
         )
         val_loss.append(val_epoch_loss)
         for key in val_epoch_losses.keys():
@@ -245,14 +234,9 @@ def train_network_e2e_bb(
 ):
     device = torch.device(device)
 
-    if params["CNN"]:
-        autoencoder_network = models.CNNAutoEncoder(
-            n_channels=1, n_bins=params["input_dim"], n_latent=params["latent_dim"]
-        )
-    else:
-        autoencoder_network = models.FFNNAutoEncoder(
-            n_bins=params["input_dim"], n_latent=params["latent_dim"]
-        )
+    autoencoder_network = models.FFNNAutoEncoder(
+        n_bins=params["input_dim"], n_latent=params["latent_dim"]
+    )
 
     derivative_network = models.NNDerivatives(
         n_latent=params["latent_dim"], layer_size=params["layers"]
@@ -308,7 +292,6 @@ def train_network_e2e_bb(
             autoencoder_network,
             derivative_network,
             device,
-            cnn=params["CNN"],
         )
         train_loss.append(epoch_loss)
         for key in epoch_losses.keys():
@@ -326,7 +309,6 @@ def train_network_e2e_bb(
             autoencoder_network,
             derivative_network,
             device,
-            cnn=params["CNN"],
         )
 
         val_loss.append(val_epoch_loss)
@@ -340,7 +322,7 @@ def train_network_e2e_bb(
             for key in epoch_losses.keys():
                 print(f"{key}: {epoch_losses[key]} | {val_epoch_losses[key]}")
 
-    printerval = 1 if params["CNN"] else 10
+    printerval = 10
     early_stopping = EarlyStopping(patience=params["patience"], verbose=True)
 
     print("\n TRAINING")
@@ -358,7 +340,6 @@ def train_network_e2e_bb(
             autoencoder_network,
             derivative_network,
             device,
-            cnn=params["CNN"],
         )
         train_loss.append(epoch_loss)
         for key in epoch_losses.keys():
@@ -376,7 +357,6 @@ def train_network_e2e_bb(
             autoencoder_network,
             derivative_network,
             device,
-            cnn=params["CNN"],
         )
 
         val_loss.append(val_epoch_loss)
