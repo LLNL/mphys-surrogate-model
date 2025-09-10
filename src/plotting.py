@@ -2,6 +2,7 @@ import os
 import sys
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
 import numpy as np
 import plotly.graph_objects as go
 import plotly.io as pio
@@ -204,6 +205,72 @@ def plot_latent_trajectories(
     ax[1][0].set_ylabel("Model")
     fig.suptitle(f"Test set predicted Z(t)")
     plt.tight_layout()
+
+    # Optional save
+    if saveas is not None:
+        fig.savefig(saveas)
+
+    # Return fig for further manipulation
+    return fig
+
+
+def plot_latent_trajectories_heatmap(
+    n_latent, dsd_time, z_pred, z_data, saveas=None, n_samples=None
+):
+    # Set up figure
+    (fig, ax) = plt.subplots(
+        nrows=2,
+        ncols=n_latent + 1,
+        figsize=(3 * (n_latent + 1), 6),
+        sharey=False,
+        sharex=True,
+        layout="constrained",
+    )
+    cmap = plt.colormaps["viridis"]
+    t_all = np.broadcast_to(dsd_time, (z_pred.shape[0], len(dsd_time)))
+
+    for i in range(n_latent + 1):
+        h_data, tedges, zedges = np.histogram2d(
+            t_all.flatten(), z_data[:, :, i].flatten(), bins=[len(dsd_time), 20]
+        )
+        h_pred, tedges, zedges = np.histogram2d(
+            t_all.flatten(), z_pred[:, :, i].flatten(), bins=[len(dsd_time), 20]
+        )
+        ax[0][i].pcolormesh(
+            tedges,
+            zedges,
+            h_data.T,
+            cmap=cmap,
+        )
+        ax[1][i].pcolormesh(
+            tedges,
+            zedges,
+            h_pred.T,
+            cmap=cmap,
+        )
+        ax[-1][i].set_xlabel("Elapsed time (s)")
+        ax[0][i].yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+        ax[1][i].yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+
+    if n_samples is not None:
+        for j in range(n_samples):
+            for i in range(n_latent + 1):
+                ax[0][i].plot(dsd_time, z_data[j, :, i], color="w", lw=1)
+                ax[1][i].plot(
+                    dsd_time,
+                    z_pred[j, :, i],
+                    color="w",
+                    lw=1,
+                )
+
+    # Accoutrements
+    for i in range(n_latent):
+        ax[0][i].set_title(f"z{i + 1}")
+        ax[0][i].set_xlim([0, dsd_time.max()])
+    ax[0][-1].set_title("mass (rescaled)")
+    ax[0][0].set_ylabel("Data")
+    ax[1][0].set_ylabel("Model")
+    fig.suptitle(f"Test set predicted Z(t)")
 
     # Optional save
     if saveas is not None:
