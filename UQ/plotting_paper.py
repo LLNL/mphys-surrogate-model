@@ -1,6 +1,5 @@
 """
 Script plots conformal prediction results on the AE-X architecture at specified times, gridboxes/samples, and subsets of the network.
-Same as plotting.py, except 
 """
 import os
 import sys
@@ -603,16 +602,18 @@ else:
         ax[j][i].set_ylim(0, 0.5)
     for j, t in enumerate(tplt):
         ax[j][0].set_ylabel(
-            rf"Normalized $\frac{{dm}}{{d\ln r}}$ [-] at"
-            f'\n t={outputs["dsd_time"][t]} s [kg liquid/kg air]'
+            rf"Normalized $\frac{{dm}}{{d\ln r}}$ [-]"
+            f'\nat t={outputs["dsd_time"][t]} s  '
         )
     ax[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 if args.title == "y":
     fig.suptitle(
         f"AE-{args.model} conformal predictions, {method}, {subset} network",
         fontsize=14,
+        # y=1.05
     )
-fig.subplots_adjust(hspace=0.7)
+# fig.subplots_adjust(hspace=0.5)
+
 fig.savefig(
     os.path.join(
         parent_directory,

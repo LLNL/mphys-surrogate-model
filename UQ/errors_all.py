@@ -146,7 +146,7 @@ elif args.subset == "all":
     sharey=False,
     constrained_layout=True,
 )
-arch_labels = ["Reconstruction", "Latent dynamics", "End-to-end", "Mass"]
+arch_labels = ["reconstruction", "latent dynamics", "end-to-end", "mass"]
 
 # grab colors from matplotlib default cycle
 prop_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
@@ -177,17 +177,12 @@ for j in range(n_cols):  # loop through architectures (columns)
                     linestyle=method_linestyles[method],
                     label=r"$\alpha={}$%, {}".format(100 * alpha, method),
                 )
-    ax[j].set_title(arch_labels[j])
     ax[j].set_xlabel("time [s]")
+    ax[j].set_ylabel(f"{arch_labels[j]} [-]")
     if j == 3:
         ax[j].set_ylim(-0.1 * m_diff.max(), 1.1 * m_diff.max())
-        ax[j].set_ylabel("normalized mass \n [-]")
     else:
         ax[j].set_ylim(-0.1 * DSD_areas[:, j].max(), 1.1 * DSD_areas[:, j].max())
-        if j == 1:
-            ax[j].set_ylabel("[-]")
-        else:
-            ax[j].set_ylabel("mass mixing ratio \n [kg liquid/kg air]")
 # legend for alpha values
 color_handles = [Line2D([0], [0], color=alpha_colors[a], lw=2) for a in alphas]
 legend1 = ax[-1].legend(
@@ -220,5 +215,5 @@ fig.savefig(
         "ae_" + args.model,
         f"errors_{args.data_name}_all_{args.subset}.pdf",
     ),
-    # bbox_inches="tight",
+    bbox_inches="tight",
 )
