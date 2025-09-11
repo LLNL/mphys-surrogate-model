@@ -16,7 +16,7 @@ import uuid
 import numpy as np
 import torch
 from src import data_utils as du
-from src import diagnostics, models, plotting, training
+from src import diagnostics, models, plotting
 from torch.utils.data import DataLoader
 
 params = {
@@ -31,7 +31,6 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "layer_size": (42, 36, 46),
-    "CNN": False,
     "print_frequency": 1,
     "emily_save": True,
     "nipun_save": True,
@@ -51,29 +50,14 @@ divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 # Model
 # ----------------------------------------------------------------------------------------------------------------------
 class AENNdzdt(torch.nn.Module):
-    def __init__(
-        self, n_channels=1, n_bins=100, n_latent=10, layer_size=(10, 10, 10), CNN=False
-    ):
+    def __init__(self, n_channels=1, n_bins=100, n_latent=10, layer_size=(10, 10, 10)):
         super(AENNdzdt, self).__init__()
         self.layer_size = layer_size
-
-        if CNN:
-            self.encoder = models.CNNEncoder(
-                n_channels=n_channels, n_bins=n_bins, n_latent=n_latent
-            )
-            self.decoder = models.CNNDecoder(
-                n_channels=n_channels,
-                n_bins=n_bins,
-                n_latent=n_latent,
-                distribution=True,
-            )
-
-        else:
-            assert n_channels == 1
-            self.encoder = models.FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
-            self.decoder = models.FFNNDecoder(
-                n_bins=n_bins, n_latent=n_latent, distribution=True
-            )
+        assert n_channels == 1
+        self.encoder = models.FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
+        self.decoder = models.FFNNDecoder(
+            n_bins=n_bins, n_latent=n_latent, distribution=True
+        )
         self.dzdt = models.NNDerivatives(
             n_latent=n_latent + 1, layer_size=self.layer_size
         )
@@ -181,9 +165,7 @@ def train_and_eval(
 
             # Calculate test loss
             loss_dz = criterion(pred_dz, dz)
-            loss_dx = criterion(
-                pred_dx, batch_dx
-            )  # TODO: Why does ae-ar have divergence here but this has criterion?. Check train loss too
+            loss_dx = criterion(pred_dx, batch_dx)
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
                 torch.log(batch_x + parameters["tol"]),
@@ -269,7 +251,6 @@ if __name__ == "__main__":
     # torch.backends.cudnn.benchmark = True
     print(f"Using {device} device")
 
-    start_time = time.time()
     # Open dataset
     if params["data_src"] == "box":
         (
@@ -305,7 +286,6 @@ if __name__ == "__main__":
         n_bins=n_bins,
         n_latent=params["latent_dim"],
         layer_size=params["layer_size"],
-        CNN=params["CNN"],
     )
 
     # Optimizer and scheduling
@@ -313,13 +293,13 @@ if __name__ == "__main__":
         model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
     )
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-    early_stopping = training.EarlyStopping(patience=params["patience"])
+    early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total number of parameters: {total_params}")
 
     # Compute & set weights based on Champion et al recs
-    lambda1, lambda2, lambda3 = du.champion_calculate_weights(
+    lambda1, lambda2, _ = du.champion_calculate_weights(
         train_data, lambda1_metaweight=0.5353139650038768
     )
     print(f"lambda: 1.0, {lambda1}, {lambda2}")
@@ -359,10 +339,7 @@ if __name__ == "__main__":
     best_model.eval()
     best_model = best_model.to("cpu")
     id = str(uuid.uuid4().hex)
-    if params["CNN"]:
-        prefix = params["data_src"] + "_CNN"
-    else:
-        prefix = params["data_src"] + "_FFNN"
+    prefix = params["data_src"] + "_FFNN"
     case_name = prefix + "_latent{}_layers{}_tr{}_lr{}_bs{}_weights{}-{}-{}_{}".format(
         params["latent_dim"],
         params["layer_size"],
