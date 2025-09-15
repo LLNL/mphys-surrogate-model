@@ -114,7 +114,7 @@ def open_mass_dataset(
     """
     # 1) load
     if filepath is None:
-        filepath = (data_dir / name).with_suffix(".nc")
+        filepath = (data_dir / Path(name)).with_suffix(".nc")
     ds = xr.open_dataset(filepath)
 
     # 2) optional subsample in time
@@ -177,10 +177,10 @@ def open_congestus_dataset(
     test_size=0.2,
     calib_size=None,
     random_state=1952,
-    data_dir=Path(__file__).parent.parent / "data",
+    data_dir=Path(__file__).parent.parent / "data" / "erf_data" / "congestus",
 ):
     return open_mass_dataset(
-        name="congestus_coal_200m",
+        name="noadv_coal_200m",
         data_dir=data_dir,
         sample_time=sample_time,
         test_size=test_size,
@@ -194,7 +194,7 @@ def open_rico_dataset(
     test_size=0.2,
     calib_size=None,
     random_state=1952,
-    data_dir=Path(__file__).parent.parent / "data",
+    data_dir=Path(__file__).parent.parent / "data" / "rico",
 ):
     return open_mass_dataset(
         name="rico_coal_200m",
@@ -222,8 +222,10 @@ def open_congestus_calib_train_rico_test(
        x_train, m_train, x_calib, m_calib, x_test, m_test, r_bins, n_bins, dsd_time
     """
     # --- 1) load both datasets
-    cong_path = (data_dir / "congestus_coal_200m").with_suffix(".nc")
-    rico_path = (data_dir / "rico_coal_200m").with_suffix(".nc")
+    cong_path = (data_dir / "erf_data" / "congestus" / "noadv_coal_200m").with_suffix(
+        ".nc"
+    )
+    rico_path = (data_dir / "rico" / "rico_coal_200m").with_suffix(".nc")
 
     ds_cong = xr.open_dataset(cong_path)
     ds_rico = xr.open_dataset(rico_path)
@@ -267,7 +269,6 @@ def open_congestus_calib_train_rico_test(
         "idx_calib": idx_calib,
         "x_test": x_test,
         "m_test": m_test,
-        "idx_test": idx_test,
         "r_bins_edges": r_bins,
         "n_bins": n_bins,
         "dsd_time": dsd_time,
@@ -288,8 +289,10 @@ def open_congestus_train_rico_calib_test(
     4) Returns dict of numpy arrays:
        x_train, m_train, x_calib, m_calib, x_test, m_test, r_bins, n_bins, dsd_time
     """
-    cong_path = (data_dir / "congestus_coal_200m").with_suffix(".nc")
-    rico_path = (data_dir / "rico_coal_200m").with_suffix(".nc")
+    cong_path = (data_dir / "erf_data" / "congestus" / "noadv_coal_200m").with_suffix(
+        ".nc"
+    )
+    rico_path = (data_dir / "rico" / "rico_coal_200m").with_suffix(".nc")
 
     ds_cong = xr.open_dataset(cong_path)
     ds_rico = xr.open_dataset(rico_path)
@@ -326,7 +329,6 @@ def open_congestus_train_rico_calib_test(
     return {
         "x_train": x_train,
         "m_train": m_train,
-        "idx_train": idx_train,
         "x_calib": x_calib,
         "m_calib": m_calib,
         "idx_calib": idx_calib,
@@ -351,8 +353,10 @@ def open_congestus_train_rico_test(
     5) Prepare and return numpy arrays:
        x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time
     """
-    cong_path = (data_dir / "congestus_coal_200m").with_suffix(".nc")
-    rico_path = (data_dir / "rico_coal_200m").with_suffix(".nc")
+    cong_path = (data_dir / "erf_data" / "congestus" / "noadv_coal_200m").with_suffix(
+        ".nc"
+    )
+    rico_path = (data_dir / "rico" / "rico_coal_200m").with_suffix(".nc")
 
     ds_cong = xr.open_dataset(cong_path)
     ds_rico = xr.open_dataset(rico_path)
@@ -386,10 +390,8 @@ def open_congestus_train_rico_test(
     return {
         "x_train": x_train,  # shape: (n_train_loc, nt, n_bins)
         "m_train": m_train,  # shape: (n_train_loc, nt)
-        "idx_train": idx_train,
         "x_test": x_test,  # shape: (n_test_loc,  nt, n_bins)
         "m_test": m_test,  # shape: (n_test_loc,  nt)
-        "idx_test": idx_test,
         "r_bins_edges": r_bins_edges,  # 1D array, length = n_bins+1 or n_bins
         "n_bins": n_bins,
         "dsd_time": dsd_time,  # 1D array, length = nt

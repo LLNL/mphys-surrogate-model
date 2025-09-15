@@ -57,14 +57,6 @@ parser.add_argument(
     choices=["conformal", "ensemble"],
     help="whether you would like to plot intervals from conformal or ensemble/bootsrapped predictions. Default is conformal.",
 )
-parser.add_argument(
-    "-title",
-    "--title",
-    type=str,
-    default="y",
-    choices=["y", "n"],
-    help="Do you want an overall title (y/n)?",
-)
 args = parser.parse_args()
 
 method = args.method
@@ -182,22 +174,6 @@ for j in range(n_cols):  # loop through architectures (columns)
     ax[j].locator_params(axis="x", nbins=4)  # Aim for 4 major ticks on the x-axis
     ax[j].locator_params(axis="y", nbins=3)  # Aim for 3 major ticks on the y-axis
 ax[-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
-if args.title == "y":
-    if method == "full":
-        fig.suptitle(
-            "Vanilla conformal prediction interval width, \n averaged across output dimensions  ",
-            fontsize=14,
-        )
-    if method == "split":
-        fig.suptitle(
-            "Split conformal prediction interval width, \n averaged across output dimensions  ",
-            fontsize=14,
-        )
-    if method == "cv+":
-        fig.suptitle(
-            "CV+ conformal prediction interval width, \n averaged across output dimensions  ",
-            fontsize=14,
-        )
 fig.savefig(
     os.path.join(
         parent_directory,

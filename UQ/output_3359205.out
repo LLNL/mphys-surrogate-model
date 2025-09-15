@@ -1,7 +1,0 @@
-Thu Aug 14 08:18:14 PDT 2025
-activating
-Traceback (most recent call last):
-  File "/g/g14/katona1/mphys-surrogate-model/UQ/plotting.py", line 541, in <module>
-    ax[j][i].step(
-    ~~~~~^^^
-TypeError: 'Axes' object is not subscriptable
