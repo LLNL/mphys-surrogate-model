@@ -22,19 +22,19 @@ echo 'activating'
 cd mphys-surrogate-model
 
 echo 'testing vanilla cp'
-python3 UQ/conformal/cp_test.py congestus_coal_200m_9600 -a NNdzdt -m full -s decoder
-python3 UQ/conformal/cp_test.py congestus_coal_200m_9600 -a NNdzdt -m full -s latent
-python3 UQ/conformal/cp_test.py congestus_coal_200m_9600 -a NNdzdt -m full -s full
-python3 UQ/conformal/cp_test.py congestus_coal_200m_9600 -a NNdzdt -m full -s mass
+python3 UQ/conformal/cp_test.py erf_data/congestus/noadv_coal_200m -a NNdzdt -m full -s decoder
+python3 UQ/conformal/cp_test.py erf_data/congestus/noadv_coal_200m -a NNdzdt -m full -s latent
+python3 UQ/conformal/cp_test.py erf_data/congestus/noadv_coal_200m -a NNdzdt -m full -s full
+python3 UQ/conformal/cp_test.py erf_data/congestus/noadv_coal_200m -a NNdzdt -m full -s mass
 p=20 # validation split percent
 echo "testing split cp, train-validation-test split: $((80 - p))-${p}-20"
-python3 UQ/conformal/cp_test.py congestus_coal_200m_9600 -a NNdzdt -m "split${p}" -s decoder
-python3 UQ/conformal/cp_test.py congestus_coal_200m_9600 -a NNdzdt -m "split${p}" -s latent
-python3 UQ/conformal/cp_test.py congestus_coal_200m_9600 -a NNdzdt -m "split${p}" -s full
-python3 UQ/conformal/cp_test.py congestus_coal_200m_9600 -a NNdzdt -m "split${p}" -s mass
+python3 UQ/conformal/cp_test.py erf_data/congestus/noadv_coal_200m -a NNdzdt -m "split${p}" -s decoder
+python3 UQ/conformal/cp_test.py erf_data/congestus/noadv_coal_200m -a NNdzdt -m "split${p}" -s latent
+python3 UQ/conformal/cp_test.py erf_data/congestus/noadv_coal_200m -a NNdzdt -m "split${p}" -s full
+python3 UQ/conformal/cp_test.py erf_data/congestus/noadv_coal_200m -a NNdzdt -m "split${p}" -s mass
 k=20 # number of cross-validation folds
 echo "testing cv+ with ${k} folds"
-python3 UQ/conformal/cp_test.py congestus_coal_200m_9600 -a NNdzdt -m "cv+${k}" -s decoder
-python3 UQ/conformal/cp_test.py congestus_coal_200m_9600 -a NNdzdt -m "cv+${k}" -s latent
-python3 UQ/conformal/cp_test.py congestus_coal_200m_9600 -a NNdzdt -m "cv+${k}" -s full
-python3 UQ/conformal/cp_test.py congestus_coal_200m_9600 -a NNdzdt -m "cv+${k}" -s mass
+python3 UQ/conformal/cp_test.py erf_data/congestus/noadv_coal_200m -a NNdzdt -m "cv+${k}" -s decoder
+python3 UQ/conformal/cp_test.py erf_data/congestus/noadv_coal_200m -a NNdzdt -m "cv+${k}" -s latent
+python3 UQ/conformal/cp_test.py erf_data/congestus/noadv_coal_200m -a NNdzdt -m "cv+${k}" -s full
+python3 UQ/conformal/cp_test.py erf_data/congestus/noadv_coal_200m -a NNdzdt -m "cv+${k}" -s mass
