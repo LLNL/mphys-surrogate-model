@@ -67,11 +67,10 @@ parser.add_argument(
 )
 parser.add_argument(
     "-g",
-    "--ids",
+    "--id",
     type=int,
-    nargs="+",
     required=True,
-    help="the indices of which samples/gridboxes to plot (required), space separated."
+    help="the index of which samples/gridboxes to plot (required), space separated."
     "indices are respect to the full dataset, NOT with respect to the testing data",
 )
 parser.add_argument(
@@ -137,16 +136,17 @@ If any are not in there, then return error.
 """
 pos_map = {value: idx for idx, value in enumerate(outputs["idx_test"])}
 
-ids = args.ids
-# Check for missing elements
-missing = [a for a in ids if a not in pos_map]
-if missing:
-    raise KeyError(f"These ids are not in the testing data: {missing}")
+id = args.id  # a single int
+
+if id not in pos_map:
+    raise KeyError(f"Id {id} is not in the testing data")
 
 # if present, then return their positions
-ids_rel_to_test = [pos_map[a] for a in ids]
+ids_rel_to_test = pos_map[id]
 tplt = np.fromstring(args.tplt, dtype=int, sep=" ")
 subset = args.subset
+
+colors = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
 
 if subset == "decoder":
     lower = DSD_bands[0][0]
@@ -167,16 +167,10 @@ elif subset == "mass":
 else:
     raise KeyError("Subset of architecture indicated (via -s) has not been implemented")
 
-# use alphas to get color arguments for fill_between (the prediction intervals on the plot)
-cmap = plt.get_cmap("autumn_r")  # 0→yellow, 1→red
-colors = cmap(
-    np.tanh(np.pi * np.array(alphas))
-)  # take tanh to ensure that it is mostly red until very close to 0
-
 if subset == "latent":
     # load model
     import torch
-    from src import training
+    from src import diagnostics
 
     params.update({"num_epochs": 200, "batch_size": 100})
 
@@ -199,7 +193,6 @@ if subset == "latent":
             {
                 "n_lag": 1,
                 "layer_size": (63, 98, 30),
-                "CNN": False,
                 "learning_rate": 0.002482884780966882,
                 "wd": 1e-3,
                 "patience": 50,
@@ -218,7 +211,6 @@ if subset == "latent":
             n_latent=params["latent_dim"],
             n_lag=params["n_lag"],
             layer_size=params["layer_size"],
-            CNN=params["CNN"],
         )
         optimal_path = os.path.join(
             "results",
@@ -243,7 +235,7 @@ if subset == "latent":
             weight_decay=params["wd"],
         )
         sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-        early_stopping = training.EarlyStopping(patience=params["patience"])
+        early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
 
         train_data = du.NormedBinDatasetAR(
             outputs["x_train"], outputs["m_train"], lag=params["n_lag"]
@@ -285,7 +277,6 @@ if subset == "latent":
         params.update(
             {
                 "layer_size": (42, 36, 46),
-                "CNN": False,
                 "learning_rate": 0.00314227212817401,
                 "wd": 1e-3,
                 "patience": 50,
@@ -300,7 +291,6 @@ if subset == "latent":
             n_bins=outputs["n_bins"],
             n_latent=params["latent_dim"],
             layer_size=params["layer_size"],
-            CNN=params["CNN"],
         )
         optimal_path = os.path.join(
             "results",
@@ -325,7 +315,7 @@ if subset == "latent":
             weight_decay=params["wd"],
         )
         sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-        early_stopping = training.EarlyStopping(patience=params["patience"])
+        early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
 
         # Compute & set weights based on Champion et al recs
         lambda1, lambda2, lambda3 = du.champion_calculate_weights(
@@ -375,16 +365,12 @@ if subset == "latent":
         )
     if args.model == "SINDy":
         from training_scripts import train_ae_sindy as train
-        from src import thresholding
 
         params.update(
             {
                 "poly_order": 2,
-                "CNN": False,
-                "sequential_thresholding_interval": None,
                 "learning_rate": 0.004204813405972317,
                 "wd": 1e-3,
-                "sequential_threshold_method": None,  # None, bimodal_gmm, knee_detection
                 "patience": 50,
                 "lambda1_metaweight": 0.500989969537634,
                 "tol": 1e-8,
@@ -398,12 +384,6 @@ if subset == "latent":
             n_bins=outputs["n_bins"],
             n_latent=params["latent_dim"],
             poly_order=params["poly_order"],
-            CNN=params["CNN"],
-            sequential_thresholding=(
-                True
-                if params["sequential_thresholding_interval"] is not None
-                else False
-            ),
         )
         optimal_path = os.path.join(
             "results",
@@ -427,16 +407,8 @@ if subset == "latent":
             lr=params["learning_rate"],
             weight_decay=params["wd"],
         )
-        if params["sequential_threshold_method"] is not None:
-            params["thresholder"] = thresholding.AdaptiveSequentialThresholdingSINDy(
-                init_model.dzdt,
-                thresholding.AdaptiveThresholdAnalyzer(
-                    method=params["sequential_threshold_method"],
-                    min_epochs_between=params["sequential_thresholding_interval"],
-                ),
-            )
         sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-        early_stopping = training.EarlyStopping(patience=params["patience"])
+        early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
 
         # Compute & set weights based on Champion et al recs
         lambda1, lambda2, lambda3 = du.champion_calculate_weights(
@@ -607,14 +579,17 @@ else:
     for j, t in enumerate(tplt):
         ax[j][0].set_ylabel(
             rf"Normalized $\frac{{dm}}{{d\ln r}}$ [-]"
-            f'\n at t={outputs["dsd_time"][t]} s [kg liquid/kg air]'
+            f'\nat t={outputs["dsd_time"][t]} s  '
         )
     ax[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 if args.title == "y":
     fig.suptitle(
         f"AE-{args.model} conformal predictions, {method}, {subset} network",
         fontsize=14,
+        # y=1.05
     )
+# fig.subplots_adjust(hspace=0.5)
+
 fig.savefig(
     os.path.join(
         parent_directory,
@@ -622,7 +597,7 @@ fig.savefig(
         "UQ",
         args.uncertainty,
         "ae_" + args.model,
-        f"{args.data_name}_{args.method}_{subset}_{'_'.join(str(x) for x in ids)}.pdf",
+        f"{os.path.basename(os.path.normpath(args.data_name))}_{args.method}_{subset}_{'_'.join(str(x) for x in ids)}.pdf",
     ),
     bbox_inches="tight",
 )

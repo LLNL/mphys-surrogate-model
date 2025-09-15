@@ -30,7 +30,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 from src import data_utils as du
-from src import training
+from src import diagnostics
 from training_scripts import train_ae_NNdzdt as train
 
 # ----------------------------------------------------------------------------
@@ -70,7 +70,6 @@ params = dict(
     tol=1e-8,
     wd=1e-3,
     layer_size=(42, 36, 46),
-    CNN=False,
     print_frequency=1,
     folds=args.folds,
     alpha_lows=[a / 2 for a in args.alpha],
@@ -120,7 +119,6 @@ def init_model(outputs, params, device):
         n_bins=outputs["n_bins"],
         n_latent=params["latent_dim"],
         layer_size=params["layer_size"],
-        CNN=params["CNN"],
     )
     optimal_path = Path("results") / "Optuna" / "ERF Dataset" / params["optuna_tag"]
     checkpoint = torch.load(
@@ -210,7 +208,7 @@ def _fold_worker(args):
         model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
     )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-    early_stop = training.EarlyStopping(patience=params["patience"])
+    early_stop = diagnostics.EarlyStopping(patience=params["patience"])
 
     # data splits
     xtr, dtr, mtr = (
@@ -343,7 +341,10 @@ def main():
     # Save outputs
     outdir = Path("UQ/conformal/results/ae_NNdzdt")
     outdir.mkdir(parents=True, exist_ok=True)
-    fname = outdir / f"{args.data_name}_cv+{args.folds}.pkl"
+    fname = (
+        outdir
+        / f"{os.path.basename(os.path.normpath(args.data_name))}_cv+{args.folds}.pkl"
+    )
     with open(fname, "wb") as fp:
         pickle.dump(
             [

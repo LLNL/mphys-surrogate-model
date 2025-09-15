@@ -67,7 +67,9 @@ if method not in [
     raise ValueError("Conformal predictions method specified has not been implemented.")
 
 # load results from conformal predictions
-cp_results_file = args.data_name + "_" + args.method + ".pkl"
+cp_results_file = (
+    os.path.basename(os.path.normpath(args.data_name)) + "_" + args.method + ".pkl"
+)
 pickle_path = os.path.join(
     parent_directory,
     "UQ",
@@ -122,7 +124,7 @@ else:
 # if we are testing conformal predictions on the latent space, we need to load the model
 if subset == "latent":
     import torch
-    from src import training
+    from src import diagnostics
 
     params.update({"num_epochs": 200, "batch_size": 200})
 
@@ -145,7 +147,6 @@ if subset == "latent":
             {
                 "n_lag": 1,
                 "layer_size": (63, 98, 30),
-                "CNN": False,
                 "learning_rate": 0.002482884780966882,
                 "wd": 1e-3,
                 "patience": 50,
@@ -164,7 +165,6 @@ if subset == "latent":
             n_latent=params["latent_dim"],
             n_lag=params["n_lag"],
             layer_size=params["layer_size"],
-            CNN=params["CNN"],
         )
         optimal_path = os.path.join(
             "results",
@@ -189,7 +189,7 @@ if subset == "latent":
             weight_decay=params["wd"],
         )
         sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-        early_stopping = training.EarlyStopping(patience=params["patience"])
+        early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
 
         train_data = du.NormedBinDatasetAR(
             outputs["x_train"], outputs["m_train"], lag=params["n_lag"]
@@ -231,7 +231,6 @@ if subset == "latent":
         params.update(
             {
                 "layer_size": (42, 36, 46),
-                "CNN": False,
                 "learning_rate": 0.00314227212817401,
                 "wd": 1e-3,
                 "patience": 50,
@@ -246,7 +245,6 @@ if subset == "latent":
             n_bins=outputs["n_bins"],
             n_latent=params["latent_dim"],
             layer_size=params["layer_size"],
-            CNN=params["CNN"],
         )
         optimal_path = os.path.join(
             "results",
@@ -271,7 +269,7 @@ if subset == "latent":
             weight_decay=params["wd"],
         )
         sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-        early_stopping = training.EarlyStopping(patience=params["patience"])
+        early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
 
         # Compute & set weights based on Champion et al recs
         lambda1, lambda2, lambda3 = du.champion_calculate_weights(
@@ -321,16 +319,12 @@ if subset == "latent":
         )
     if args.model == "SINDy":
         from training_scripts import train_ae_sindy as train
-        from src import thresholding
 
         params.update(
             {
                 "poly_order": 2,
-                "CNN": False,
-                "sequential_thresholding_interval": None,
                 "learning_rate": 0.004204813405972317,
                 "wd": 1e-3,
-                "sequential_threshold_method": None,  # None, bimodal_gmm, knee_detection
                 "patience": 50,
                 "lambda1_metaweight": 0.500989969537634,
                 "tol": 1e-8,
@@ -344,12 +338,6 @@ if subset == "latent":
             n_bins=outputs["n_bins"],
             n_latent=params["latent_dim"],
             poly_order=params["poly_order"],
-            CNN=params["CNN"],
-            sequential_thresholding=(
-                True
-                if params["sequential_thresholding_interval"] is not None
-                else False
-            ),
         )
         optimal_path = os.path.join(
             "results",
@@ -373,16 +361,8 @@ if subset == "latent":
             lr=params["learning_rate"],
             weight_decay=params["wd"],
         )
-        if params["sequential_threshold_method"] is not None:
-            params["thresholder"] = thresholding.AdaptiveSequentialThresholdingSINDy(
-                init_model.dzdt,
-                thresholding.AdaptiveThresholdAnalyzer(
-                    method=params["sequential_threshold_method"],
-                    min_epochs_between=params["sequential_thresholding_interval"],
-                ),
-            )
         sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-        early_stopping = training.EarlyStopping(patience=params["patience"])
+        early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
 
         # Compute & set weights based on Champion et al recs
         lambda1, lambda2, lambda3 = du.champion_calculate_weights(

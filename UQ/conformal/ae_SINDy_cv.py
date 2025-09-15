@@ -21,12 +21,12 @@ from pathlib import Path
 from contextlib import redirect_stdout
 from sklearn.model_selection import KFold
 
-# project imports (data_utils, training, thresholding, etc.)
+# project imports (data_utils, etc.)
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 from src import data_utils as du
 from training_scripts import train_ae_sindy as train
-from src import thresholding, training
+from src import diagnostics
 
 parser = argparse.ArgumentParser(description="cv+ conformal for AE-SINDy")
 parser.add_argument("data_name", help="basename (no .nc) of your dataset")
@@ -62,9 +62,6 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "lambda1_metaweight": 0.500989969537634,
-    "CNN": False,
-    "sequential_threshold_method": None,  # None, bimodal_gmm, knee_detection
-    "sequential_thresholding_interval": None,  # None
     "print_frequency": 1,
 }
 
@@ -101,8 +98,6 @@ def init_model(device, params, outputs):
         n_bins=outputs["n_bins"],
         n_latent=params["latent_dim"],
         poly_order=params["poly_order"],
-        CNN=params["CNN"],
-        sequential_thresholding=bool(params["sequential_thresholding_interval"]),
     )
     optimal_path = os.path.join(
         "results",
@@ -126,14 +121,6 @@ def init_optimizer(model, params):
     opt = torch.optim.AdamW(
         model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
     )
-    if params["sequential_threshold_method"] is not None:
-        opt.thresholder = thresholding.AdaptiveSequentialThresholdingSINDy(
-            model.dzdt,
-            thresholding.AdaptiveThresholdAnalyzer(
-                method=params["sequential_threshold_method"],
-                min_epochs_between=params["sequential_thresholding_interval"],
-            ),
-        )
     return opt
 
 
@@ -242,7 +229,7 @@ def _fold_worker(args):
     model = init_model(device, params, outputs)
     optimizer = init_optimizer(model, params)
     scheduler = init_scheduler(optimizer)
-    early_stop = training.EarlyStopping(patience=params["patience"])
+    early_stop = diagnostics.EarlyStopping(patience=params["patience"])
 
     # build _single‐worker_ dataloaders with num_workers=0
     train_ds = du.NormedBinDatasetDzDt(
@@ -392,7 +379,10 @@ def main():
     # finally: pickle lower/upper/representative bands
     outdir = Path("UQ/conformal/results/ae_SINDy")
     outdir.mkdir(parents=True, exist_ok=True)
-    fname = outdir / f"{args.data_name}_cv+{args.folds}.pkl"
+    fname = (
+        outdir
+        / f"{os.path.basename(os.path.normpath(args.data_name))}_cv+{args.folds}.pkl"
+    )
     with open(fname, "wb") as f:
         pickle.dump(
             [

@@ -32,7 +32,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 from src import data_utils as du
-from src import training
+from src import diagnostics
 from training_scripts import train_ae_ar as train
 
 # -------------------------------------------------------------------
@@ -94,7 +94,6 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "layer_size": (63, 98, 30),
-    "CNN": False,
     "print_frequency": 1,
     "n_bins": None,  # set after data load
 }
@@ -132,7 +131,6 @@ def init_model(device, params):
         n_latent=params["latent_dim"],
         n_lag=params["n_lag"],
         layer_size=params["layer_size"],
-        CNN=params["CNN"],
     )
     optimal_path = os.path.join(
         "results",
@@ -263,7 +261,7 @@ def _fold_worker(args):
             optimizer,
             sched,
             params,
-            early_stopping=training.EarlyStopping(patience=params["patience"]),
+            early_stopping=diagnostics.EarlyStopping(patience=params["patience"]),
             print_flag=False,
             device=device,
         )
@@ -385,7 +383,10 @@ def main():
     # ----------------------------------------------------------------
     out_dir = Path("UQ/conformal/results/ae_AR")
     out_dir.mkdir(parents=True, exist_ok=True)
-    fname = out_dir / f"{args.data_name}_cv+{args.folds}.pkl"
+    fname = (
+        out_dir
+        / f"{os.path.basename(os.path.normpath(args.data_name))}_cv+{args.folds}.pkl"
+    )
     with open(fname, "wb") as fh:
         pickle.dump(
             [

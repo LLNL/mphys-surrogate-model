@@ -14,7 +14,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 from src import data_utils as du
-from src import training
+from src import diagnostics
 from training_scripts import train_ae_ar as train
 
 # load arguments
@@ -66,7 +66,6 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "layer_size": (63, 98, 30),
-    "CNN": False,
     "print_frequency": 1,
 }
 
@@ -146,7 +145,6 @@ def init_model(device=device):
         n_latent=params["latent_dim"],
         n_lag=params["n_lag"],
         layer_size=params["layer_size"],
-        CNN=params["CNN"],
     )
     optimal_path = os.path.join(
         "results",
@@ -182,7 +180,7 @@ def init_scheduler(optimizer):
     return sched
 
 
-early_stopping = training.EarlyStopping(patience=params["patience"])
+early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
 
 """
 Helper utility functions
@@ -545,7 +543,11 @@ if method == "split":  # add split percent if needed
     method += str(int(100 * calib_size))
 with open(
     os.path.join(
-        "UQ", "conformal", "results", "ae_AR", args.data_name + "_" + method + ".pkl"
+        "UQ",
+        "conformal",
+        "results",
+        "ae_AR",
+        os.path.basename(os.path.normpath(args.data_name)) + "_" + method + ".pkl",
     ),
     "wb",
 ) as f:

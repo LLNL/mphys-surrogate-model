@@ -14,7 +14,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 from src import data_utils as du
-from src import training
+from src import diagnostics
 from training_scripts import train_ae_NNdzdt as train
 
 # load arguments
@@ -62,7 +62,6 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "layer_size": (42, 36, 46),
-    "CNN": False,
     "print_frequency": 1,
 }
 
@@ -141,7 +140,6 @@ def init_model(device=device):
         n_bins=outputs["n_bins"],
         n_latent=params["latent_dim"],
         layer_size=params["layer_size"],
-        CNN=params["CNN"],
     )
     optimal_path = os.path.join(
         "results",
@@ -177,7 +175,7 @@ def init_scheduler(optimizer):
     return sched
 
 
-early_stopping = training.EarlyStopping(patience=params["patience"])
+early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
 
 # Compute & set weights based on Champion et al recs
 lambda1, lambda2, lambda3 = du.champion_calculate_weights(
@@ -541,7 +539,7 @@ with open(
         "conformal",
         "results",
         "ae_NNdzdt",
-        args.data_name + "_" + method + ".pkl",
+        os.path.basename(os.path.normpath(args.data_name)) + "_" + method + ".pkl",
     ),
     "wb",
 ) as f:
