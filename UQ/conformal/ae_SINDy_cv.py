@@ -157,16 +157,17 @@ def run_ae_X_latent(x, m, model):
         (x.shape[0], x.shape[1], params["latent_dim"] + 1),
         dtype=float,
     )
-    z_enc_train = model.encoder(torch.Tensor(x)).detach().numpy()
+    z_enc = model.encoder(torch.Tensor(x)).detach().numpy()
+    z_train_enc = model.encoder(torch.Tensor(outputs["x_train"])).detach().numpy()
     zlim = np.zeros((3 + 1, 2))  # DSD bins
     for il in range(3):
-        zlim[il][0] = z_enc_train[:, :, il].min()
-        zlim[il][1] = z_enc_train[:, :, il].max()
-    zlim[-1][0] = m.min()
-    zlim[-1][1] = m.max()
+        zlim[il][0] = z_train_enc[:, :, il].min()
+        zlim[il][1] = z_train_enc[:, :, il].max()
+    zlim[-1][0] = outputs["m_train"].min()
+    zlim[-1][1] = outputs["m_train"].max()
 
     for id in range(len(x)):  # loop through each initial condition/sample/gridbox
-        z0 = np.concatenate((z_enc_train[id, 0, :], np.array([m[id, 0]])), axis=-1)
+        z0 = np.concatenate((z_enc[id, 0, :], np.array([m[id, 0]])), axis=-1)
         latents_all[id] = du.simulate(z0, outputs["dsd_time"], model.dzdt, zlim)
     return latents_all
 
@@ -178,16 +179,17 @@ def run_ae_X(x, m, model):
     DSD_all = np.empty(x.shape, dtype=float)
     # mass data
     M_all = np.empty(m.shape, dtype=float)
-    z_enc_train = model.encoder(torch.Tensor(x)).detach().numpy()
+    z_enc = model.encoder(torch.Tensor(x)).detach().numpy()
+    z_train_enc = model.encoder(torch.Tensor(outputs["x_train"])).detach().numpy()
     zlim = np.zeros((3 + 1, 2))  # DSD bins
     for il in range(3):
-        zlim[il][0] = z_enc_train[:, :, il].min()
-        zlim[il][1] = z_enc_train[:, :, il].max()
-    zlim[-1][0] = m.min()
-    zlim[-1][1] = m.max()
+        zlim[il][0] = z_train_enc[:, :, il].min()
+        zlim[il][1] = z_train_enc[:, :, il].max()
+    zlim[-1][0] = outputs["m_train"].min()
+    zlim[-1][1] = outputs["m_train"].max()
 
     for id in range(len(x)):  # loop through each initial condition/sample/gridbox
-        z0 = np.concatenate((z_enc_train[id, 0, :], np.array([m[id, 0]])), axis=-1)
+        z0 = np.concatenate((z_enc[id, 0, :], np.array([m[id, 0]])), axis=-1)
         latents_pred = du.simulate(z0, outputs["dsd_time"], model.dzdt, zlim)
         DSD_all[id] = (
             model.decoder(torch.Tensor(latents_pred[:, :-1])).detach().numpy()

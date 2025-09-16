@@ -168,11 +168,12 @@ def run_all(x, m, model, outputs, params):
         N, T = x_arr.shape[:2]
         lat_all = np.empty((N, T, params["latent_dim"] + 1), dtype=float)
         z_enc = model.encoder(torch.Tensor(x_arr)).detach().numpy()
+        z_train_enc = model.encoder(torch.Tensor(outputs["x_train"])).detach().numpy()
         # determine z-limits
         zlim = np.zeros((params["latent_dim"] + 1, 2))
         for d in range(params["latent_dim"]):
-            zlim[d] = (z_enc[:, :, d].min(), z_enc[:, :, d].max())
-        zlim[-1] = (m_arr.min(), m_arr.max())
+            zlim[d] = (z_train_enc[:, :, d].min(), z_train_enc[:, :, d].max())
+        zlim[-1] = (outputs["m_train"].min(), outputs["m_train"].max())
 
         for i in range(N):
             z0 = np.concatenate([z_enc[i, 0, :], [m_arr[i, 0]]])
