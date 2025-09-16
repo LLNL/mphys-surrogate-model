@@ -160,6 +160,7 @@ def open_mass_dataset(
         "m_test": m_test,
         "idx_test": idx_test,
         "r_bins_edges": ds["rbin_l"].to_numpy(),
+        "r_bins_edges_r": ds["rbin_r"].to_numpy(),
         "n_bins": x_train.shape[-1],
         "dsd_time": ds["t"].to_numpy() - ds["t"].to_numpy()[0],
         "m_scale": m_scale,
@@ -351,7 +352,7 @@ def open_congestus_train_rico_test(
        to the first nt_cong timesteps (default nt_cong=61).
     4) Compute m_scale from congestus only.
     5) Prepare and return numpy arrays:
-       x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time
+       x_train, m_train, x_test, m_test, r_bins_edges, r_bins_edges_r, n_bins, dsd_time
     """
     cong_path = (data_dir / "erf_data" / "congestus" / "noadv_coal_200m").with_suffix(
         ".nc"

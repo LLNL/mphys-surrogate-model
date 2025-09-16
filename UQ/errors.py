@@ -70,8 +70,8 @@ calib_size = None
 calib_size = 20
 k = 20
 
-DSD_areas = []
-m_diffs = []
+DSD_areas = {}
+m_diffs = {}
 
 models = ["SINDy", "NNdzdt", "AR"]
 for model in models:
@@ -82,7 +82,9 @@ for model in models:
         arg_method = "split" + str(calib_size)
     if method == "cv+":
         arg_method = "cv+" + str(k)
-    cp_results_file = args.data_name + "_" + arg_method + ".pkl"
+    cp_results_file = (
+        os.path.basename(os.path.normpath(args.data_name)) + "_" + arg_method + ".pkl"
+    )
     pickle_path = os.path.join(
         parent_directory,
         "UQ",
@@ -137,29 +139,37 @@ for model in models:
         outputs["r_bins_edges"][0]
     )
     # composite trapezoidal rule for DSD outputs; average across latent space coordinates
-    DSD_areas.append(
-        [
-            np.trapz(DSD_diff[0], x=rbins_mid, axis=-1) / domain_size,
-            np.mean(DSD_diff[1], axis=-1),
-            np.trapz(DSD_diff[2], x=rbins_mid, axis=-1) / domain_size,
-        ]
-    )
-    m_diffs.append(m_diff)
-DSD_areas = np.array(DSD_areas)
-m_diffs = np.array(m_diffs)
+    DSD_areas[model] = [
+        np.trapz(DSD_diff[0], x=rbins_mid, axis=-1) / domain_size,
+        np.mean(DSD_diff[1], axis=-1),
+        np.trapz(DSD_diff[2], x=rbins_mid, axis=-1) / domain_size,
+    ]
+    m_diffs[model] = m_diff
 
 # define figures. Columns correspond to parts of architecture
 if args.subset == "nomass":
-    n_cols = 3
+    arch_labels = ["reconstruction", "latent dynamics", "end-to-end"]
+    arch_to_idx = {
+        "reconstruction": 0,
+        "latent dynamics": 1,
+        "end-to-end": 2,
+    }
 elif args.subset == "all":
-    n_cols = 4
-(fig, ax) = plt.subplots(
+    arch_labels = ["reconstruction", "latent dynamics", "mass", "end-to-end"]
+    arch_to_idx = {
+        "reconstruction": 0,
+        "latent dynamics": 1,
+        "end-to-end": 2,
+        # no entry for "mass" because it's handled by m_diffs
+    }
+
+n_cols = len(arch_labels)
+fig, ax = plt.subplots(
     ncols=n_cols,
     figsize=(2.5 * n_cols, n_cols),
     sharey=False,
     constrained_layout=True,
 )
-arch_labels = ["reconstruction", "latent dynamics", "end-to-end", "mass"]
 
 # grab colors from matplotlib default cycle
 model_colors = {
@@ -177,34 +187,37 @@ alpha_linestyles = {
     alphas[3]: "dotted",
 }
 
-for j in range(n_cols):  # loop through architectures (columns)
-    # loop through alpha values
-    for i, model in enumerate(models):
-        for k, alpha in enumerate(alphas):
-            if j == 3:
+for j, label in enumerate(arch_labels):  # loop through architectures (columns)
+    for model in models:  # loop through models
+        for k, alpha in enumerate(alphas):  # loop through alpha values
+            if label == "mass":
                 ax[j].plot(
                     outputs["dsd_time"],
-                    m_diff[i][k],
+                    m_diffs[model][k],
                     color=model_colors[model],
                     linestyle=alpha_linestyles[alpha],
                     label=r"$\alpha={}$%, {}".format(100 * alpha, model),
                 )
             else:
+                data_idx = arch_to_idx[label]
                 ax[j].plot(
                     outputs["dsd_time"],
-                    DSD_areas[i][j][k],
+                    DSD_areas[model][data_idx][k],
                     color=model_colors[model],
                     linestyle=alpha_linestyles[alpha],
-                    label=r"$\alpha={}$%, {}".format(100 * alpha, model),
                 )
+
     ax[j].set_xlabel("time [s]")
-    ax[j].set_ylabel(f"{arch_labels[j]} [-]")
-    if j == 3:
-        ax[j].set_ylim(-0.1 * m_diff.max(), 1.1 * m_diff.max())
+
+    # y-labels and limits
+    if label == "mass":
+        ax[j].set_ylabel("mass [-]")
     else:
-        ax[j].set_ylim(-0.1 * DSD_areas[:, j].max(), 1.1 * DSD_areas[:, j].max())
-# legend for alpha values
-color_handles = [Line2D([0], [0], color=model_colors[a], lw=2) for a in alphas]
+        data_idx = arch_to_idx[label]
+        ax[j].set_ylabel(f"{label} [-]")
+
+# legend for alpha values (colors = models)
+color_handles = [Line2D([0], [0], color=model_colors[model], lw=2) for model in models]
 legend1 = ax[-1].legend(
     color_handles,
     models,
@@ -213,19 +226,20 @@ legend1 = ax[-1].legend(
     loc="upper left",
 )
 
-# legend for methods (linestyles)
+# legend for miscoverage (linestyles)
 marker_handles = [
     Line2D([0], [0], color="black", linestyle=alpha_linestyles[alpha])
     for alpha in alphas
 ]
 legend2 = ax[-1].legend(
     marker_handles,
-    model_colors,
+    [r"$\alpha={}$%".format(100 * alpha) for alpha in alphas],
     bbox_to_anchor=(1.05, 0),
     title="Miscoverage rate",
     loc="lower left",
 )
 plt.gca().add_artist(legend1)
+
 fig.savefig(
     os.path.join(
         parent_directory,

@@ -22,10 +22,10 @@ echo 'activating'
 cd mphys-surrogate-model
 
 echo 'starting vanilla cp'
-python3 UQ/conformal/ae_AR.py erf_data/congestus/noadv_coal_200m -m full -e 200 -b 200 -a 0.1 0.05 0.02 0.01
+python3 UQ/conformal/ae_AR.py erf_data/congestus/noadv_coal_200m_9600 -m full -e 200 -b 200 -a 0.1 0.05 0.02 0.01
 p=20 # validation split percent
 echo "starting split cp, train-validation-test split: $((80 - p))-${p}-20"
-python3 UQ/conformal/ae_AR.py erf_data/congestus/noadv_coal_200m -m "split${p}" -e 200 -b 200 -a 0.1 0.05 0.02 0.01
+python3 UQ/conformal/ae_AR.py erf_data/congestus/noadv_coal_200m_9600 -m "split${p}" -e 200 -b 200 -a 0.1 0.05 0.02 0.01
 k=20 # number of cross-validation folds
 echo "starting cv+ with ${k} folds"
-python3 UQ/conformal/ae_AR_cv.py erf_data/congestus/noadv_coal_200m -k "${k}" -e 200 -b 200 -a 0.1 0.05 0.02 0.01
+python3 UQ/conformal/ae_AR_cv.py erf_data/congestus/noadv_coal_200m_9600 -k "${k}" -e 200 -b 200 -a 0.1 0.05 0.02 0.01
