@@ -20,9 +20,9 @@ sys.path.append(project_root)
 import src.data_utils as du
 from src import diagnostics
 
-# MODEL_TYPE = "AE-AR"
+MODEL_TYPE = "AE-AR"
 # MODEL_TYPE = "NNdzdt"
-MODEL_TYPE = "AE-SINDy"
+# MODEL_TYPE = "AE-SINDy"
 
 if MODEL_TYPE == "AE-AR":
     from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
@@ -62,7 +62,7 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
     # Fixed parameters
-    num_epochs = 30  # Reduced for faster trials
+    num_epochs = 1  # Reduced for faster trials
 
     # Initialize the model
     if MODEL_TYPE == "AE-AR":
@@ -74,7 +74,6 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
             n_latent=params["latent_dim"],
             layer_size=(layer1_size, layer2_size, layer3_size),
             n_lag=params["n_lag"],
-            CNN=params["CNN"],
         )
     elif MODEL_TYPE == "NNdzdt":
         lambda1, lambda2, lambda3 = du.champion_calculate_weights(
@@ -88,7 +87,6 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
             n_bins=n_bins,
             n_latent=params["latent_dim"],
             layer_size=(layer1_size, layer2_size, layer3_size),
-            CNN=params["CNN"],
         )
     elif MODEL_TYPE == "AE-SINDy":
         # params["latent_dim"] = latent_dim
@@ -104,7 +102,6 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
             n_bins=n_bins,
             n_latent=params["latent_dim"],
             poly_order=params["poly_order"],
-            CNN=params["CNN"],
         )
     else:
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
@@ -163,7 +160,7 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
         )
     else:
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
-    _, train_wass, _ = diagnostics.get_performance_metrics(
+    _, train_wass, _, _ = diagnostics.get_performance_metrics(
         x_train, m_train, z_pred, x_pred
     )
     mean_trainset_wass = np.mean(train_wass)
@@ -185,7 +182,7 @@ def optimize_worker(args):
 
 
 if __name__ == "__main__":
-    total_trials = 1000  # On mac with 8 perf. cores, choose multiple of 8 total_trials
+    total_trials = 1  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
     # Open dataset
@@ -241,7 +238,7 @@ if __name__ == "__main__":
         print(f"Folder '{output_directory}' already exists.")
 
     # Set up parallel info
-    n_workers = 8  # 8 performance cores and 4 efficiency cores
+    n_workers = 1  # 8 performance cores and 4 efficiency cores
     if parallel_flag:
         if total_trials % n_workers:
             raise RuntimeError("Ensure total trials is a multiple of n_workers")

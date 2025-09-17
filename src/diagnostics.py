@@ -91,7 +91,7 @@ def get_performance_metrics(x_test, m_test, z_pred, x_pred, tol=1e-8):
 
     test_kl = np.zeros(x_test.shape[0:2])
     test_wass = np.zeros(x_test.shape[0:2])
-    test_wass_un = np.zeros(x_test.shape[0:2])
+    test_mse_un = np.zeros(x_test.shape[0:2])
     test_mass_diff = np.zeros(x_test.shape[0:2])
     for nm in range(n_test):
         for nt in range(n_timesteps):
@@ -106,12 +106,9 @@ def get_performance_metrics(x_test, m_test, z_pred, x_pred, tol=1e-8):
             test_wass[nm, nt] = wasserstein_distance(
                 pred_dsd.detach().numpy().ravel(), true_dsd.detach().numpy().ravel()
             )
-            test_wass_un[nm, nt] = wasserstein_distance(
-                pred_dsd_un.detach().numpy().ravel(),
-                true_dsd_un.detach().numpy().ravel(),
-            )
+            test_mse_un[nm, nt] = np.linalg.norm((pred_dsd - true_dsd).detach().numpy().ravel())
             test_mass_diff[nm, nt] = z_pred[nm, nt, -1] - m_test[nm, nt]
-    return test_kl, test_wass, test_wass_un, test_mass_diff
+    return test_kl, test_wass, test_mse_un, test_mass_diff
 
 
 class EarlyStopping:
