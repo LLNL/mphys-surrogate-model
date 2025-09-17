@@ -14,7 +14,7 @@ import numpy as np
 import optuna
 import torch
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
 import src.data_utils as du
@@ -62,7 +62,7 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
     # Fixed parameters
-    num_epochs = 1  # Reduced for faster trials
+    num_epochs = 30  # Reduced for faster trials
 
     # Initialize the model
     if MODEL_TYPE == "AE-AR":
@@ -182,7 +182,7 @@ def optimize_worker(args):
 
 
 if __name__ == "__main__":
-    total_trials = 1  # On mac with 8 perf. cores, choose multiple of 8 total_trials
+    total_trials = 1024  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
     # Open dataset
@@ -227,10 +227,10 @@ if __name__ == "__main__":
         params["loss_weight_sindy_z"] = lambda2
 
     # Set up save folder
-    base_output_directory = Path("./")
+    base_output_directory = Path("../results/Optuna/")
     id = str(uuid.uuid4().hex)
     output_directory = base_output_directory / (
-        f"{MODEL_TYPE}_" + datetime.now().isoformat().split(".")[0] + "_" + id
+        f"{MODEL_TYPE}_" + datetime.now().isoformat().split(".")[0]# + "_" + id
     )
     if not output_directory.exists():
         output_directory.mkdir(parents=True, exist_ok=True)
@@ -238,7 +238,7 @@ if __name__ == "__main__":
         print(f"Folder '{output_directory}' already exists.")
 
     # Set up parallel info
-    n_workers = 1  # 8 performance cores and 4 efficiency cores
+    n_workers = 64  # 8 performance cores and 4 efficiency cores
     if parallel_flag:
         if total_trials % n_workers:
             raise RuntimeError("Ensure total trials is a multiple of n_workers")
