@@ -36,14 +36,9 @@ def get_latent_trajectories_AR(
         z_pred[j, :n_lag, :-1] = z0
         z_pred[j, :n_lag, -1] = mj[0]
         for t in range(n_lag, x_test.shape[1]):
-            lagged_input = torch.cat(
-                (
-                    torch.Tensor(z_pred[j, t - n_lag : t, :-1]).reshape(
-                        n_lag * n_latent
-                    ),
-                    torch.Tensor([mj[0]]),
-                )
-            )
+            lagged_input = torch.Tensor(z_pred[j, t - n_lag : t, :]).reshape(
+                        n_lag * (n_latent + 1)
+                    )
             z_pred[j, t, :] = model.autoregressor(lagged_input).detach().numpy()
             z_data[j, t, :-1] = (
                 model.encoder(torch.Tensor(x_test[j, t, :]).reshape(1, -1))
