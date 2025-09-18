@@ -96,9 +96,7 @@ def get_performance_metrics(x_test, m_test, z_pred, x_pred, tol=1e-8):
     for nm in range(n_test):
         for nt in range(n_timesteps):
             pred_dsd = x_pred[nm, nt]
-            pred_dsd_un = pred_dsd * z_pred[nm, nt, -1]
             true_dsd = torch.Tensor(x_test[nm, nt]).reshape(1, 1, -1)
-            true_dsd_un = true_dsd * m_test[nm, nt]
             test_kl[nm, nt] = divergence(
                 torch.log(pred_dsd + tol),
                 torch.log(true_dsd + tol),
@@ -106,7 +104,7 @@ def get_performance_metrics(x_test, m_test, z_pred, x_pred, tol=1e-8):
             test_wass[nm, nt] = wasserstein_distance(
                 pred_dsd.detach().numpy().ravel(), true_dsd.detach().numpy().ravel()
             )
-            test_mse_un[nm, nt] = np.linalg.norm((pred_dsd - true_dsd).detach().numpy().ravel())
+            test_mse_un[nm, nt] = np.linalg.norm((pred_dsd - true_dsd).detach().numpy().ravel()) / np.linalg.norm(true_dsd.detach().numpy().ravel())
             test_mass_diff[nm, nt] = z_pred[nm, nt, -1] - m_test[nm, nt]
     return test_kl, test_wass, test_mse_un, test_mass_diff
 
