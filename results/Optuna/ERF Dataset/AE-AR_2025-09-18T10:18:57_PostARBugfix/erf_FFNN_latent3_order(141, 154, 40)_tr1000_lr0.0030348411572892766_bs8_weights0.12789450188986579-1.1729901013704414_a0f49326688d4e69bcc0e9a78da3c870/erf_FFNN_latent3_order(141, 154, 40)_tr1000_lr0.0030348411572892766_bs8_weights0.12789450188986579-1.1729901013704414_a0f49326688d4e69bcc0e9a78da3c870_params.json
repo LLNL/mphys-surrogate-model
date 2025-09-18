@@ -1,0 +1,24 @@
+{
+    "data_src": "erf",
+    "random_seed": 10,
+    "num_epochs": 1000,
+    "batch_size": 8,
+    "learning_rate": 0.0030348411572892766,
+    "latent_dim": 3,
+    "n_lag": 1,
+    "w_recon": 1,
+    "w_dx": 0.12789450188986579,
+    "w_dz": 1.1729901013704414,
+    "lr_sched": true,
+    "patience": 50,
+    "tol": 1e-08,
+    "wd": 0.001,
+    "layer_size": [
+        141,
+        154,
+        40
+    ],
+    "print_frequency": 1,
+    "emily_save": true,
+    "nipun_save": true
+}

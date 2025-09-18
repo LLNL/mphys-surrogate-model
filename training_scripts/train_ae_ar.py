@@ -22,18 +22,18 @@ params = {
     "data_src": "erf",
     "random_seed": 10,
     "num_epochs": 1000,
-    "batch_size": 4,
-    "learning_rate": 0.002482884780966882,
+    "batch_size": 8,
+    "learning_rate": 0.0030348411572892766,
     "latent_dim": 3,
     "n_lag": 1,
     "w_recon": 1,
-    "w_dx": 0.22816989332325596,
-    "w_dz": 0.6719555656053005,
+    "w_dx": 0.12789450188986579,
+    "w_dz": 1.1729901013704414,
     "lr_sched": True,
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "layer_size": (63, 98, 30),
+    "layer_size": (141, 154, 40),
     "print_frequency": 1,
     "emily_save": True,
     "nipun_save": True,
@@ -518,7 +518,7 @@ if __name__ == "__main__":
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_full_test_recon.png"))
 
-    test_kl, test_wass, test_wun = diagnostics.get_performance_metrics(
+    test_kl, test_wass, test_wun, _ = diagnostics.get_performance_metrics(
         x_test, m_test, z_pred, x_pred
     )
     fig = plotting.plot_full_testset_performance_pred(test_kl, test_wass, test_wun)

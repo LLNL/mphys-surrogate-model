@@ -14,6 +14,10 @@ varied for each model.
     w_dx = trial.suggest_float("w_dx", 0.1, 1.9)
     w_dz = trial.suggest_float("w_dz", 0.1, 1.9)
 ```
+The AE-AR model hyperparameter optimization was run twice, the second 
+time was after Emily's diagnostic bugfix. The new results are in
+`AE-AR_2025-09-18T10/18/57_PostARBugfix`, and aren't too different
+from the old results.
 
 ## AE-NNdzdt
 ```

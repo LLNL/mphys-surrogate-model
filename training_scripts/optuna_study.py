@@ -230,7 +230,7 @@ if __name__ == "__main__":
     base_output_directory = Path("../results/Optuna/")
     id = str(uuid.uuid4().hex)
     output_directory = base_output_directory / (
-        f"{MODEL_TYPE}_" + datetime.now().isoformat().split(".")[0]# + "_" + id
+        f"{MODEL_TYPE}_" + datetime.now().isoformat().split(".")[0]  # + "_" + id
     )
     if not output_directory.exists():
         output_directory.mkdir(parents=True, exist_ok=True)
@@ -238,7 +238,7 @@ if __name__ == "__main__":
         print(f"Folder '{output_directory}' already exists.")
 
     # Set up parallel info
-    n_workers = 64  # 8 performance cores and 4 efficiency cores
+    n_workers = 8  # 8 performance cores and 4 efficiency cores
     if parallel_flag:
         if total_trials % n_workers:
             raise RuntimeError("Ensure total trials is a multiple of n_workers")
