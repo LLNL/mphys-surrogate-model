@@ -36,14 +36,9 @@ def get_latent_trajectories_AR(
         z_pred[j, :n_lag, :-1] = z0
         z_pred[j, :n_lag, -1] = mj[0]
         for t in range(n_lag, x_test.shape[1]):
-            lagged_input = torch.cat(
-                (
-                    torch.Tensor(z_pred[j, t - n_lag : t, :-1]).reshape(
-                        n_lag * n_latent
-                    ),
-                    torch.Tensor([mj[0]]),
-                )
-            )
+            lagged_input = torch.Tensor(z_pred[j, t - n_lag : t, :]).reshape(
+                        n_lag * (n_latent + 1)
+                    )
             z_pred[j, t, :] = model.autoregressor(lagged_input).detach().numpy()
             z_data[j, t, :-1] = (
                 model.encoder(torch.Tensor(x_test[j, t, :]).reshape(1, -1))
@@ -96,14 +91,12 @@ def get_performance_metrics(x_test, m_test, z_pred, x_pred, tol=1e-8):
 
     test_kl = np.zeros(x_test.shape[0:2])
     test_wass = np.zeros(x_test.shape[0:2])
-    test_wass_un = np.zeros(x_test.shape[0:2])
+    test_mse_un = np.zeros(x_test.shape[0:2])
     test_mass_diff = np.zeros(x_test.shape[0:2])
     for nm in range(n_test):
         for nt in range(n_timesteps):
             pred_dsd = x_pred[nm, nt]
-            pred_dsd_un = pred_dsd * z_pred[nm, nt, -1]
             true_dsd = torch.Tensor(x_test[nm, nt]).reshape(1, 1, -1)
-            true_dsd_un = true_dsd * m_test[nm, nt]
             test_kl[nm, nt] = divergence(
                 torch.log(pred_dsd + tol),
                 torch.log(true_dsd + tol),
@@ -111,12 +104,9 @@ def get_performance_metrics(x_test, m_test, z_pred, x_pred, tol=1e-8):
             test_wass[nm, nt] = wasserstein_distance(
                 pred_dsd.detach().numpy().ravel(), true_dsd.detach().numpy().ravel()
             )
-            test_wass_un[nm, nt] = wasserstein_distance(
-                pred_dsd_un.detach().numpy().ravel(),
-                true_dsd_un.detach().numpy().ravel(),
-            )
+            test_mse_un[nm, nt] = np.linalg.norm((pred_dsd - true_dsd).detach().numpy().ravel()) / np.linalg.norm(true_dsd.detach().numpy().ravel())
             test_mass_diff[nm, nt] = z_pred[nm, nt, -1] - m_test[nm, nt]
-    return test_kl, test_wass, test_wass_un, test_mass_diff
+    return test_kl, test_wass, test_mse_un, test_mass_diff
 
 
 class EarlyStopping:

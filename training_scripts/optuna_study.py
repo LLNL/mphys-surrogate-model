@@ -14,15 +14,15 @@ import numpy as np
 import optuna
 import torch
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
 import src.data_utils as du
 from src import diagnostics
 
-# MODEL_TYPE = "AE-AR"
+MODEL_TYPE = "AE-AR"
 # MODEL_TYPE = "NNdzdt"
-MODEL_TYPE = "AE-SINDy"
+# MODEL_TYPE = "AE-SINDy"
 
 if MODEL_TYPE == "AE-AR":
     from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
@@ -74,7 +74,6 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
             n_latent=params["latent_dim"],
             layer_size=(layer1_size, layer2_size, layer3_size),
             n_lag=params["n_lag"],
-            CNN=params["CNN"],
         )
     elif MODEL_TYPE == "NNdzdt":
         lambda1, lambda2, lambda3 = du.champion_calculate_weights(
@@ -88,7 +87,6 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
             n_bins=n_bins,
             n_latent=params["latent_dim"],
             layer_size=(layer1_size, layer2_size, layer3_size),
-            CNN=params["CNN"],
         )
     elif MODEL_TYPE == "AE-SINDy":
         # params["latent_dim"] = latent_dim
@@ -104,7 +102,6 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
             n_bins=n_bins,
             n_latent=params["latent_dim"],
             poly_order=params["poly_order"],
-            CNN=params["CNN"],
         )
     else:
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
@@ -163,7 +160,7 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
         )
     else:
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
-    _, train_wass, _ = diagnostics.get_performance_metrics(
+    _, train_wass, _, _ = diagnostics.get_performance_metrics(
         x_train, m_train, z_pred, x_pred
     )
     mean_trainset_wass = np.mean(train_wass)
@@ -185,7 +182,7 @@ def optimize_worker(args):
 
 
 if __name__ == "__main__":
-    total_trials = 1000  # On mac with 8 perf. cores, choose multiple of 8 total_trials
+    total_trials = 1024  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
     # Open dataset
@@ -230,10 +227,10 @@ if __name__ == "__main__":
         params["loss_weight_sindy_z"] = lambda2
 
     # Set up save folder
-    base_output_directory = Path("./")
+    base_output_directory = Path("../results/Optuna/")
     id = str(uuid.uuid4().hex)
     output_directory = base_output_directory / (
-        f"{MODEL_TYPE}_" + datetime.now().isoformat().split(".")[0] + "_" + id
+        f"{MODEL_TYPE}_" + datetime.now().isoformat().split(".")[0]  # + "_" + id
     )
     if not output_directory.exists():
         output_directory.mkdir(parents=True, exist_ok=True)
