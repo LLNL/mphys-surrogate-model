@@ -199,16 +199,17 @@ if subset == "latent":
 
     params.update(
         {
-            "n_lag": 1,
-            "layer_size": (63, 98, 30),
-            "learning_rate": 0.002482884780966882,
-            "wd": 1e-3,
-            "patience": 50,
-            "tol": 1e-8,
-            "w_dx": 0.22816989332325596,
-            "w_dz": 0.6719555656053005,
-            "w_recon": 1,
             "lr_sched": True,
+            "learning_rate": 0.0030348411572892766,
+            "latent_dim": 3,
+            "n_lag": 1,
+            "w_recon": 1,
+            "w_dx": 0.12789450188986579,
+            "w_dz": 1.1729901013704414,
+            "patience": 50,
+            "tol": 1e-08,
+            "wd": 0.001,
+            "layer_size": [141, 154, 40],
             "print_frequency": 1,
         }
     )

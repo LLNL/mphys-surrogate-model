@@ -55,17 +55,17 @@ params = {
     "random_seed": 1952,
     "num_epochs": args.epochs,
     "batch_size": args.batches,
-    "learning_rate": 0.002482884780966882,
+    "learning_rate": 0.0030348411572892766,
     "latent_dim": 3,
     "n_lag": 1,
     "w_recon": 1,
-    "w_dx": 0.22816989332325596,
-    "w_dz": 0.6719555656053005,
+    "w_dx": 0.12789450188986579,
+    "w_dz": 1.1729901013704414,
     "lr_sched": True,
     "patience": 50,
-    "tol": 1e-8,
-    "wd": 1e-3,
-    "layer_size": (63, 98, 30),
+    "tol": 1e-08,
+    "wd": 0.001,
+    "layer_size": [141, 154, 40],
     "print_frequency": 1,
 }
 
@@ -150,13 +150,13 @@ def init_model(device=device):
         "results",
         "Optuna",
         "ERF Dataset",
-        "AE-AR_2025-07-20T22:45:33_605d8b8697694137a65cab3b1012fffc",
-        "erf_FFNN_latent3_order(63, 98, 30)_tr1000_lr0.002482884780966882_bs4_weights0.22816989332325596-0.6719555656053005_7c43ff3e659b47358fa327f690871ed7",
+        "AE-AR_2025-09-18T10:18:57_PostARBugfix",
+        "erf_FFNN_latent3_order(141, 154, 40)_tr1000_lr0.0030348411572892766_bs8_weights0.12789450188986579-1.1729901013704414_a0f49326688d4e69bcc0e9a78da3c870",
     )
     ae_ar_checkpoint = torch.load(
         os.path.join(
             optimal_path,
-            "erf_FFNN_latent3_order(63, 98, 30)_tr1000_lr0.002482884780966882_bs4_weights0.22816989332325596-0.6719555656053005_7c43ff3e659b47358fa327f690871ed7.pth",
+            "erf_FFNN_latent3_order(141, 154, 40)_tr1000_lr0.0030348411572892766_bs8_weights0.12789450188986579-1.1729901013704414_a0f49326688d4e69bcc0e9a78da3c870.pth",
         ),
         weights_only=True,
     )
