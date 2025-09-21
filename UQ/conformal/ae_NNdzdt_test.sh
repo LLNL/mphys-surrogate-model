@@ -11,7 +11,7 @@
 #SBATCH -p pdebug
 #SBATCH --mail-type=ALL
 #SBATCH -A ml-uphys
-#SBATCH -o output_%J.out
+#SBATCH -o ae_NNdzdt.out
 
 ##### These are shell commands
 date
