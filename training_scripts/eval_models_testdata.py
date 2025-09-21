@@ -16,7 +16,7 @@ from train_ae_NNdzdt import AENNdzdt
 from train_ae_sindy import AESINDy
 
 MODEL_DIRS = {
-    "AR": "../results/Optuna/ERF Dataset/AE-AR_2025-07-20T22:45:33_605d8b8697694137a65cab3b1012fffc/erf_FFNN_latent3_order(63, 98, 30)_tr1000_lr0.002482884780966882_bs4_weights0.22816989332325596-0.6719555656053005_7c43ff3e659b47358fa327f690871ed7",
+    "AR": "../results/Optuna/ERF Dataset/AE-AR_2025-09-18T10:18:57_PostARBugfix/erf_FFNN_latent3_order(141, 154, 40)_tr1000_lr0.0030348411572892766_bs8_weights0.12789450188986579-1.1729901013704414_a0f49326688d4e69bcc0e9a78da3c870",
     "SINDy": "../results/Optuna/ERF Dataset/AE-SINDy_LimParams/erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc",
     "NNdzdt": "../results/Optuna/ERF Dataset/NNdzdt_2025-07-20T23:31:20_3a400c596947422389559813cd41dfe6/erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3",
 }
@@ -57,7 +57,6 @@ def get_model(model_type, n_bins=64):
                 params["layer2_size"],
                 params["layer3_size"],
             ),
-            CNN=False,
         )
     elif model_type == "SINDy":
         model = AESINDy(
@@ -65,8 +64,6 @@ def get_model(model_type, n_bins=64):
             n_bins=n_bins,
             n_latent=3,
             poly_order=2,
-            CNN=False,
-            sequential_thresholding=False,
         )
     elif model_type == "NNdzdt":
         model = AENNdzdt(
@@ -78,7 +75,6 @@ def get_model(model_type, n_bins=64):
                 params["layer2_size"],
                 params["layer3_size"],
             ),
-            CNN=False,
         )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
@@ -87,7 +83,7 @@ def get_model(model_type, n_bins=64):
 
 if __name__ == "__main__":
     which_data = "val"  # "val", "9600", "14400", "RICO"
-    for model_type in ["SINDy", "NNdzdt"]:
+    for model_type in ["AR", "SINDy", "NNdzdt"]:
         for which_data in ["val", "9600", "14400", "RICO"]:
             print(f"Loading {model_type} model...")
 
