@@ -1,44 +1,40 @@
 """
-Script takes in data filepath and does conformal predictions on AE-SINDy model.
+Script takes in data filepath and does split conformal predictions on AE-SINDy model.
+Assumes an already pretrained model and only does calibration and prediction on the specified data.
 """
 import os
 import sys
 import numpy as np
 import argparse
 import torch
+
+torch.set_grad_enabled(False)
+torch.backends.cudnn.benchmark = True
+torch.set_num_threads(1)
 import time
 from pathlib import Path
 import pickle
+from joblib import Parallel, delayed
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 from src import data_utils as du
-from src import diagnostics
 from training_scripts import train_ae_sindy as train
+from math import ceil
+from sklearn.covariance import LedoitWolf
+import xarray as xr
 
 # load arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("data_name", help="basename (no .nc) of your dataset")
 parser.add_argument(
-    "-t",
-    "--test_size",
-    type=float,
-    default=0.2,
-    help="testing set proportion, must be between 0 and 1, default is 0.2",
-)
-parser.add_argument(
-    "-m",
-    "--method",
-    default="split30",
-    help="conformal predictions method to use (split[p], full), default is split30. \
-                        The p in split indicates what *percent* you want to dedicate out of the full data for calibration.",
-)
-parser.add_argument(
-    "-e", "--epochs", type=int, default=100, help="number of epochs (default is 100)"
-)
-parser.add_argument(
-    "-b", "--batches", type=int, default=200, help="batch size (default is 200)"
+    "-p",
+    "--p",
+    type=int,
+    default=20,
+    help="The p indicates what *percent* you want to dedicate out of the full data for calibration."
+    "Default is 20%, in which case p=20.",
 )
 parser.add_argument(
     "-a",
@@ -48,58 +44,33 @@ parser.add_argument(
     default=0.1,
     help="miscoverage rate(s), must be between 0 and 1, default is 0.1",
 )
+parser.add_argument(
+    "-j",
+    "--n_jobs",
+    type=int,
+    default=-1,
+    help="The number of jobs allocatable for parallelizing the covariance computation."
+    "Default is -1 (all).",
+)
 args = parser.parse_args()
 
 params = {
     "data_src": args.data_name,
     "random_seed": 1952,
-    "num_epochs": args.epochs,
-    "batch_size": args.batches,
-    "learning_rate": 0.004204813405972317,
     "latent_dim": 3,
     "poly_order": 2,
-    "lr_sched": True,
-    "patience": 50,
-    "tol": 1e-8,
-    "wd": 1e-3,
-    "lambda1_metaweight": 0.500989969537634,
-    "print_frequency": 1,
 }
 
 # Global variables and settings
-# Criterion and divergence need to be outside train function to be available in other scripts
 torch.manual_seed(params["random_seed"])
 np.random.seed(params["random_seed"])
 sample_time = None  # for setting times to sample, as indices
-criterion = torch.nn.MSELoss()
-divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 
 # Setting inputted variables
-test_size = args.test_size
-method = args.method
-calib_size = None  # default is no calibration data
-# isolate calib_size or k in the situation where you're using split-conformal or cv+, respectively
-if method[:5] == "split":
-    calib_size = float(method[5:])
-    if (calib_size <= 0) | (calib_size >= 100 * (1 - test_size)):
-        raise ValueError(
-            "Calibration size for split must be a percent strictly between 0 and 100 * (1 - test_size)."
-        )
-    method = "split"
-if method[:3] == "cv+":
-    k = int(method[3:])
-    method = "cv+"
-if method not in [
-    "split",
-    "full",
-    "cv+",
-]:  # raise error if method is not one of the list above
-    raise ValueError("Conformal predictions method specified has not been implemented.")
+calib_size = args.p
 
 alphas = args.alpha if isinstance(args.alpha, (list, tuple)) else [args.alpha]
 
-if (test_size <= 0) | (test_size >= 1):
-    raise ValueError("Test set proportion must be between 0 and 1")
 if any(a <= 0 or a >= 1 for a in alphas):
     raise ValueError("Coverage rate (alpha) must be between 0 and 1 for all values")
 
@@ -108,28 +79,18 @@ alpha_lows = [a / 2 for a in alphas]
 alpha_ups = alpha_lows.copy()
 
 # Set device
-device = torch.device(
-    "cuda"
-    if torch.cuda.is_available()
-    else (
-        "mps"
-        if torch.backends.mps.is_available() and params["batch_size"] > 1000
-        else "cpu"
-    )
-)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # torch.backends.cudnn.benchmark = True
 print(f"Using {device} device")
 
-if calib_size is not None:
-    calib_size *= 0.01
+calib_size *= 0.01
 start_time = time.time()
 # Open dataset
 outputs = du.open_mass_dataset(
     name=params["data_src"],
     data_dir=Path(__file__).parent.parent.parent / "data",
     sample_time=sample_time,
-    test_size=test_size,
-    calib_size=calib_size,
+    test_size=1 - calib_size,
     random_state=params["random_seed"],
 )
 
@@ -158,121 +119,81 @@ def init_model(device=device):
         weights_only=True,
     )
     model.load_state_dict(ae_sindy_checkpoint)
-    # total_params = sum(p.numel() for p in model.parameters())
-    # total_coeffs = sum(p.numel() for p in model.dzdt.parameters())
-    # print(
-    #     f"Total number of parameters: {total_params}, {total_coeffs} are SINDy coefficients"
-    # )
-    return model.to(device)
+    return model.to(device, dtype=torch.float32)
 
-
-# initialize optimizer
-def init_optimizer(model):
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
-    )
-    return optimizer
-
-
-# initialize scheduling
-def init_scheduler(optimizer):
-    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-    return sched
-
-
-early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
-
-# Compute & set weights based on Champion et al recs
-lambda1, lambda2, lambda3 = du.champion_calculate_weights(
-    du.NormedBinDatasetDzDt(
-        outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
-    ),
-    lambda1_metaweight=params["lambda1_metaweight"],
-)
-print(f"lambda: 1.0, {lambda1}, {lambda2}")
-params["loss_weight_recon"] = 1.0
-params["loss_weight_sindy_x"] = lambda1
-params["loss_weight_sindy_z"] = lambda2
 
 """
 Helper utility functions
 """
 
 
+# simulate multiple latent space initial conditions at once in parallel
+def simulate_many(z0s, t_grid, dzdt, zlim, n_jobs):
+    sims = Parallel(n_jobs=n_jobs, backend="loky", batch_size="auto")(
+        delayed(du.simulate)(z0, t_grid, dzdt, zlim) for z0 in z0s
+    )
+    return np.stack(sims, axis=0)  # (N, T, latent_dim+1)
+
+
 # this helper utility encodes and then decodes each DSD to test how close the predictions are to the actual values
-def encode_decode_ae(x, model):
-    # for DSD data, decoded (predictions from network)
-    DSD_all = (
-        model.decoder(model.encoder(torch.Tensor(x))).detach().numpy()
-    )  # DSD pred t+0
-    return DSD_all
+def encode_decode_ae_batched(x_t, model):
+    with torch.inference_mode():
+        out = model.decoder(model.encoder(x_t))
+    return out.detach().cpu().numpy()
 
 
 # run latent space dynamics
-def run_ae_X_latent(x, m, model):
-    # for DSD_mass data, not decoded (so still within the latent space)
-    latents_all = np.empty(
-        (x.shape[0], x.shape[1], params["latent_dim"] + 1),
-        dtype=float,
-    )
-    z_enc = model.encoder(torch.Tensor(x)).detach().numpy()
-    z_train_enc = model.encoder(torch.Tensor(outputs["x_train"])).detach().numpy()
-    zlim = np.zeros((3 + 1, 2))  # DSD bins
-    for il in range(3):
-        zlim[il][0] = z_train_enc[:, :, il].min()
-        zlim[il][1] = z_train_enc[:, :, il].max()
-    zlim[-1][0] = outputs["m_train"].min()
-    zlim[-1][1] = outputs["m_train"].max()
-
-    for id in range(len(x)):  # loop through each initial condition/sample/gridbox
-        z0 = np.concatenate((z_enc[id, 0, :], np.array([m[id, 0]])), axis=-1)
-        latents_all[id] = du.simulate(z0, outputs["dsd_time"], model.dzdt, zlim)
+def run_ae_X_latent_batched(z_enc_np, m_np, model, zlim, n_jobs):
+    # z_enc_np: (N,T,L), m_np: (N,T)
+    z0s = [
+        np.concatenate((z_enc_np[i, 0, :], np.array([m_np[i, 0]])), axis=-1)
+        for i in range(z_enc_np.shape[0])
+    ]
+    latents_all = simulate_many(
+        z0s, outputs["dsd_time"], model.dzdt, zlim, n_jobs
+    )  # (N,T,L+1)
     return latents_all
 
 
 # run full network
 # computes the predicted DSD and mass trajectories
-def run_ae_X(x, m, model):
-    # DSD data, decoded (predictions from network)
-    DSD_all = np.empty(x.shape, dtype=float)
-    # mass data
-    M_all = np.empty(m.shape, dtype=float)
-    z_enc = model.encoder(torch.Tensor(x)).detach().numpy()
-    z_train_enc = model.encoder(torch.Tensor(outputs["x_train"])).detach().numpy()
-    zlim = np.zeros((3 + 1, 2))  # DSD bins
-    for il in range(3):
-        zlim[il][0] = z_train_enc[:, :, il].min()
-        zlim[il][1] = z_train_enc[:, :, il].max()
-    zlim[-1][0] = outputs["m_train"].min()
-    zlim[-1][1] = outputs["m_train"].max()
-
-    for id in range(len(x)):  # loop through each initial condition/sample/gridbox
-        z0 = np.concatenate((z_enc[id, 0, :], np.array([m[id, 0]])), axis=-1)
-        latents_pred = du.simulate(z0, outputs["dsd_time"], model.dzdt, zlim)
-        DSD_all[id] = (
-            model.decoder(torch.Tensor(latents_pred[:, :-1])).detach().numpy()
-        )  # add DSD predictions
-        M_all[id] = latents_pred[:, -1]  # add mass predictions
-    return DSD_all, M_all
+def run_ae_X_batched(z_enc_np, m_np, model, zlim, n_jobs, device):
+    latents_all = run_ae_X_latent_batched(
+        z_enc_np, m_np, model, zlim, n_jobs
+    )  # (N,T,L+1)
+    z_only = latents_all[..., :-1].reshape(-1, z_enc_np.shape[-1])  # (N*T,L)
+    with torch.inference_mode():
+        flat_t = torch.tensor(z_only, device=device, dtype=torch.float32)
+        decoded_flat = model.decoder(flat_t)  # (N*T, n_bins)
+        DSD_all = (
+            decoded_flat.detach()
+            .cpu()
+            .numpy()
+            .reshape(z_enc_np.shape[0], z_enc_np.shape[1], -1)
+        )
+    M_all = latents_all[..., -1]  # (N,T)
+    return DSD_all, M_all, latents_all[..., :-1]
 
 
 # runs all three parts of the architecture above and returns data
-def run_all(x, m, model):
-    DSD_all = [
-        np.empty(x.shape, dtype=float),  # decoder only
-        np.empty(
-            (x.shape[0], x.shape[1], params["latent_dim"]), dtype=float
-        ),  # latent only
-        np.empty(x.shape, dtype=float),  # full architecture
-    ]
-    M_all = np.empty(
-        m.shape,
-        dtype=float,
+def run_all_batched(outputs, model, z_calib_enc, z_test_enc, zlim, device, n_jobs):
+    # decoder-only paths (pure Torch, batched)
+    x_calib_t = torch.tensor(outputs["x_train"], device=device, dtype=torch.float32)
+    x_test_t = torch.tensor(outputs["x_test"], device=device, dtype=torch.float32)
+    DSD_calib_dec = encode_decode_ae_batched(x_calib_t, model)
+    DSD_test_dec = encode_decode_ae_batched(x_test_t, model)
+
+    # full architecture via simulate (Joblib) + batched decoding
+    DSD_calib_full, M_calib_full, Z_calib_full = run_ae_X_batched(
+        z_calib_enc, outputs["m_train"], model, zlim, n_jobs, device
     )
-    DSD_all[0] = encode_decode_ae(x, model=model)
-    DSD_all[1] = run_ae_X_latent(x, m, model=model)[..., :-1]
-    DSD_all[2], M_all = run_ae_X(x, m, model=model)
-    return DSD_all, M_all
+    DSD_test_full, M_test_full, Z_test_full = run_ae_X_batched(
+        z_test_enc, outputs["m_test"], model, zlim, n_jobs, device
+    )
+
+    DSD_calib_all = [DSD_calib_dec, DSD_calib_full, Z_calib_full]
+    DSD_test_all = [DSD_test_dec, DSD_test_full, Z_test_full]
+    return (DSD_calib_all, M_calib_full), (DSD_test_all, M_test_full)
 
 
 def one_sided_quantiles(residuals, alpha_lows, alpha_ups):
@@ -310,254 +231,161 @@ def one_sided_quantiles(residuals, alpha_lows, alpha_ups):
     return q_low, q_high
 
 
+# for computing Mahalanobis distance scoring and covariance matrix inverses
+def compute_scores_and_inv(res_t):
+    # res_t: shape (m, d) at a fixed time t
+    mu_t = res_t.mean(axis=0, keepdims=True)  # (1, d)
+    res_c = res_t - mu_t  # center residuals
+    lw = LedoitWolf().fit(res_c)  # covariance of centered residuals
+    Sigma_inv = lw.precision_
+    scores_t = np.einsum("mi,ij,mi->m", res_c, Sigma_inv, res_c)
+    return scores_t, Sigma_inv, mu_t.squeeze(0)
+
+
 """
 Run conformal predictions. 
-The data splits used are different for each method, so we will configure those separately in each case.
 """
 
-if method == "full":
-    # 0) configure data and dataloaders
-    train_data = du.NormedBinDatasetDzDt(
-        outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
-    )
-    train_loader = torch.utils.data.DataLoader(
-        train_data, batch_size=params["batch_size"], shuffle=True
-    )
-    test_data = du.NormedBinDatasetDzDt(
-        outputs["x_test"], outputs["dsd_time"], outputs["m_test"]
-    )
-    test_loader = torch.utils.data.DataLoader(
-        test_data, batch_size=len(test_data), shuffle=True
-    )
+# 1) predict on calibration and test data
+DSD_lower_full = [
+    np.empty((len(alphas),) + outputs["x_test"].shape, dtype=float),  # decoder only
+    np.empty(
+        (len(alphas),) + outputs["x_test"].shape, dtype=float
+    ),  # full architecture
+]
+DSD_upper_full = DSD_lower_full.copy()
+M_lower_full = np.empty(
+    (len(alphas),) + outputs["m_test"].shape,
+    dtype=float,
+)
+M_upper_full = M_lower_full.copy()
 
-    # 1) fit & predict on training data
-    DSD_lower_full = [
-        np.empty((len(alphas),) + outputs["x_test"].shape, dtype=float),  # decoder only
-        np.empty(
-            (
-                len(alphas),
-                outputs["x_test"].shape[0],
-                outputs["x_test"].shape[1],
-                params["latent_dim"],
-            ),
-            dtype=float,
-        ),  # latent only
-        np.empty(
-            (len(alphas),) + outputs["x_test"].shape, dtype=float
-        ),  # full architecture
-    ]
-    DSD_upper_full = DSD_lower_full.copy()
-    M_lower_full = np.empty(
-        (len(alphas),) + outputs["m_test"].shape,
-        dtype=float,
-    )
-    M_upper_full = M_lower_full.copy()
+print("Loading and initializing model.")
+model = init_model(device)
+model.eval()
 
-    model = init_model(device)
-    optimizer = init_optimizer(model)
-    sched = init_scheduler(optimizer)
+# # load original dataset to properly clip
+# ds = xr.open_dataset(
+#     (Path(__file__).parent.parent.parent / "data" / Path('congestus_coal_200m_train')).with_suffix(".nc")
+#     )
+# dmdlnr = ds["dmdlnr"]
+# m_scale = (
+#     dmdlnr
+#     .sum(dim="bin")
+#     .transpose("loc", "t")
+#     .max()
+#     .item()  # scalar
+# )
+# # sum over bin → shape (t, loc); then transpose → (loc, t)
+# m = dmdlnr.sum(dim="bin").transpose("loc", "t")
+# # x has shape (loc, t, bin)
+# x = (dmdlnr / m).transpose("loc", "t", "bin")
+# x_train =  x.to_numpy()
+# m_train = (m / m_scale).to_numpy()
 
-    # suppress output of train_and_eval
-    (
-        best_model,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-    ) = train.train_and_eval(
-        params["num_epochs"],
-        model,
-        train_loader,
-        test_loader,
-        optimizer,
-        sched,
-        params,
-        early_stopping=early_stopping,
-        print_flag=True,
-        device=device,
-    )
-    print("Predicting the training data.")
-    DSD_train_all, M_train_all = run_all(
-        x=outputs["x_train"], m=outputs["m_train"], model=best_model
-    )
-    print("Predicting the testing data.")
-    DSD_test_all, M_test_all = run_all(
-        x=outputs["x_test"], m=outputs["m_test"], model=best_model
-    )
-    print("Running vanilla conformal predictions.")
-    for i in range(3):  # loop through different subsets of the architecture
-        if (
-            i == 1
-        ):  # in latent case, you should do it relative to latent space. Otherwise, not
-            DSD_res_signed = (
-                DSD_train_all[i]
-                - best_model.encoder(torch.Tensor(outputs["x_train"])).detach().numpy()
-            )
-        else:
-            DSD_res_signed = DSD_train_all[i] - outputs["x_train"]
-        DSD_q_low, DSD_q_high = one_sided_quantiles(
-            DSD_res_signed, alpha_lows, alpha_ups
-        )
-        DSD_lower_full[i] = (
-            DSD_test_all[i][np.newaxis, ...] - DSD_q_high[:, np.newaxis, ...]
-        )
-        DSD_upper_full[i] = (
-            DSD_test_all[i][np.newaxis, ...] - DSD_q_low[:, np.newaxis, ...]
-        )
-        if i == 2:  # also check mass in full architecture case
-            M_res_signed = M_train_all - outputs["m_train"]
-            M_q_low, M_q_high = one_sided_quantiles(M_res_signed, alpha_lows, alpha_ups)
-            M_lower_full = M_test_all[np.newaxis, ...] - M_q_high[:, np.newaxis, ...]
-            M_upper_full = M_test_all[np.newaxis, ...] - M_q_low[:, np.newaxis, ...]
-    lower = DSD_lower_full
-    upper = DSD_upper_full
-    rep_DSD = DSD_test_all
-    lower_m = M_lower_full
-    upper_m = M_upper_full
-    rep_m = M_test_all
+print("Encoding data.")
+with torch.inference_mode():
+    # x_train_t = torch.tensor(x_train, device=device, dtype=torch.float32)
+    x_calib_t = torch.tensor(outputs["x_train"], device=device, dtype=torch.float32)
+    x_test_t = torch.tensor(outputs["x_test"], device=device, dtype=torch.float32)
+    # z_train_enc_t = model.encoder(x_train_t)              # (N_train, T, latent_dim)
+    z_calib_enc_t = model.encoder(x_calib_t)  # (N_calib, T, latent_dim)
+    z_test_enc_t = model.encoder(x_test_t)  # (N_test,  T, latent_dim)
+# z_train_enc = z_train_enc_t.detach().cpu().numpy()
+z_calib_enc = z_calib_enc_t.detach().cpu().numpy()
+z_test_enc = z_test_enc_t.detach().cpu().numpy()
 
-if method == "split":
-    # 0) configure data and dataloaders
-    train_data = du.NormedBinDatasetDzDt(
-        outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
-    )
-    train_loader = torch.utils.data.DataLoader(
-        train_data, batch_size=params["batch_size"], shuffle=True
-    )
-    calib_data = du.NormedBinDatasetDzDt(
-        outputs["x_calib"], outputs["dsd_time"], outputs["m_calib"]
-    )
-    calib_loader = torch.utils.data.DataLoader(
-        calib_data, batch_size=len(calib_data), shuffle=True
-    )
-    test_data = du.NormedBinDatasetDzDt(
-        outputs["x_test"], outputs["dsd_time"], outputs["m_test"]
-    )
-    test_loader = torch.utils.data.DataLoader(
-        test_data, batch_size=len(test_data), shuffle=True
-    )
+# compute clipping windows in latent space relative to the ORIGINAL training data
+zlim = np.array(
+    [[-np.inf, np.inf]] * (params["latent_dim"] + 1), dtype=float
+)  # (-inf,inf) default
+# for il in range(params["latent_dim"]):
+#     zlim[il,0] = z_train_enc[:,:,il].min()
+#     zlim[il,1] = z_train_enc[:,:,il].max()
+# zlim[-1,0] = m_train.min()
+# zlim[-1,1] = m_train.max()
 
-    # 1) fit & predict on training data
-    DSD_lower_full = [
-        np.empty((len(alphas),) + outputs["x_test"].shape, dtype=float),  # decoder only
-        np.empty(
-            (
-                len(alphas),
-                outputs["x_test"].shape[0],
-                outputs["x_test"].shape[1],
-                params["latent_dim"],
-            ),
-            dtype=float,
-        ),  # latent only
-        np.empty(
-            (len(alphas),) + outputs["x_test"].shape, dtype=float
-        ),  # full architecture
-    ]
-    DSD_upper_full = DSD_lower_full.copy()
-    M_lower_full = np.empty(
-        (len(alphas),) + outputs["m_test"].shape,
-        dtype=float,
+print("Predicting the calibration and testing data.")
+(DSD_calib_all, M_calib_all), (DSD_test_all, M_test_all) = run_all_batched(
+    outputs, model, z_calib_enc, z_test_enc, zlim, device, n_jobs=args.n_jobs
+)
+print("Running split conformal predictions on decoder and full outputs.")
+for i in range(2):  # loop through decoder and then full subsets of architecture
+    DSD_res_signed = DSD_calib_all[i] - outputs["x_train"]
+    DSD_q_low, DSD_q_high = one_sided_quantiles(DSD_res_signed, alpha_lows, alpha_ups)
+    DSD_lower_full[i] = (
+        DSD_test_all[i][np.newaxis, ...] - DSD_q_high[:, np.newaxis, ...]
     )
-    M_upper_full = M_lower_full.copy()
+    DSD_upper_full[i] = DSD_test_all[i][np.newaxis, ...] - DSD_q_low[:, np.newaxis, ...]
+    if i == 1:  # also check mass in full architecture case
+        M_res_signed = M_calib_all - outputs["m_train"]
+        M_q_low, M_q_high = one_sided_quantiles(M_res_signed, alpha_lows, alpha_ups)
+        M_lower_full = M_test_all[np.newaxis, ...] - M_q_high[:, np.newaxis, ...]
+        M_upper_full = M_test_all[np.newaxis, ...] - M_q_low[:, np.newaxis, ...]
+# conformal predictions on latent trajectories
+print("Running split conformal predictions on latent trajectories.")
+residuals_lat = DSD_calib_all[2] - z_calib_enc  # (m, n, d)
 
-    model = init_model(device)
-    optimizer = init_optimizer(model)
-    sched = init_scheduler(optimizer)
+m, n, d = residuals_lat.shape
+results = Parallel(n_jobs=args.n_jobs)(
+    delayed(compute_scores_and_inv)(residuals_lat[:, t, :]) for t in range(n)
+)
 
-    (
-        best_model,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-    ) = train.train_and_eval(
-        params["num_epochs"],
-        model,
-        train_loader,
-        test_loader,
-        optimizer,
-        sched,
-        params,
-        early_stopping=early_stopping,
-        print_flag=True,
-        device=device,
-    )
-    print("Predicting the calibration data.")
-    DSD_calib_all, M_calib_all = run_all(
-        x=outputs["x_calib"], m=outputs["m_calib"], model=best_model
-    )
-    print("Predicting the testing data.")
-    DSD_test_all, M_test_all = run_all(
-        x=outputs["x_test"], m=outputs["m_test"], model=best_model
-    )
-    print("Running split conformal predictions.")
-    for i in range(3):  # loop through different subsets of the architecture
-        if (
-            i == 1
-        ):  # in latent case, you should do it relative to latent space. Otherwise, not
-            DSD_res_signed = (
-                DSD_calib_all[i]
-                - best_model.encoder(torch.Tensor(outputs["x_calib"])).detach().numpy()
-            )
-        else:
-            DSD_res_signed = DSD_calib_all[i] - outputs["x_calib"]
-        DSD_q_low, DSD_q_high = one_sided_quantiles(
-            DSD_res_signed, alpha_lows, alpha_ups
-        )
-        DSD_lower_full[i] = (
-            DSD_test_all[i][np.newaxis, ...] - DSD_q_high[:, np.newaxis, ...]
-        )
-        DSD_upper_full[i] = (
-            DSD_test_all[i][np.newaxis, ...] - DSD_q_low[:, np.newaxis, ...]
-        )
-        if i == 2:  # also check mass in full architecture case
-            M_res_signed = M_calib_all - outputs["m_calib"]
-            M_q_low, M_q_high = one_sided_quantiles(M_res_signed, alpha_lows, alpha_ups)
-            M_lower_full = M_test_all[np.newaxis, ...] - M_q_high[:, np.newaxis, ...]
-            M_upper_full = M_test_all[np.newaxis, ...] - M_q_low[:, np.newaxis, ...]
-    lower = DSD_lower_full
-    upper = DSD_upper_full
-    rep_DSD = DSD_test_all
-    lower_m = M_lower_full
-    upper_m = M_upper_full
-    rep_m = M_test_all
+scores_list, Sigma_inv_list, mu_list = zip(*results)
+scores = np.stack(scores_list, axis=1)  # (m, n)
+Sigma_inv = np.stack(Sigma_inv_list, axis=0)  # (n, d, d)
+mu = np.stack(mu_list, axis=0)  # (n, d)
+
+taus = np.zeros((len(alphas), scores.shape[1]))
+for i, alpha in enumerate(alphas):
+    k = min(ceil((len(scores) + 1) * (1 - alpha)), len(scores))
+    taus[i] = np.sort(scores, axis=0)[k - 1]
+
+latent_dict = {
+    "z_enc_test_pred": DSD_test_all[2],
+    "Sigma_inv": Sigma_inv,
+    "mu": mu,  # <-- save the mean!
+    "taus": taus,
+}
+lower = DSD_lower_full
+upper = DSD_upper_full
+rep_DSD = DSD_test_all
+lower_m = M_lower_full
+upper_m = M_upper_full
+rep_m = M_test_all
+
+print("Saving results.")
 
 """
 Save:
 -alpha values,
 -indices for test data, 
--(lower and upper interval DSD values, and representative ("center") DSDs), and
--(lower and upper interval mass values, and representative ("center") mass),
+-(lower and upper interval DSD values, and representative ("center") DSDs), 
+-(lower and upper interval mass values, and representative ("center") mass), and
+-{encoded predictions on test set, covariance inverse of latent space trajectories, residual mean, conformal radii}
 in that order.
 """
 
-if method == "split":  # add split percent if needed
-    method += str(int(100 * calib_size))
 with open(
     os.path.join(
         "UQ",
         "conformal",
         "results",
         "ae_SINDy",
-        os.path.basename(os.path.normpath(args.data_name)) + "_" + method + ".pkl",
+        os.path.basename(os.path.normpath(args.data_name))
+        + "_split"
+        + str(int(100 * calib_size))
+        + ".pkl",
     ),
     "wb",
 ) as f:
     pickle.dump(
         [
             alphas,
-            test_size,
             outputs["idx_test"],
             (lower, upper, rep_DSD),
             (lower_m, upper_m, rep_m),
+            latent_dict,
         ],
         f,
     )

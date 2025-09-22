@@ -44,31 +44,23 @@ parser.add_argument(
     help="the dynamic model/architecture used (required): AR, NNdzdt, or SINDy",
 )
 parser.add_argument(
-    "-m",
-    "--method",
-    type=str,
-    required=True,
-    help="which conformal predictions to plot (required): full, split[p], or cv+[k]",
+    "-p",
+    "--p",
+    type=int,
+    default=20,
+    help="The p indicates what *percent* you want to dedicate out of the full data for calibration."
+    "Default is 20%, in which case p=20.",
 )
 args = parser.parse_args()
 
-method = args.method
-calib_size = None
-if method[:5] == "split":
-    calib_size = float(method[5:])
-    method = "split"
-if method[:3] == "cv+":
-    method = "cv+"
-if method not in [
-    "split",
-    "full",
-    "cv+",
-]:  # raise error if method is not one of the list above
-    raise ValueError("Conformal predictions method specified has not been implemented.")
+calib_size = args.p
 
 # load results from conformal predictions
 cp_results_file = (
-    os.path.basename(os.path.normpath(args.data_name)) + "_" + args.method + ".pkl"
+    os.path.basename(os.path.normpath(args.data_name))
+    + "_split"
+    + str(calib_size)
+    + ".pkl"
 )
 pickle_path = os.path.join(
     parent_directory,
@@ -79,66 +71,25 @@ pickle_path = os.path.join(
     cp_results_file,
 )
 with open(pickle_path, "rb") as f:
-    alphas, test_size, _, DSD_bands, m_bands = pickle.load(f)
+    alphas, _, DSD_bands, m_bands, latent_dict = pickle.load(f)
 
 # load data
-if calib_size:
-    outputs = du.open_mass_dataset(
-        name=args.data_name,
-        data_dir=Path(parent_directory) / "data",
-        sample_time=None,
-        test_size=test_size,
-        calib_size=0.01 * calib_size,
-        random_state=params["random_seed"],
-    )
-else:
-    outputs = du.open_mass_dataset(
-        name=args.data_name,
-        data_dir=Path(parent_directory) / "data",
-        sample_time=None,
-        test_size=test_size,
-        random_state=params["random_seed"],
-    )
+outputs = du.open_mass_dataset(
+    name=args.data_name,
+    data_dir=Path(parent_directory) / "data",
+    sample_time=None,
+    test_size=1 - 0.01 * calib_size,
+    random_state=params["random_seed"],
+)
 
-# get prediction bands
 subset = args.subset
-if subset == "decoder":
-    lower = DSD_bands[0][0]
-    upper = DSD_bands[1][0]
-    rep = DSD_bands[2][0]
-elif subset == "latent":
-    lower = DSD_bands[0][1]
-    upper = DSD_bands[1][1]
-    rep = DSD_bands[2][1]
-elif subset == "full":
-    lower = DSD_bands[0][2]
-    upper = DSD_bands[1][2]
-    rep = DSD_bands[2][2]
-elif subset == "mass":
-    lower = m_bands[0]
-    upper = m_bands[1]
-    rep = m_bands[2]
-else:
-    raise KeyError("Subset of architecture indicated (via -s) has not been implemented")
 
 # if we are testing conformal predictions on the latent space, we need to load the model
 if subset == "latent":
     import torch
-    from src import diagnostics
-
-    params.update({"num_epochs": 200, "batch_size": 200})
 
     # Set device
-    device = torch.device(
-        "cuda"
-        if torch.cuda.is_available()
-        else (
-            "mps"
-            if torch.backends.mps.is_available() and params["batch_size"] > 1000
-            else "cpu"
-        )
-    )
-    # torch.backends.cudnn.benchmark = True
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if args.model == "AR":
         from training_scripts import train_ae_ar as train
@@ -146,20 +97,11 @@ if subset == "latent":
         params.update(
             {
                 "n_lag": 1,
-                "layer_size": (63, 98, 30),
-                "learning_rate": 0.002482884780966882,
-                "wd": 1e-3,
-                "patience": 50,
-                "tol": 1e-8,
-                "w_dx": 0.22816989332325596,
-                "w_dz": 0.6719555656053005,
-                "w_recon": 1,
-                "lr_sched": True,
-                "print_frequency": 1,
+                "layer_size": [141, 154, 40],
             }
         )
 
-        init_model = train.AEAutoregressor(
+        model = train.AEAutoregressor(
             n_channels=1,
             n_bins=outputs["n_bins"],
             n_latent=params["latent_dim"],
@@ -170,77 +112,27 @@ if subset == "latent":
             "results",
             "Optuna",
             "ERF Dataset",
-            "AE-AR_2025-07-20T22:45:33_605d8b8697694137a65cab3b1012fffc",
-            "erf_FFNN_latent3_order(63, 98, 30)_tr1000_lr0.002482884780966882_bs4_weights0.22816989332325596-0.6719555656053005_7c43ff3e659b47358fa327f690871ed7",
+            "AE-AR_2025-09-18T10:18:57_PostARBugfix",
+            "erf_FFNN_latent3_order(141, 154, 40)_tr1000_lr0.0030348411572892766_bs8_weights0.12789450188986579-1.1729901013704414_a0f49326688d4e69bcc0e9a78da3c870",
         )
         ae_ar_checkpoint = torch.load(
             os.path.join(
                 optimal_path,
-                "erf_FFNN_latent3_order(63, 98, 30)_tr1000_lr0.002482884780966882_bs4_weights0.22816989332325596-0.6719555656053005_7c43ff3e659b47358fa327f690871ed7.pth",
+                "erf_FFNN_latent3_order(141, 154, 40)_tr1000_lr0.0030348411572892766_bs8_weights0.12789450188986579-1.1729901013704414_a0f49326688d4e69bcc0e9a78da3c870.pth",
             ),
             weights_only=True,
         )
-        init_model.load_state_dict(ae_ar_checkpoint)
-        init_model.to(device)
-
-        optimizer = torch.optim.AdamW(
-            init_model.parameters(),
-            lr=params["learning_rate"],
-            weight_decay=params["wd"],
-        )
-        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-        early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
-
-        train_data = du.NormedBinDatasetAR(
-            outputs["x_train"], outputs["m_train"], lag=params["n_lag"]
-        )
-        train_loader = torch.utils.data.DataLoader(
-            train_data, batch_size=params["batch_size"], shuffle=True
-        )
-        test_data = du.NormedBinDatasetAR(
-            outputs["x_test"], outputs["m_test"], lag=params["n_lag"]
-        )
-        test_loader = torch.utils.data.DataLoader(
-            test_data, batch_size=len(test_data), shuffle=True
-        )
-        (
-            model,
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-        ) = train.train_and_eval(
-            params["num_epochs"],
-            init_model,
-            train_loader,
-            test_loader,
-            optimizer,
-            sched,
-            params,
-            early_stopping=early_stopping,
-            print_flag=False,
-            device=device,
-        )
+        model.load_state_dict(ae_ar_checkpoint)
     if args.model == "NNdzdt":
         from training_scripts import train_ae_NNdzdt as train
 
         params.update(
             {
                 "layer_size": (42, 36, 46),
-                "learning_rate": 0.00314227212817401,
-                "wd": 1e-3,
-                "patience": 50,
-                "tol": 1e-8,
-                "lr_sched": True,
-                "print_frequency": 1,
             }
         )
 
-        init_model = train.AENNdzdt(
+        model = train.AENNdzdt(
             n_channels=1,
             n_bins=outputs["n_bins"],
             n_latent=params["latent_dim"],
@@ -260,80 +152,17 @@ if subset == "latent":
             ),
             weights_only=True,
         )
-        init_model.load_state_dict(ae_NNdzdt_checkpoint)
-        init_model.to(device)
-
-        optimizer = torch.optim.AdamW(
-            init_model.parameters(),
-            lr=params["learning_rate"],
-            weight_decay=params["wd"],
-        )
-        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-        early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
-
-        # Compute & set weights based on Champion et al recs
-        lambda1, lambda2, lambda3 = du.champion_calculate_weights(
-            du.NormedBinDatasetDzDt(
-                outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
-            ),
-            lambda1_metaweight=0.5353139650038768,
-        )
-        params["loss_weight_recon"] = 1.0
-        params["loss_weight_sindy_x"] = lambda1
-        params["loss_weight_sindy_z"] = lambda2
-
-        train_data = du.NormedBinDatasetDzDt(
-            outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
-        )
-        train_loader = torch.utils.data.DataLoader(
-            train_data, batch_size=params["batch_size"], shuffle=True
-        )
-        test_data = du.NormedBinDatasetDzDt(
-            outputs["x_test"], outputs["dsd_time"], outputs["m_test"]
-        )
-        test_loader = torch.utils.data.DataLoader(
-            test_data, batch_size=len(test_data), shuffle=True
-        )
-
-        (
-            model,
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-        ) = train.train_and_eval(
-            params["num_epochs"],
-            init_model,
-            train_loader,
-            test_loader,
-            optimizer,
-            sched,
-            params,
-            early_stopping=early_stopping,
-            print_flag=False,
-            device=device,
-        )
+        model.load_state_dict(ae_NNdzdt_checkpoint)
     if args.model == "SINDy":
         from training_scripts import train_ae_sindy as train
 
         params.update(
             {
                 "poly_order": 2,
-                "learning_rate": 0.004204813405972317,
-                "wd": 1e-3,
-                "patience": 50,
-                "lambda1_metaweight": 0.500989969537634,
-                "tol": 1e-8,
-                "lr_sched": True,
-                "print_frequency": 1,
             }
         )
 
-        init_model = train.AESINDy(
+        model = train.AESINDy(
             n_channels=1,
             n_bins=outputs["n_bins"],
             n_latent=params["latent_dim"],
@@ -353,82 +182,61 @@ if subset == "latent":
             ),
             weights_only=True,
         )
-        init_model.load_state_dict(ae_sindy_checkpoint)
-        init_model.to(device)
-
-        optimizer = torch.optim.AdamW(
-            init_model.parameters(),
-            lr=params["learning_rate"],
-            weight_decay=params["wd"],
-        )
-        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-        early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
-
-        # Compute & set weights based on Champion et al recs
-        lambda1, lambda2, lambda3 = du.champion_calculate_weights(
-            du.NormedBinDatasetDzDt(
-                outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
-            ),
-            lambda1_metaweight=params["lambda1_metaweight"],
-        )
-        params["loss_weight_recon"] = 1.0
-        params["loss_weight_sindy_x"] = lambda1
-        params["loss_weight_sindy_z"] = lambda2
-
-        train_data = du.NormedBinDatasetDzDt(
-            outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
-        )
-        train_loader = torch.utils.data.DataLoader(
-            train_data, batch_size=params["batch_size"], shuffle=True
-        )
-        test_data = du.NormedBinDatasetDzDt(
-            outputs["x_test"], outputs["dsd_time"], outputs["m_test"]
-        )
-        test_loader = torch.utils.data.DataLoader(
-            test_data, batch_size=len(test_data), shuffle=True
+        model.load_state_dict(ae_sindy_checkpoint)
+    model.to(device)
+    model.eval()
+    with torch.inference_mode():
+        z_enc_test = (
+            model.encoder(
+                torch.tensor(outputs["x_test"], device=device, dtype=torch.float32)
+            )
+            .detach()
+            .cpu()
+            .numpy()
         )
 
-        (
-            model,
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-        ) = train.train_and_eval(
-            params["num_epochs"],
-            init_model,
-            train_loader,
-            test_loader,
-            optimizer,
-            sched,
-            params,
-            early_stopping=early_stopping,
-            print_flag=False,
-            device=device,
-        )
-    z_enc_test = model.encoder(torch.Tensor(outputs["x_test"])).detach().numpy()
+# get prediction bands
+if subset == "decoder":
+    lower = DSD_bands[0][0]
+    upper = DSD_bands[1][0]
+    rep = DSD_bands[2][0]
+elif subset == "latent":
+    Sigma_inv = latent_dict["Sigma_inv"]
+    taus = latent_dict["taus"]
+    r_test = latent_dict["z_enc_test_pred"] - z_enc_test
+    mu = latent_dict.get("mu", None)
+    if mu is not None:
+        r_test = r_test - mu[None, :, :]
+elif subset == "full":
+    lower = DSD_bands[0][1]
+    upper = DSD_bands[1][1]
+    rep = DSD_bands[2][1]
+elif subset == "mass":
+    lower = m_bands[0]
+    upper = m_bands[1]
+    rep = m_bands[2]
+else:
+    raise KeyError("Subset of architecture indicated (via -s) has not been implemented")
 
 """
 Now we test the conformal prediction coverage!
 """
 N = len(outputs["x_test"])  # number of samples/initial conditions
+if subset == "latent":
+    scores_test = np.einsum("mnd,ndd,mnd->mn", r_test, Sigma_inv, r_test)
 # loop across alphas
 for i, alpha in enumerate(alphas):
     print(f"testing for coverage 1-alpha={100*(1-alpha)}%")
-    # test if it falls within the bands
+    # test if it falls within the prediction set
     if subset == "latent":
-        testing = (z_enc_test >= lower[i]) & (z_enc_test <= upper[i])
+        testing = scores_test <= taus[i]
     elif subset == "mass":
         testing = (outputs["m_test"] >= lower[i]) & (outputs["m_test"] <= upper[i])
     else:
         testing = (outputs["x_test"] >= lower[i]) & (outputs["x_test"] <= upper[i])
-    # get fraction that fall within the bands
+    # get fraction that fall within the prediction set
     counter = np.count_nonzero(testing, axis=0) / N
-    if subset == "mass":
+    if (subset == "mass") or (subset == "latent"):
         print(
             f"Mean percent of real test trajectories that fall within: {100*np.mean(counter)}"
         )

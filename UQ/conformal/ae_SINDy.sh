@@ -1,6 +1,4 @@
 #!/bin/bash
-
-##### These lines are for Slurm
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=110
@@ -13,19 +11,51 @@
 #SBATCH -A ml-uphys
 #SBATCH -o output_%J.out
 
-##### These are shell commands
-date
-cd /g/g14/katona1
+export PYTHONUNBUFFERED=1
 
+date
+cd /g/g14/katona1 # changes this to home directory
 echo 'activating'
 . python.sh
 cd mphys-surrogate-model
 
-echo 'starting vanilla cp'
-python3 UQ/conformal/ae_SINDy.py erf_data/congestus/noadv_coal_200m_9600 -m full -e 200 -b 200 -a 0.1 0.05 0.025 0.01
-p=20 # validation split percent
-echo "starting split cp, train-validation-test split: $((80 - p))-${p}-20"
-python3 UQ/conformal/ae_SINDy.py erf_data/congestus/noadv_coal_200m_9600 -m "split${p}" -e 200 -b 200 -a 0.1 0.05 0.025 0.01
-k=20 # number of cross-validation folds
-echo "starting cv+ with ${k} folds"
-python3 UQ/conformal/ae_SINDy_cv.py erf_data/congestus/noadv_coal_200m_9600 -k "${k}" -e 200 -b 200 -a 0.1 0.05 0.025 0.01
+# --- Parameters ---
+P_VALUES=(20 30 40)
+CONGESTUS_ADD=40                         # constant addition for congestus
+CONGESTUS_MAX=80                         
+CONGESTUS_MIN=1
+NUM_JOBS=${#P_VALUES[@]}                     # number of background jobs
+NJOBS_PER_P=$((SLURM_CPUS_PER_TASK / NUM_JOBS))  # threads per Python process
+
+echo "Total CPUs allocated: $SLURM_CPUS_PER_TASK"
+echo "Parallel jobs: $NUM_JOBS, threads per job: $NJOBS_PER_P"
+
+# --- Create log folder ---
+mkdir -p logs
+
+# --- Loop over p values in background ---
+for p in "${P_VALUES[@]}"; do
+    (
+    echo "RICO split: ${p}-$((100 - p))"
+    python3 UQ/conformal/ae_SINDy.py erf_data/RICO/noadv_coal_200m \
+      -p "$p" -a 0.1 0.05 0.025 0.01 -j "$NJOBS_PER_P" \
+      > "logs/RICO_p${p}_SINDy.log" 2>&1
+
+    # congestus p = p + constant, then clamp
+    p_small=$(( p + CONGESTUS_ADD ))
+    (( p_small > CONGESTUS_MAX )) && p_small=$CONGESTUS_MAX
+    (( p_small < CONGESTUS_MIN )) && p_small=$CONGESTUS_MIN
+
+    echo "congestus split (p + ${CONGESTUS_ADD}): ${p_small}-$((100 - p_small)) (from base p=${p})"
+    python3 UQ/conformal/ae_SINDy.py congestus_coal_200m_test \
+      -p "$p_small" -a 0.1 0.05 0.025 0.01 -j "$NJOBS_PER_P" \
+      > "logs/congestus_p${p_small}_SINDy.log" 2>&1
+
+    echo "Finished pair: RICO p=${p} / congestus p=${p_small}"
+    ) &
+done
+
+# Wait for all background jobs to finish
+wait
+echo "All jobs completed."
+date

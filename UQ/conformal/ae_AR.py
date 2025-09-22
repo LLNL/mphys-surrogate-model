@@ -1,44 +1,39 @@
 """
-Script takes in data filepath and does conformal predictions on AE-AR model.
+Script takes in data filepath and does split conformal predictions on AE-AR model.
+Assumes an already pretrained model and only does calibration and prediction on the specified data.
 """
 import os
 import sys
 import numpy as np
 import argparse
 import torch
+
+torch.set_grad_enabled(False)
+torch.backends.cudnn.benchmark = True
+torch.set_num_threads(1)
 import time
 from pathlib import Path
 import pickle
+from joblib import Parallel, delayed
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 from src import data_utils as du
-from src import diagnostics
 from training_scripts import train_ae_ar as train
+from math import ceil
+from sklearn.covariance import LedoitWolf
 
 # load arguments
 parser = argparse.ArgumentParser()
 parser.add_argument("data_name", help="basename (no .nc) of your dataset")
 parser.add_argument(
-    "-t",
-    "--test_size",
-    type=float,
-    default=0.2,
-    help="testing set proportion, must be between 0 and 1, default is 0.2",
-)
-parser.add_argument(
-    "-m",
-    "--method",
-    default="split30",
-    help="conformal predictions method to use (split[p], full), default is split30. \
-                        The p in split indicates what *percent* you want to dedicate out of the full data for calibration.",
-)
-parser.add_argument(
-    "-e", "--epochs", type=int, default=100, help="number of epochs (default is 100)"
-)
-parser.add_argument(
-    "-b", "--batches", type=int, default=200, help="batch size (default is 200)"
+    "-p",
+    "--p",
+    type=int,
+    default=20,
+    help="The p indicates what *percent* you want to dedicate out of the full data for calibration."
+    "Default is 20%, in which case p=20.",
 )
 parser.add_argument(
     "-a",
@@ -48,25 +43,22 @@ parser.add_argument(
     default=0.1,
     help="miscoverage rate(s), must be between 0 and 1, default is 0.1",
 )
+parser.add_argument(
+    "-j",
+    "--n_jobs",
+    type=int,
+    default=-1,
+    help="The number of jobs allocatable for parallelizing the covariance computation."
+    "Default is -1 (all).",
+)
 args = parser.parse_args()
 
 params = {
     "data_src": args.data_name,
     "random_seed": 1952,
-    "num_epochs": args.epochs,
-    "batch_size": args.batches,
-    "learning_rate": 0.0030348411572892766,
     "latent_dim": 3,
     "n_lag": 1,
-    "w_recon": 1,
-    "w_dx": 0.12789450188986579,
-    "w_dz": 1.1729901013704414,
-    "lr_sched": True,
-    "patience": 50,
-    "tol": 1e-08,
-    "wd": 0.001,
     "layer_size": [141, 154, 40],
-    "print_frequency": 1,
 }
 
 # Global variables and settings
@@ -78,31 +70,10 @@ criterion = torch.nn.MSELoss()
 divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 
 # Setting inputted variables
-test_size = args.test_size
-method = args.method
-calib_size = None  # default is no calibration data
-# isolate calib_size or k in the situation where you're using split-conformal or cv+, respectively
-if method[:5] == "split":
-    calib_size = float(method[5:])
-    if (calib_size <= 0) | (calib_size >= 100 * (1 - test_size)):
-        raise ValueError(
-            "Calibration size for split must be a percent strictly between 0 and 100 * (1 - test_size)."
-        )
-    method = "split"
-if method[:3] == "cv+":
-    k = int(method[3:])
-    method = "cv+"
-if method not in [
-    "split",
-    "full",
-    "cv+",
-]:  # raise error if method is not one of the list above
-    raise ValueError("Conformal predictions method specified has not been implemented.")
+calib_size = args.p
 
 alphas = args.alpha if isinstance(args.alpha, (list, tuple)) else [args.alpha]
 
-if (test_size <= 0) | (test_size >= 1):
-    raise ValueError("Test set proportion must be between 0 and 1")
 if any(a <= 0 or a >= 1 for a in alphas):
     raise ValueError("Coverage rate (alpha) must be between 0 and 1 for all values")
 
@@ -111,28 +82,18 @@ alpha_lows = [a / 2 for a in alphas]
 alpha_ups = alpha_lows.copy()
 
 # Set device
-device = torch.device(
-    "cuda"
-    if torch.cuda.is_available()
-    else (
-        "mps"
-        if torch.backends.mps.is_available() and params["batch_size"] > 1000
-        else "cpu"
-    )
-)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # torch.backends.cudnn.benchmark = True
 print(f"Using {device} device")
 
-if calib_size is not None:
-    calib_size *= 0.01
+calib_size *= 0.01
 start_time = time.time()
 # Open dataset
 outputs = du.open_mass_dataset(
     name=params["data_src"],
     data_dir=Path(__file__).parent.parent.parent / "data",
     sample_time=sample_time,
-    test_size=test_size,
-    calib_size=calib_size,
+    test_size=1 - calib_size,
     random_state=params["random_seed"],
 )
 
@@ -161,26 +122,8 @@ def init_model(device=device):
         weights_only=True,
     )
     model.load_state_dict(ae_ar_checkpoint)
-    # total_params = sum(p.numel() for p in model.parameters())
-    # print(f"Total number of parameters: {total_params}")
-    return model.to(device)
+    return model.to(device, dtype=torch.float32)
 
-
-# initialize optimizer
-def init_optimizer(model):
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
-    )
-    return optimizer
-
-
-# initialize scheduling
-def init_scheduler(optimizer):
-    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-    return sched
-
-
-early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
 
 """
 Helper utility functions
@@ -188,92 +131,95 @@ Helper utility functions
 
 
 # this helper utility encodes and then decodes each DSD to test how close the predictions are to the actual values
-def encode_decode_ae(x, model):
-    # for DSD data, decoded (predictions from network)
-    DSD_all = (
-        model.decoder(model.encoder(torch.Tensor(x))).detach().numpy()
-    )  # DSD pred t+0
-    return DSD_all
+def encode_decode_ae_batched(x_t, model):
+    with torch.inference_mode():
+        return model.decoder(model.encoder(x_t)).detach().cpu().numpy()
 
 
 # run latent space dynamics
-def run_ae_X_latent(x, m, model, n_lag=params["n_lag"]):
-    # for DSD_mass data, not decoded (so still within the latent space)
-    latents_all = np.empty(
-        (x.shape[0], x.shape[1], params["latent_dim"] + 1),
-        dtype=float,
+def run_ae_X_latent_batched(z_init_enc_t, m_t, model, n_lag):
+    """
+    z_init_enc_t: (N, T, L) torch on device (encoder(x))
+    m_t:          (N, T)     torch on device
+    Returns:
+        latents_all_t: (N, T, L+1) torch on device
+    """
+    N, T, L = z_init_enc_t.shape
+    latents_all = torch.empty(
+        (N, T, L + 1), device=z_init_enc_t.device, dtype=z_init_enc_t.dtype
     )
-    for id in range(len(x)):  # loop through each initial condition/sample/gridbox
-        x0 = x[id, :n_lag, :]
-        m0 = m[id, :n_lag]
-        # encode DSD
-        latents_all[id][:n_lag, :-1] = model.encoder(torch.Tensor(x0)).detach().numpy()
-        latents_all[id][:n_lag, -1] = m0
-        for t in range(n_lag, x.shape[1]):
-            latent_DSD = torch.Tensor(
-                latents_all[id][t - n_lag : t, :-1].reshape(
-                    -1, n_lag, latents_all[id][t, :-1].shape[0]
-                )
-            )
-            mass_t = torch.Tensor(
-                latents_all[id][t - n_lag : t, -1].reshape(1, 1, 1)
-            )  # reshape mass
-            # run autoregressor in latent space
-            res = model.autoregressor(torch.cat([latent_DSD, mass_t], dim=2))
-            latents_all[id][t] = res.detach().numpy()
-    return latents_all
+
+    # seed with first n_lag frames (just copy encoded z + m)
+    latents_all[:, :n_lag, :L] = z_init_enc_t[:, :n_lag, :]
+    latents_all[:, :n_lag, L] = m_t[:, :n_lag]
+
+    # roll forward autoregressively, batched over N
+    for t in range(n_lag, T):
+        # build (N, 1, n_lag, L) -> we want (N, n_lag, L) then add mass
+        latent_DSD = latents_all[:, t - n_lag : t, :L]  # (N, n_lag, L)
+        mass_t = latents_all[:, t - n_lag : t, L].unsqueeze(-1)  # (N, n_lag, 1)
+        ar_in = torch.cat([latent_DSD, mass_t], dim=-1)  # (N, n_lag, L+1)
+
+        # model.autoregressor expects (N, n_lag, L+1); outputs (N, L+1)
+        res = model.autoregressor(ar_in)  # (N, L+1)
+        latents_all[:, t, :] = res
+
+    return latents_all  # torch
 
 
 # run full network
 # computes the predicted DSD and mass trajectories
-def run_ae_X(x, m, model, n_lag=params["n_lag"]):
-    # DSD data, decoded (predictions from network)
-    DSD_all = np.empty(x.shape, dtype=float)
-    # mass data
-    M_all = np.empty(m.shape, dtype=float)
-    for id in range(len(x)):  # loop through each initial condition/sample/gridbox
-        x0 = x[id, :n_lag, :]
-        m0 = m[id, :n_lag]
-        DSD_all[id][:n_lag, :] = (
-            model.decoder(model.encoder(torch.Tensor(x0))).detach().numpy()
-        )
-        M_all[id][:n_lag] = m0
-        for t in range(n_lag, x.shape[1]):
-            latent_DSD = model.encoder(
-                torch.Tensor(
-                    DSD_all[id][t - n_lag : t].reshape(
-                        -1, n_lag, DSD_all[id][t].shape[0]
-                    )
-                )
-            )  # encode DSD
-            mass_t = torch.Tensor(
-                M_all[id][t - n_lag : t].reshape(1, 1, 1)
-            )  # reshape mass
-            # run autoregressor in latent space
-            res = model.autoregressor(torch.cat([latent_DSD, mass_t], dim=2))
-            # decode the DSD and save it
-            DSD_all[id][t, :] = model.decoder(res[..., :-1]).detach().numpy()
-            M_all[id][t] = res[..., -1].squeeze().detach().item()  # save mass
-    return DSD_all, M_all
+def run_ae_X_batched(x_t, m_t, model, n_lag):
+    """
+    x_t: (N, T, n_bins) torch on device
+    m_t: (N, T)         torch on device
+    Returns:
+        DSD_all: (N, T, n_bins) numpy
+        M_all:   (N, T)         numpy
+        Z_all:   (N, T, L)      numpy
+    """
+    with torch.inference_mode():
+        # encode once
+        z_enc_t = model.encoder(x_t)  # (N, T, L)
+        # run latent AR for whole batch
+        latents_all = run_ae_X_latent_batched(z_enc_t, m_t, model, n_lag)  # (N, T, L+1)
+
+        # decode all timesteps in one go
+        z_only = latents_all[..., :-1].reshape(-1, z_enc_t.shape[-1])  # (N*T, L)
+        DSD_flat = model.decoder(z_only)  # (N*T, n_bins)
+        DSD_all_t = DSD_flat.reshape(x_t.shape[0], x_t.shape[1], -1)  # (N, T, n_bins)
+
+        M_all_t = latents_all[..., -1]  # (N, T)
+
+    # move back to cpu only once
+    return (
+        DSD_all_t.detach().cpu().numpy(),
+        M_all_t.detach().cpu().numpy(),
+        latents_all[..., :-1].detach().cpu().numpy(),
+    )
 
 
 # runs all three parts of the architecture above and returns data
-def run_all(x, m, model, n_lag=params["n_lag"]):
-    DSD_all = [
-        np.empty(x.shape, dtype=float),  # decoder only
-        np.empty(
-            (x.shape[0], x.shape[1], params["latent_dim"]), dtype=float
-        ),  # latent only
-        np.empty(x.shape, dtype=float),  # full architecture
-    ]
-    M_all = np.empty(
-        m.shape,
-        dtype=float,
+def run_all_batched(outputs, model, n_lag, device):
+    with torch.inference_mode():
+        x_train_t = torch.tensor(outputs["x_train"], device=device, dtype=torch.float32)
+        x_test_t = torch.tensor(outputs["x_test"], device=device, dtype=torch.float32)
+        m_train_t = torch.tensor(outputs["m_train"], device=device, dtype=torch.float32)
+        m_test_t = torch.tensor(outputs["m_test"], device=device, dtype=torch.float32)
+
+    DSD_train_dec = encode_decode_ae_batched(x_train_t, model)
+    DSD_test_dec = encode_decode_ae_batched(x_test_t, model)
+
+    DSD_train_full, M_train_full, Z_train_full = run_ae_X_batched(
+        x_train_t, m_train_t, model, n_lag
     )
-    DSD_all[0] = encode_decode_ae(x, model=model)
-    DSD_all[1] = run_ae_X_latent(x, m, model=model, n_lag=n_lag)[..., :-1]
-    DSD_all[2], M_all = run_ae_X(x, m, model=model, n_lag=n_lag)
-    return DSD_all, M_all
+    DSD_test_full, M_test_full, Z_test_full = run_ae_X_batched(
+        x_test_t, m_test_t, model, n_lag
+    )
+
+    DSD_all_train = [DSD_train_dec, DSD_train_full, Z_train_full]
+    DSD_all_test = [DSD_test_dec, DSD_test_full, Z_test_full]
+    return (DSD_all_train, M_train_full), (DSD_all_test, M_test_full)
 
 
 def one_sided_quantiles(residuals, alpha_lows, alpha_ups):
@@ -311,253 +257,130 @@ def one_sided_quantiles(residuals, alpha_lows, alpha_ups):
     return q_low, q_high
 
 
+# for computing Mahalanobis distance scoring and covariance matrix inverses
+def compute_scores_and_inv(res_t):
+    # res_t: shape (m, d) at a fixed time t
+    mu_t = res_t.mean(axis=0, keepdims=True)  # (1, d)
+    res_c = res_t - mu_t  # center residuals
+    lw = LedoitWolf().fit(res_c)  # covariance of centered residuals
+    Sigma_inv = lw.precision_
+    scores_t = np.einsum("mi,ij,mi->m", res_c, Sigma_inv, res_c)
+    return scores_t, Sigma_inv, mu_t.squeeze(0)
+
+
 """
-Run conformal predictions. 
-The data splits used are different for each method, so we will configure those separately in each case.
+Run split conformal predictions. 
 """
 
-if method == "full":
-    # 0) configure data and dataloaders
-    train_data = du.NormedBinDatasetAR(
-        outputs["x_train"], outputs["m_train"], lag=params["n_lag"]
-    )
-    train_loader = torch.utils.data.DataLoader(
-        train_data, batch_size=params["batch_size"], shuffle=True
-    )
-    test_data = du.NormedBinDatasetAR(
-        outputs["x_test"], outputs["m_test"], lag=params["n_lag"]
-    )
-    test_loader = torch.utils.data.DataLoader(
-        test_data, batch_size=len(test_data), shuffle=True
-    )
+# 1) predict on calibration and test data
+DSD_lower_full = [
+    np.empty((len(alphas),) + outputs["x_test"].shape, dtype=float),  # decoder only
+    np.empty(
+        (len(alphas),) + outputs["x_test"].shape, dtype=float
+    ),  # full architecture
+]
+DSD_upper_full = DSD_lower_full.copy()
+M_lower_full = np.empty(
+    (len(alphas),) + outputs["m_test"].shape,
+    dtype=float,
+)
+M_upper_full = M_lower_full.copy()
 
-    # 1) fit & predict on training data
-    DSD_lower_full = [
-        np.empty((len(alphas),) + outputs["x_test"].shape, dtype=float),  # decoder only
-        np.empty(
-            (
-                len(alphas),
-                outputs["x_test"].shape[0],
-                outputs["x_test"].shape[1],
-                params["latent_dim"],
-            ),
-            dtype=float,
-        ),  # latent only
-        np.empty(
-            (len(alphas),) + outputs["x_test"].shape, dtype=float
-        ),  # full architecture
-    ]
-    DSD_upper_full = DSD_lower_full.copy()
-    M_lower_full = np.empty(
-        (len(alphas),) + outputs["m_test"].shape,
-        dtype=float,
-    )
-    M_upper_full = M_lower_full.copy()
+print("Loading and initializing model.")
+model = init_model(device)
+model.eval()
 
-    model = init_model(device)
-    optimizer = init_optimizer(model)
-    sched = init_scheduler(optimizer)
+print("Encoding data.")
+with torch.inference_mode():
+    x_calib_t = torch.tensor(outputs["x_train"], device=device, dtype=torch.float32)
+    x_test_t = torch.tensor(outputs["x_test"], device=device, dtype=torch.float32)
+    z_calib_enc_t = model.encoder(x_calib_t)  # (N_calib, T, latent_dim)
+    z_test_enc_t = model.encoder(x_test_t)  # (N_test,  T, latent_dim)
 
-    (
-        best_model,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-    ) = train.train_and_eval(
-        params["num_epochs"],
-        model,
-        train_loader,
-        test_loader,
-        optimizer,
-        sched,
-        params,
-        early_stopping=early_stopping,
-        print_flag=True,
-        device=device,
-    )
-    print("Predicting the training data.")
-    DSD_train_all, M_train_all = run_all(
-        x=outputs["x_train"], m=outputs["m_train"], model=best_model
-    )
-    print("Predicting the testing data.")
-    DSD_test_all, M_test_all = run_all(
-        x=outputs["x_test"], m=outputs["m_test"], model=best_model
-    )
-    print("Running vanilla conformal predictions.")
-    for i in range(3):  # loop through different subsets of the architecture
-        if (
-            i == 1
-        ):  # in latent case, you should do it relative to latent space. Otherwise, not
-            DSD_res_signed = (
-                DSD_train_all[i]
-                - best_model.encoder(torch.Tensor(outputs["x_train"])).detach().numpy()
-            )
-        else:
-            DSD_res_signed = DSD_train_all[i] - outputs["x_train"]
-        DSD_q_low, DSD_q_high = one_sided_quantiles(
-            DSD_res_signed, alpha_lows, alpha_ups
-        )
-        DSD_lower_full[i] = (
-            DSD_test_all[i][np.newaxis, ...] - DSD_q_high[:, np.newaxis, ...]
-        )
-        DSD_upper_full[i] = (
-            DSD_test_all[i][np.newaxis, ...] - DSD_q_low[:, np.newaxis, ...]
-        )
-        if i == 2:  # also check mass in full architecture case
-            M_res_signed = M_train_all - outputs["m_train"]
-            M_q_low, M_q_high = one_sided_quantiles(M_res_signed, alpha_lows, alpha_ups)
-            M_lower_full = M_test_all[np.newaxis, ...] - M_q_high[:, np.newaxis, ...]
-            M_upper_full = M_test_all[np.newaxis, ...] - M_q_low[:, np.newaxis, ...]
-    lower = DSD_lower_full
-    upper = DSD_upper_full
-    rep_DSD = DSD_test_all
-    lower_m = M_lower_full
-    upper_m = M_upper_full
-    rep_m = M_test_all
+z_calib_enc = z_calib_enc_t.detach().cpu().numpy()
+z_test_enc = z_test_enc_t.detach().cpu().numpy()
 
-if method == "split":
-    # 0) configure data and dataloaders
-    train_data = du.NormedBinDatasetAR(
-        outputs["x_train"], outputs["m_train"], lag=params["n_lag"]
+print("Predicting the calibration and testing data.")
+(DSD_calib_all, M_calib_all), (DSD_test_all, M_test_all) = run_all_batched(
+    outputs, model, params["n_lag"], device
+)
+print("Running split conformal predictions on decoder and full outputs.")
+for i in range(2):  # loop through decoder and then full subsets of architecture
+    DSD_res_signed = DSD_calib_all[i] - outputs["x_train"]
+    DSD_q_low, DSD_q_high = one_sided_quantiles(DSD_res_signed, alpha_lows, alpha_ups)
+    DSD_lower_full[i] = (
+        DSD_test_all[i][np.newaxis, ...] - DSD_q_high[:, np.newaxis, ...]
     )
-    train_loader = torch.utils.data.DataLoader(
-        train_data, batch_size=params["batch_size"], shuffle=True
-    )
-    calib_data = du.NormedBinDatasetAR(
-        outputs["x_calib"], outputs["m_calib"], lag=params["n_lag"]
-    )
-    calib_loader = torch.utils.data.DataLoader(
-        calib_data, batch_size=len(calib_data), shuffle=True
-    )
-    test_data = du.NormedBinDatasetAR(
-        outputs["x_test"], outputs["m_test"], lag=params["n_lag"]
-    )
-    test_loader = torch.utils.data.DataLoader(
-        test_data, batch_size=len(test_data), shuffle=True
-    )
+    DSD_upper_full[i] = DSD_test_all[i][np.newaxis, ...] - DSD_q_low[:, np.newaxis, ...]
+    if i == 1:  # also check mass in full architecture case
+        M_res_signed = M_calib_all - outputs["m_train"]
+        M_q_low, M_q_high = one_sided_quantiles(M_res_signed, alpha_lows, alpha_ups)
+        M_lower_full = M_test_all[np.newaxis, ...] - M_q_high[:, np.newaxis, ...]
+        M_upper_full = M_test_all[np.newaxis, ...] - M_q_low[:, np.newaxis, ...]
+# conformal predictions on latent trajectories
+print("Running split conformal predictions on latent trajectories.")
+residuals_lat = DSD_calib_all[2] - z_calib_enc  # (m, n, d)
 
-    # 1) fit & predict on training data
-    DSD_lower_full = [
-        np.empty((len(alphas),) + outputs["x_test"].shape, dtype=float),  # decoder only
-        np.empty(
-            (
-                len(alphas),
-                outputs["x_test"].shape[0],
-                outputs["x_test"].shape[1],
-                params["latent_dim"],
-            ),
-            dtype=float,
-        ),  # latent only
-        np.empty(
-            (len(alphas),) + outputs["x_test"].shape, dtype=float
-        ),  # full architecture
-    ]
-    DSD_upper_full = DSD_lower_full.copy()
-    M_lower_full = np.empty(
-        (len(alphas),) + outputs["m_test"].shape,
-        dtype=float,
-    )
-    M_upper_full = M_lower_full.copy()
+m, n, d = residuals_lat.shape
+results = Parallel(n_jobs=args.n_jobs)(
+    delayed(compute_scores_and_inv)(residuals_lat[:, t, :]) for t in range(n)
+)
 
-    model = init_model(device)
-    optimizer = init_optimizer(model)
-    sched = init_scheduler(optimizer)
+scores_list, Sigma_inv_list, mu_list = zip(*results)
+scores = np.stack(scores_list, axis=1)  # (m, n)
+Sigma_inv = np.stack(Sigma_inv_list, axis=0)  # (n, d, d)
+mu = np.stack(mu_list, axis=0)  # (n, d)
 
-    (
-        best_model,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-    ) = train.train_and_eval(
-        params["num_epochs"],
-        model,
-        train_loader,
-        test_loader,
-        optimizer,
-        sched,
-        params,
-        early_stopping=early_stopping,
-        print_flag=True,
-        device=device,
-    )
-    print("Predicting the calibration data.")
-    DSD_calib_all, M_calib_all = run_all(
-        x=outputs["x_calib"], m=outputs["m_calib"], model=best_model
-    )
-    print("Predicting the testing data.")
-    DSD_test_all, M_test_all = run_all(
-        x=outputs["x_test"], m=outputs["m_test"], model=best_model
-    )
-    print("Running split conformal predictions.")
-    for i in range(3):  # loop through different subsets of the architecture
-        if (
-            i == 1
-        ):  # in latent case, you should do it relative to latent space. Otherwise, not
-            DSD_res_signed = (
-                DSD_calib_all[i]
-                - best_model.encoder(torch.Tensor(outputs["x_calib"])).detach().numpy()
-            )
-        else:
-            DSD_res_signed = DSD_calib_all[i] - outputs["x_calib"]
-        DSD_q_low, DSD_q_high = one_sided_quantiles(
-            DSD_res_signed, alpha_lows, alpha_ups
-        )
-        DSD_lower_full[i] = (
-            DSD_test_all[i][np.newaxis, ...] - DSD_q_high[:, np.newaxis, ...]
-        )
-        DSD_upper_full[i] = (
-            DSD_test_all[i][np.newaxis, ...] - DSD_q_low[:, np.newaxis, ...]
-        )
-        if i == 2:  # also check mass in full architecture case
-            M_res_signed = M_calib_all - outputs["m_calib"]
-            M_q_low, M_q_high = one_sided_quantiles(M_res_signed, alpha_lows, alpha_ups)
-            M_lower_full = M_test_all[np.newaxis, ...] - M_q_high[:, np.newaxis, ...]
-            M_upper_full = M_test_all[np.newaxis, ...] - M_q_low[:, np.newaxis, ...]
-    lower = DSD_lower_full
-    upper = DSD_upper_full
-    rep_DSD = DSD_test_all
-    lower_m = M_lower_full
-    upper_m = M_upper_full
-    rep_m = M_test_all
+taus = np.zeros((len(alphas), scores.shape[1]))
+for i, alpha in enumerate(alphas):
+    k = min(ceil((len(scores) + 1) * (1 - alpha)), len(scores))
+    taus[i] = np.sort(scores, axis=0)[k - 1]
+
+latent_dict = {
+    "z_enc_test_pred": DSD_test_all[2],
+    "Sigma_inv": Sigma_inv,
+    "mu": mu,  # <-- save the mean!
+    "taus": taus,
+}
+lower = DSD_lower_full
+upper = DSD_upper_full
+rep_DSD = DSD_test_all
+lower_m = M_lower_full
+upper_m = M_upper_full
+rep_m = M_test_all
+
+print("Saving results.")
 
 """
 Save:
 -alpha values,
 -indices for test data, 
--(lower and upper interval DSD values, and representative ("center") DSDs), and
--(lower and upper interval mass values, and representative ("center") mass),
+-(lower and upper interval DSD values, and representative ("center") DSDs), 
+-(lower and upper interval mass values, and representative ("center") mass), and
+-{encoded predictions on test set, covariance inverse of latent space trajectories, residual mean, conformal radii}
 in that order.
 """
 
-if method == "split":  # add split percent if needed
-    method += str(int(100 * calib_size))
 with open(
     os.path.join(
         "UQ",
         "conformal",
         "results",
         "ae_AR",
-        os.path.basename(os.path.normpath(args.data_name)) + "_" + method + ".pkl",
+        os.path.basename(os.path.normpath(args.data_name))
+        + "_split"
+        + str(int(100 * calib_size))
+        + ".pkl",
     ),
     "wb",
 ) as f:
     pickle.dump(
         [
             alphas,
-            test_size,
             outputs["idx_test"],
             (lower, upper, rep_DSD),
             (lower_m, upper_m, rep_m),
+            latent_dict,
         ],
         f,
     )

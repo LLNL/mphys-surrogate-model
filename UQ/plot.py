@@ -28,12 +28,12 @@ parser.add_argument(
     "--subset",
     type=str,
     required=True,
-    choices=["decoder", "latent", "full", "mass"],
-    help="which subset of the network you want to plot conformal predictions on: decoder, latent, full, or mass"
+    choices=["decoder", "full", "mass"],
+    help="which subset of the network you want to plot conformal predictions on: decoder, full, or mass"
     "-decoder: the reconstruction/autoencoder only"
-    "-latent: the dynamics in the latent space only"
     "-full: the entire network architecture (reconstruction+dynamics)"
-    "-mass: the (normalized) mass as a function of time",
+    "-mass: the (normalized) mass as a function of time"
+    "(sorry, 3D latent trajectory plots not implemented yet!)",
 )
 parser.add_argument(
     "-t",
@@ -43,19 +43,21 @@ parser.add_argument(
     help="the indices of which times to plot (required), space separated, inputed as a string",
 )
 parser.add_argument(
-    "-m",
-    "--method",
-    type=str,
-    required=True,
-    help="which conformal predictions to plot (required): full, split[p], or cv+[k]",
+    "-p",
+    "--p",
+    type=int,
+    default=20,
+    help="The p indicates what *percent* you want to dedicate out of the full data for calibration."
+    "Default is 20%, in which case p=20.",
 )
 parser.add_argument(
     "-u",
     "--uncertainty",
     type=str,
     default="conformal",
-    choices=["conformal", "ensemble"],
-    help="whether you would like to plot intervals from conformal or ensemble/bootsrapped predictions. Default is conformal.",
+    choices=["conformal"],
+    help="Types of uncertainty intervals to plot."
+    "Default (and only one implemented currently) is conformal.",
 )
 parser.add_argument(
     "-g",
@@ -75,25 +77,16 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-method = args.method
-calib_size = None
-if method[:5] == "split":
-    calib_size = float(method[5:])
-    method = "split"
-if method[:3] == "cv+":
-    method = "cv+"
-if method not in [
-    "split",
-    "full",
-    "cv+",
-]:  # raise error if method is not one of the list above
-    raise ValueError("Conformal predictions method specified has not been implemented.")
+calib_size = args.p
 
 models = ["AR", "NNdzdt", "SINDy"]
 
 # load results from conformal predictions
 cp_results_file = (
-    os.path.basename(os.path.normpath(args.data_name)) + "_" + args.method + ".pkl"
+    os.path.basename(os.path.normpath(args.data_name))
+    + "_split"
+    + str(calib_size)
+    + ".pkl"
 )
 
 id = args.id  # a single int
@@ -112,26 +105,16 @@ for model in models:
         cp_results_file,
     )
     with open(pickle_path, "rb") as f:
-        alphas, test_size, _, DSD_bands, m_bands = pickle.load(f)
+        alphas, _, DSD_bands, m_bands, _ = pickle.load(f)
 
     # load data
-    if calib_size:
-        outputs = du.open_mass_dataset(
-            name=args.data_name,
-            data_dir=Path(parent_directory) / "data",
-            sample_time=None,
-            test_size=test_size,
-            calib_size=0.01 * calib_size,
-            random_state=params["random_seed"],
-        )
-    else:
-        outputs = du.open_mass_dataset(
-            name=args.data_name,
-            data_dir=Path(parent_directory) / "data",
-            sample_time=None,
-            test_size=test_size,
-            random_state=params["random_seed"],
-        )
+    outputs = du.open_mass_dataset(
+        name=args.data_name,
+        data_dir=Path(parent_directory) / "data",
+        sample_time=None,
+        test_size=1 - 0.01 * calib_size,
+        random_state=params["random_seed"],
+    )
 
     """
     Get indices to plot relative to the test data. 
@@ -155,14 +138,10 @@ for model in models:
         lowers[model] = DSD_bands[0][0]
         uppers[model] = DSD_bands[1][0]
         reps[model] = DSD_bands[2][0]
-    elif subset == "latent":
+    elif subset == "full":
         lowers[model] = DSD_bands[0][1]
         uppers[model] = DSD_bands[1][1]
         reps[model] = DSD_bands[2][1]
-    elif subset == "full":
-        lowers[model] = DSD_bands[0][2]
-        uppers[model] = DSD_bands[1][2]
-        reps[model] = DSD_bands[2][2]
     elif subset == "mass":
         lowers[model] = m_bands[0]
         uppers[model] = m_bands[1]
@@ -172,353 +151,7 @@ for model in models:
             "Subset of architecture indicated (via -s) has not been implemented"
         )
 
-if subset == "latent":
-    z_enc_tests = {}
-    # load model
-    import torch
-    from src import diagnostics
-
-    params.update({"num_epochs": 200, "batch_size": 100})
-
-    # Set device
-    device = torch.device(
-        "cuda"
-        if torch.cuda.is_available()
-        else (
-            "mps"
-            if torch.backends.mps.is_available() and params["batch_size"] > 1000
-            else "cpu"
-        )
-    )
-    # torch.backends.cudnn.benchmark = True
-
-    """
-    Run AE-AR results.
-    """
-    from training_scripts import train_ae_ar as train
-
-    params.update(
-        {
-            "lr_sched": True,
-            "learning_rate": 0.0030348411572892766,
-            "latent_dim": 3,
-            "n_lag": 1,
-            "w_recon": 1,
-            "w_dx": 0.12789450188986579,
-            "w_dz": 1.1729901013704414,
-            "patience": 50,
-            "tol": 1e-08,
-            "wd": 0.001,
-            "layer_size": [141, 154, 40],
-            "print_frequency": 1,
-        }
-    )
-
-    init_model = train.AEAutoregressor(
-        n_channels=1,
-        n_bins=outputs["n_bins"],
-        n_latent=params["latent_dim"],
-        n_lag=params["n_lag"],
-        layer_size=params["layer_size"],
-    )
-    optimal_path = os.path.join(
-        "results",
-        "Optuna",
-        "ERF Dataset",
-        "AE-AR_2025-07-20T22:45:33_605d8b8697694137a65cab3b1012fffc",
-        "erf_FFNN_latent3_order(63, 98, 30)_tr1000_lr0.002482884780966882_bs4_weights0.22816989332325596-0.6719555656053005_7c43ff3e659b47358fa327f690871ed7",
-    )
-    ae_ar_checkpoint = torch.load(
-        os.path.join(
-            optimal_path,
-            "erf_FFNN_latent3_order(63, 98, 30)_tr1000_lr0.002482884780966882_bs4_weights0.22816989332325596-0.6719555656053005_7c43ff3e659b47358fa327f690871ed7.pth",
-        ),
-        weights_only=True,
-    )
-    init_model.load_state_dict(ae_ar_checkpoint)
-    init_model.to(device)
-
-    optimizer = torch.optim.AdamW(
-        init_model.parameters(),
-        lr=params["learning_rate"],
-        weight_decay=params["wd"],
-    )
-    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-    early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
-
-    train_data = du.NormedBinDatasetAR(
-        outputs["x_train"], outputs["m_train"], lag=params["n_lag"]
-    )
-    train_loader = torch.utils.data.DataLoader(
-        train_data, batch_size=params["batch_size"], shuffle=True
-    )
-    test_data = du.NormedBinDatasetAR(
-        outputs["x_test"], outputs["m_test"], lag=params["n_lag"]
-    )
-    test_loader = torch.utils.data.DataLoader(
-        test_data, batch_size=len(test_data), shuffle=True
-    )
-    (
-        model,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-    ) = train.train_and_eval(
-        params["num_epochs"],
-        init_model,
-        train_loader,
-        test_loader,
-        optimizer,
-        sched,
-        params,
-        early_stopping=early_stopping,
-        print_flag=False,
-        device=device,
-    )
-    z_enc_tests["AR"] = model.encoder(torch.Tensor(outputs["x_test"])).detach().numpy()
-
-    """
-    Run AE-NNdzdt results.
-    """
-    from training_scripts import train_ae_NNdzdt as train
-
-    params.update(
-        {
-            "layer_size": (42, 36, 46),
-            "learning_rate": 0.00314227212817401,
-            "wd": 1e-3,
-            "patience": 50,
-            "tol": 1e-8,
-            "lr_sched": True,
-            "print_frequency": 1,
-        }
-    )
-
-    init_model = train.AENNdzdt(
-        n_channels=1,
-        n_bins=outputs["n_bins"],
-        n_latent=params["latent_dim"],
-        layer_size=params["layer_size"],
-    )
-    optimal_path = os.path.join(
-        "results",
-        "Optuna",
-        "ERF Dataset",
-        "NNdzdt_2025-07-20T23:31:20_3a400c596947422389559813cd41dfe6",
-        "erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3",
-    )
-    ae_NNdzdt_checkpoint = torch.load(
-        os.path.join(
-            optimal_path,
-            "erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3.pth",
-        ),
-        weights_only=True,
-    )
-    init_model.load_state_dict(ae_NNdzdt_checkpoint)
-    init_model.to(device)
-
-    optimizer = torch.optim.AdamW(
-        init_model.parameters(),
-        lr=params["learning_rate"],
-        weight_decay=params["wd"],
-    )
-    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-    early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
-
-    # Compute & set weights based on Champion et al recs
-    lambda1, lambda2, lambda3 = du.champion_calculate_weights(
-        du.NormedBinDatasetDzDt(
-            outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
-        ),
-        lambda1_metaweight=0.5353139650038768,
-    )
-    params["loss_weight_recon"] = 1.0
-    params["loss_weight_sindy_x"] = lambda1
-    params["loss_weight_sindy_z"] = lambda2
-
-    train_data = du.NormedBinDatasetDzDt(
-        outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
-    )
-    train_loader = torch.utils.data.DataLoader(
-        train_data, batch_size=params["batch_size"], shuffle=True
-    )
-    test_data = du.NormedBinDatasetDzDt(
-        outputs["x_test"], outputs["dsd_time"], outputs["m_test"]
-    )
-    test_loader = torch.utils.data.DataLoader(
-        test_data, batch_size=len(test_data), shuffle=True
-    )
-
-    (
-        model,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-    ) = train.train_and_eval(
-        params["num_epochs"],
-        init_model,
-        train_loader,
-        test_loader,
-        optimizer,
-        sched,
-        params,
-        early_stopping=early_stopping,
-        print_flag=False,
-        device=device,
-    )
-    z_enc_tests["NNdzdt"] = (
-        model.encoder(torch.Tensor(outputs["x_test"])).detach().numpy()
-    )
-
-    """
-    Run AE-SINDy results.
-    """
-    from training_scripts import train_ae_sindy as train
-
-    params.update(
-        {
-            "poly_order": 2,
-            "learning_rate": 0.004204813405972317,
-            "wd": 1e-3,
-            "patience": 50,
-            "lambda1_metaweight": 0.500989969537634,
-            "tol": 1e-8,
-            "lr_sched": True,
-            "print_frequency": 1,
-        }
-    )
-
-    init_model = train.AESINDy(
-        n_channels=1,
-        n_bins=outputs["n_bins"],
-        n_latent=params["latent_dim"],
-        poly_order=params["poly_order"],
-    )
-    optimal_path = os.path.join(
-        "results",
-        "Optuna",
-        "ERF Dataset",
-        "AE-SINDy_LimParams",
-        "erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc",
-    )
-    ae_sindy_checkpoint = torch.load(
-        os.path.join(
-            optimal_path,
-            "erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc.pth",
-        ),
-        weights_only=True,
-    )
-    init_model.load_state_dict(ae_sindy_checkpoint)
-    init_model.to(device)
-
-    optimizer = torch.optim.AdamW(
-        init_model.parameters(),
-        lr=params["learning_rate"],
-        weight_decay=params["wd"],
-    )
-    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
-    early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
-
-    # Compute & set weights based on Champion et al recs
-    lambda1, lambda2, lambda3 = du.champion_calculate_weights(
-        du.NormedBinDatasetDzDt(
-            outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
-        ),
-        lambda1_metaweight=params["lambda1_metaweight"],
-    )
-    params["loss_weight_recon"] = 1.0
-    params["loss_weight_sindy_x"] = lambda1
-    params["loss_weight_sindy_z"] = lambda2
-
-    train_data = du.NormedBinDatasetDzDt(
-        outputs["x_train"], outputs["dsd_time"], outputs["m_train"]
-    )
-    train_loader = torch.utils.data.DataLoader(
-        train_data, batch_size=params["batch_size"], shuffle=True
-    )
-    test_data = du.NormedBinDatasetDzDt(
-        outputs["x_test"], outputs["dsd_time"], outputs["m_test"]
-    )
-    test_loader = torch.utils.data.DataLoader(
-        test_data, batch_size=len(test_data), shuffle=True
-    )
-
-    (
-        model,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-    ) = train.train_and_eval(
-        params["num_epochs"],
-        init_model,
-        train_loader,
-        test_loader,
-        optimizer,
-        sched,
-        params,
-        early_stopping=early_stopping,
-        print_flag=False,
-        device=device,
-    )
-    z_enc_tests["SINDy"] = (
-        model.encoder(torch.Tensor(outputs["x_test"])).detach().numpy()
-    )
-
-    # columns correspond to test_ids, rows correpsond to latent dimension
-    (fig, ax) = plt.subplots(
-        ncols=len(models),
-        nrows=3,
-        figsize=(2.5 * len(models), 2 * 3),
-        sharey=True,
-    )  # Rows correspond to latent variables.
-    for i, m in enumerate(models):
-        for j in range(3):
-            for k_alpha, alpha in zip(reversed(range(len(alphas))), reversed(alphas)):
-                ax[j][i].fill_between(
-                    outputs["dsd_time"],
-                    lowers[m][k_alpha, ids_rel_to_test, :, j],
-                    uppers[m][k_alpha, ids_rel_to_test, :, j],
-                    color=colors[k_alpha],
-                    alpha=0.4,
-                    label=f"{100*(1-alpha)}% coverage",
-                )
-            ax[j][i].plot(
-                outputs["dsd_time"],
-                z_enc_tests[m][ids_rel_to_test, :, j],
-                label="Data",
-                color="black",
-                linestyle="solid",
-                linewidth=1.5,
-            )
-            ax[j][i].plot(
-                outputs["dsd_time"],
-                reps[m][ids_rel_to_test, :, j],
-                label="Model",
-                color="black",
-                linestyle="dashed",
-                linewidth=1.5,
-            )  # representative band
-        ax[0][i].set_title(f"AE-{m}")
-        ax[-1][i].set_xlabel("time [s]")
-    for j in range(3):
-        ax[j][0].set_ylabel(r"$z_{}$ [-]".format(j + 1))
-    ax[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
-elif subset == "mass":
+if subset == "mass":
     (fig, ax) = plt.subplots(
         ncols=len(models),
         nrows=1,
@@ -605,7 +238,7 @@ else:
     ax[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 if args.title == "y":
     fig.suptitle(
-        f"Conformal predictions, {method}, {subset} network",
+        f"Conformal predictions, {subset} network",
         fontsize=14,
         # y=1.05
     )
@@ -617,7 +250,7 @@ fig.savefig(
         "results",
         "UQ",
         args.uncertainty,
-        f"{os.path.basename(os.path.normpath(args.data_name))}_{args.method}_{subset}_{id}.pdf",
+        f"{os.path.basename(os.path.normpath(args.data_name))}_{subset}_{id}.pdf",
     ),
     bbox_inches="tight",
 )
