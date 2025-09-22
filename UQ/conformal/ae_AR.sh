@@ -20,7 +20,7 @@ echo 'activating'
 cd mphys-surrogate-model
 
 # --- Parameters ---
-P_VALUES=(20 30 40)
+P_VALUES=(30 40)
 CONGESTUS_ADD=40                         # constant addition for congestus
 CONGESTUS_MAX=80                         
 CONGESTUS_MIN=1
@@ -40,6 +40,11 @@ for p in "${P_VALUES[@]}"; do
     python3 UQ/conformal/ae_AR.py erf_data/RICO/noadv_coal_200m \
       -p "$p" -a 0.1 0.05 0.025 0.01 -j "$NJOBS_PER_P" \
       > "logs/RICO_p${p}_AR.log" 2>&1
+
+    echo "congestus9600 split: ${p}-$((100 - p))"
+    python3 UQ/conformal/ae_AR.py erf_data/congestus/noadv_coal_200m_9600 \
+      -p "$p" -a 0.1 0.05 0.025 0.01 -j "$NJOBS_PER_P" \
+      > "logs/congestus9600_p${p}_AR.log" 2>&1
 
     # congestus p = p + constant, then clamp
     p_small=$(( p + CONGESTUS_ADD ))

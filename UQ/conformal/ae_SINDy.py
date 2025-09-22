@@ -59,6 +59,8 @@ params = {
     "random_seed": 1952,
     "latent_dim": 3,
     "poly_order": 2,
+    "eps": 1e-5,  # damping coefficient for ODE integration
+    "p": 3,  # must be odd; damping exponent
 }
 
 # Global variables and settings
@@ -128,9 +130,9 @@ Helper utility functions
 
 
 # simulate multiple latent space initial conditions at once in parallel
-def simulate_many(z0s, t_grid, dzdt, zlim, n_jobs):
+def simulate_many(z0s, t_grid, dzdt, eps, n_jobs):
     sims = Parallel(n_jobs=n_jobs, backend="loky", batch_size="auto")(
-        delayed(du.simulate)(z0, t_grid, dzdt, zlim) for z0 in z0s
+        delayed(du.simulate_damped)(z0, t_grid, dzdt, eps, params["p"]) for z0 in z0s
     )
     return np.stack(sims, axis=0)  # (N, T, latent_dim+1)
 
@@ -143,23 +145,23 @@ def encode_decode_ae_batched(x_t, model):
 
 
 # run latent space dynamics
-def run_ae_X_latent_batched(z_enc_np, m_np, model, zlim, n_jobs):
+def run_ae_X_latent_batched(z_enc_np, m_np, model, eps, n_jobs):
     # z_enc_np: (N,T,L), m_np: (N,T)
     z0s = [
         np.concatenate((z_enc_np[i, 0, :], np.array([m_np[i, 0]])), axis=-1)
         for i in range(z_enc_np.shape[0])
     ]
     latents_all = simulate_many(
-        z0s, outputs["dsd_time"], model.dzdt, zlim, n_jobs
+        z0s, outputs["dsd_time"], model.dzdt, eps, n_jobs
     )  # (N,T,L+1)
     return latents_all
 
 
 # run full network
 # computes the predicted DSD and mass trajectories
-def run_ae_X_batched(z_enc_np, m_np, model, zlim, n_jobs, device):
+def run_ae_X_batched(z_enc_np, m_np, model, eps, n_jobs, device):
     latents_all = run_ae_X_latent_batched(
-        z_enc_np, m_np, model, zlim, n_jobs
+        z_enc_np, m_np, model, eps, n_jobs
     )  # (N,T,L+1)
     z_only = latents_all[..., :-1].reshape(-1, z_enc_np.shape[-1])  # (N*T,L)
     with torch.inference_mode():
@@ -176,7 +178,7 @@ def run_ae_X_batched(z_enc_np, m_np, model, zlim, n_jobs, device):
 
 
 # runs all three parts of the architecture above and returns data
-def run_all_batched(outputs, model, z_calib_enc, z_test_enc, zlim, device, n_jobs):
+def run_all_batched(outputs, model, z_calib_enc, z_test_enc, eps, device, n_jobs):
     # decoder-only paths (pure Torch, batched)
     x_calib_t = torch.tensor(outputs["x_train"], device=device, dtype=torch.float32)
     x_test_t = torch.tensor(outputs["x_test"], device=device, dtype=torch.float32)
@@ -185,10 +187,10 @@ def run_all_batched(outputs, model, z_calib_enc, z_test_enc, zlim, device, n_job
 
     # full architecture via simulate (Joblib) + batched decoding
     DSD_calib_full, M_calib_full, Z_calib_full = run_ae_X_batched(
-        z_calib_enc, outputs["m_train"], model, zlim, n_jobs, device
+        z_calib_enc, outputs["m_train"], model, eps, n_jobs, device
     )
     DSD_test_full, M_test_full, Z_test_full = run_ae_X_batched(
-        z_test_enc, outputs["m_test"], model, zlim, n_jobs, device
+        z_test_enc, outputs["m_test"], model, eps, n_jobs, device
     )
 
     DSD_calib_all = [DSD_calib_dec, DSD_calib_full, Z_calib_full]
@@ -264,50 +266,18 @@ print("Loading and initializing model.")
 model = init_model(device)
 model.eval()
 
-# # load original dataset to properly clip
-# ds = xr.open_dataset(
-#     (Path(__file__).parent.parent.parent / "data" / Path('congestus_coal_200m_train')).with_suffix(".nc")
-#     )
-# dmdlnr = ds["dmdlnr"]
-# m_scale = (
-#     dmdlnr
-#     .sum(dim="bin")
-#     .transpose("loc", "t")
-#     .max()
-#     .item()  # scalar
-# )
-# # sum over bin → shape (t, loc); then transpose → (loc, t)
-# m = dmdlnr.sum(dim="bin").transpose("loc", "t")
-# # x has shape (loc, t, bin)
-# x = (dmdlnr / m).transpose("loc", "t", "bin")
-# x_train =  x.to_numpy()
-# m_train = (m / m_scale).to_numpy()
-
 print("Encoding data.")
 with torch.inference_mode():
-    # x_train_t = torch.tensor(x_train, device=device, dtype=torch.float32)
     x_calib_t = torch.tensor(outputs["x_train"], device=device, dtype=torch.float32)
     x_test_t = torch.tensor(outputs["x_test"], device=device, dtype=torch.float32)
-    # z_train_enc_t = model.encoder(x_train_t)              # (N_train, T, latent_dim)
     z_calib_enc_t = model.encoder(x_calib_t)  # (N_calib, T, latent_dim)
     z_test_enc_t = model.encoder(x_test_t)  # (N_test,  T, latent_dim)
-# z_train_enc = z_train_enc_t.detach().cpu().numpy()
 z_calib_enc = z_calib_enc_t.detach().cpu().numpy()
 z_test_enc = z_test_enc_t.detach().cpu().numpy()
 
-# compute clipping windows in latent space relative to the ORIGINAL training data
-zlim = np.array(
-    [[-np.inf, np.inf]] * (params["latent_dim"] + 1), dtype=float
-)  # (-inf,inf) default
-# for il in range(params["latent_dim"]):
-#     zlim[il,0] = z_train_enc[:,:,il].min()
-#     zlim[il,1] = z_train_enc[:,:,il].max()
-# zlim[-1,0] = m_train.min()
-# zlim[-1,1] = m_train.max()
-
 print("Predicting the calibration and testing data.")
 (DSD_calib_all, M_calib_all), (DSD_test_all, M_test_all) = run_all_batched(
-    outputs, model, z_calib_enc, z_test_enc, zlim, device, n_jobs=args.n_jobs
+    outputs, model, z_calib_enc, z_test_enc, params["eps"], device, n_jobs=args.n_jobs
 )
 print("Running split conformal predictions on decoder and full outputs.")
 for i in range(2):  # loop through decoder and then full subsets of architecture

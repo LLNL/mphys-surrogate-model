@@ -20,8 +20,8 @@ cd /g/g14/katona1
 cd mphys-surrogate-model
 mkdir -p logs
 
-DATASETS=( "erf_data/RICO/noadv_coal_200m" "congestus_coal_200m_test" )
-P_VALUES=(20 30 40)
+DATASETS=( "erf_data/RICO/noadv_coal_200m" "congestus_coal_200m_test" "erf_data/congestus/noadv_coal_200m_9600")
+P_VALUES=(30 40)
 CONGESTUS_ADD=40                         # constant addition for congestus
 CONGESTUS_MAX=80                         
 CONGESTUS_MIN=1

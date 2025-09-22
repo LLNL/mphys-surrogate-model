@@ -78,10 +78,8 @@ def ellipse_volumes_pd(Sigma_inv, taus):
     # Unit d-ball volume
     Vd = math.pi ** (d / 2) / math.gamma(d / 2 + 1)
 
-    # Stable log-determinants; sign should be +1 for PD matrices
-    sign, logdet = np.linalg.slogdet(Sigma_inv)  # (m,)
-    if not np.all(sign > 0):
-        raise ValueError("All A must be positive definite (got non-positive det).")
+    # Stable log-determinants
+    _, logdet = np.linalg.slogdet(Sigma_inv)  # (m,)
 
     inv_sqrt_detA = np.exp(-0.5 * logdet)  # (m,)
 
@@ -154,6 +152,7 @@ for model in models:
     volumes[model] = ellipse_volumes_pd(
         Sigma_inv=Sigma_inv, taus=taus
     )  # array of ellipse volumes
+    print(f"Done with {model}.")
 
 
 # define figures. Columns correspond to parts of architecture
@@ -195,19 +194,21 @@ for j, label in enumerate(arch_labels):  # loop through architectures (columns)
         for k, alpha in enumerate(alphas):  # loop through alpha values
             if label == "mass":
                 ax[j].plot(
-                    outputs["dsd_time"],
-                    m_diffs[model][k],
+                    outputs["dsd_time"][1:],
+                    m_diffs[model][k][1:],
                     color=model_colors[model],
                     linestyle=alpha_linestyles[alpha],
                     label=r"$\alpha={}$%, {}".format(100 * alpha, model),
                 )
+                ax[j].set_yscale("log")
             elif label == "latent dynamics":
                 ax[j].plot(
-                    outputs["dsd_time"],
-                    volumes[model][k],
+                    outputs["dsd_time"][1:],
+                    volumes[model][k][1:],
                     color=model_colors[model],
                     linestyle=alpha_linestyles[alpha],
                 )
+                ax[j].set_yscale("log")
             else:
                 data_idx = arch_to_idx[label]
                 ax[j].plot(

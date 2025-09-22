@@ -515,6 +515,37 @@ def simulate(z0, T, dz_network, z_lim):
     return Z
 
 
+def simulate_damped(z0, T, dz_network, eps, p):
+    """
+    z0: (D,) initial state (latent L plus mass 1)
+    T:  (T,) time grid
+    dz_network: callable taking torch tensor (1, D) or (D,) -> returning (1, D) or (D,)
+    eps: damping coefficient (>0)
+    p:   odd integer exponent (e.g., 3, 5)
+    """
+    z0 = np.asarray(z0, dtype=float)
+    D = z0.shape[0]
+
+    if p <= 0 or p % 2 == 0:
+        raise ValueError("p must be a positive odd integer")
+
+    def f(t, z):
+        # evaluate network derivative
+        dz = dz_network(torch.as_tensor(z, dtype=torch.float32).unsqueeze(0))
+        dz = np.asarray(dz.detach().cpu().numpy()).ravel()
+        if dz.shape[0] != D:
+            raise ValueError(
+                f"dz_network returned length {dz.shape[0]} but expected {D}"
+            )
+
+        # apply damping to *all* coordinates (latent and mass)
+        dz -= eps * z * (np.abs(z) ** (p - 1))
+        return dz
+
+    sol = solve_ivp(f, [float(T[0]), float(T[-1])], z0, method="LSODA", t_eval=T)
+    return sol.y.T
+
+
 def champion_calculate_weights(ds, lambda1_metaweight=0.5, lambda3=1.0):
     """
     See Champion et al. supplementary materials for information.

@@ -155,13 +155,18 @@ def run_ae_X_latent_batched(z_init_enc_t, m_t, model, n_lag):
 
     # roll forward autoregressively, batched over N
     for t in range(n_lag, T):
-        # build (N, 1, n_lag, L) -> we want (N, n_lag, L) then add mass
-        latent_DSD = latents_all[:, t - n_lag : t, :L]  # (N, n_lag, L)
-        mass_t = latents_all[:, t - n_lag : t, L].unsqueeze(-1)  # (N, n_lag, 1)
-        ar_in = torch.cat([latent_DSD, mass_t], dim=-1)  # (N, n_lag, L+1)
+        # latents_all: (N, T, L+1); split into z (L) and mass (1)
+        z_hist = latents_all[:, t - n_lag : t, :L]  # (N, n_lag, L)
+        z_hist_f = z_hist.reshape(z_hist.shape[0], 1, -1)  # (N, 1, n_lag*L)
 
-        # model.autoregressor expects (N, n_lag, L+1); outputs (N, L+1)
-        res = model.autoregressor(ar_in)  # (N, L+1)
+        # Use the most recent mass (t-1) to match training forward()
+        m_last = latents_all[:, t - 1, L].unsqueeze(1).unsqueeze(2)  # (N, 1, 1)
+
+        ar_in = torch.cat([z_hist_f, m_last], dim=2)  # (N, 1, n_lag*L + 1)
+
+        res = model.autoregressor(ar_in)  # (N, 1, L+1)
+        res = res.squeeze(1)  # (N, L+1)
+
         latents_all[:, t, :] = res
 
     return latents_all  # torch

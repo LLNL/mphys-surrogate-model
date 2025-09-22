@@ -1,17 +1,17 @@
-srun: Step created for StepId=3739985.6
+srun: Step created for StepId=3743128.10
 testing for coverage 1-alpha=90.0%
-Mean percent of real test trajectories that fall within: 86.88524590163935
-Median percent of real test trajectories that fall within: 84.21052631578947
-Standard deviation of percent of real test trajectories that fall within: 4.4824763443867255
-testing for coverage 1-alpha=95.0%
-Mean percent of real test trajectories that fall within: 91.15616911130286
-Median percent of real test trajectories that fall within: 92.10526315789474
-Standard deviation of percent of real test trajectories that fall within: 3.8426662539505316
-testing for coverage 1-alpha=97.5%
-Mean percent of real test trajectories that fall within: 94.30543572044866
-Median percent of real test trajectories that fall within: 94.73684210526315
-Standard deviation of percent of real test trajectories that fall within: 3.2381352898697493
-testing for coverage 1-alpha=99.0%
-Mean percent of real test trajectories that fall within: 97.15271786022433
+Mean percent of real test trajectories that fall within: 97.19585849870576
 Median percent of real test trajectories that fall within: 97.36842105263158
-Standard deviation of percent of real test trajectories that fall within: 1.801605954945739
+Standard deviation of percent of real test trajectories that fall within: 1.3366637950672708
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 97.23899913718722
+Median percent of real test trajectories that fall within: 97.36842105263158
+Standard deviation of percent of real test trajectories that fall within: 1.0024978463004535
+testing for coverage 1-alpha=97.5%
+Mean percent of real test trajectories that fall within: 97.36842105263158
+Median percent of real test trajectories that fall within: 97.36842105263158
+Standard deviation of percent of real test trajectories that fall within: 1.1102230246251565e-14
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 97.41156169111302
+Median percent of real test trajectories that fall within: 97.36842105263158
+Standard deviation of percent of real test trajectories that fall within: 0.3341659487668174
