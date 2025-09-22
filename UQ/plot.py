@@ -150,6 +150,7 @@ for model in models:
         raise KeyError(
             "Subset of architecture indicated (via -s) has not been implemented"
         )
+    print(f"Done with {model}.")
 
 if subset == "mass":
     (fig, ax) = plt.subplots(

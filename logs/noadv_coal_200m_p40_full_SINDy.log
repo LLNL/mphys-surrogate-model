@@ -1,16 +1,17 @@
+srun: Step created for StepId=3748878.10
 testing for coverage 1-alpha=90.0%
-Mean percent of real test trajectories that fall within: 89.51860620690361
-Median percent of real test trajectories that fall within: 89.67475477542591
-Standard deviation of percent of real test trajectories that fall within: 1.059059913297714
+Mean percent of real test trajectories that fall within: 89.9397864412151
+Median percent of real test trajectories that fall within: 90.08776458440889
+Standard deviation of percent of real test trajectories that fall within: 1.0044501640369292
 testing for coverage 1-alpha=95.0%
-Mean percent of real test trajectories that fall within: 94.97613884387923
-Median percent of real test trajectories that fall within: 94.73412493546721
-Standard deviation of percent of real test trajectories that fall within: 1.1360230844397543
+Mean percent of real test trajectories that fall within: 94.85196914438475
+Median percent of real test trajectories that fall within: 94.88900361383583
+Standard deviation of percent of real test trajectories that fall within: 0.7497302042388839
 testing for coverage 1-alpha=97.5%
-Mean percent of real test trajectories that fall within: 97.29285775441251
-Median percent of real test trajectories that fall within: 97.26381001548788
-Standard deviation of percent of real test trajectories that fall within: 0.6773938733896381
+Mean percent of real test trajectories that fall within: 97.34162473100692
+Median percent of real test trajectories that fall within: 97.41868869385648
+Standard deviation of percent of real test trajectories that fall within: 0.5738493056403532
 testing for coverage 1-alpha=99.0%
-Mean percent of real test trajectories that fall within: 98.84089378542915
+Mean percent of real test trajectories that fall within: 98.84531044741026
 Median percent of real test trajectories that fall within: 98.86422302529685
-Standard deviation of percent of real test trajectories that fall within: 0.37426427083940794
+Standard deviation of percent of real test trajectories that fall within: 0.39456307627908394
