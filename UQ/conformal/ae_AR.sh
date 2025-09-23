@@ -32,6 +32,7 @@ echo "Parallel jobs: $NUM_JOBS, threads per job: $NJOBS_PER_P"
 
 # --- Create log folder ---
 mkdir -p logs
+mkdir -p UQ/conformal/results/ae_AR
 
 # --- Loop over p values in background ---
 for p in "${P_VALUES[@]}"; do
