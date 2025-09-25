@@ -204,7 +204,7 @@ def plot_panel(ax, label):
 # Layout logic
 if args.subset == "all":
     fig, axes = plt.subplots(
-        2, 2, figsize=(10, 6), sharex=False, sharey=False, constrained_layout=True
+        2, 2, figsize=(6, 5), sharex=False, sharey=False, constrained_layout=True
     )
     order = ["reconstruction", "end-to-end", "latent dynamics", "mass"]  # row-major
     for ax, label in zip(axes.flat, order):
@@ -241,9 +241,8 @@ fig.legend(
 # Save
 out_path = os.path.join(
     parent_directory,
-    "results",
+    "figures",
     "UQ",
-    args.uncertainty,
     f"errors_{os.path.basename(os.path.normpath(args.data_name))}_{args.subset}.pdf",
 )
 fig.savefig(out_path, bbox_inches="tight")

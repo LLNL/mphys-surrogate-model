@@ -79,7 +79,7 @@ args = parser.parse_args()
 
 calib_size = args.p
 
-models = ["AR", "NNdzdt", "SINDy"]
+models = ["SINDy", "NNdzdt", "AR"]
 
 # load results from conformal predictions
 cp_results_file = (
@@ -211,26 +211,26 @@ else:
                     alpha=0.4,
                     label=f"{100*(1-alpha)}% coverage",
                 )
-            ax[j][i].plot(
+            ax[j][i].step(
                 bin_mids,
                 outputs["x_test"][ids_rel_to_test, t],
                 label="Data",
                 color="black",
                 linestyle="solid",
-                linewidth=1.5,
+                linewidth=1,
             )
-            ax[j][i].plot(
+            ax[j][i].step(
                 bin_mids,
                 reps[m][ids_rel_to_test, t],
                 label="Model",
-                color="black",
-                linestyle="dashed",
-                linewidth=1.5,
+                color="rebeccapurple",
+                linestyle="solid",
+                linewidth=1,
             )  # representative band
             ax[j][i].set_xscale("log")
         ax[0][i].set_title(f"AE-{m}")
         ax[-1][i].set_xlabel("radius [m]")
-        ax[j][i].set_ylim(0, 0.5)
+        ax[j][i].set_ylim(0, 0.8)
     for j, t in enumerate(tplt):
         ax[j][0].set_ylabel(
             rf"Normalized $\frac{{dm}}{{d\ln r}}$ [-]"
@@ -248,9 +248,8 @@ if args.title == "y":
 fig.savefig(
     os.path.join(
         parent_directory,
-        "results",
+        "figures",
         "UQ",
-        args.uncertainty,
         f"{os.path.basename(os.path.normpath(args.data_name))}_{subset}_{id}.pdf",
     ),
     bbox_inches="tight",
