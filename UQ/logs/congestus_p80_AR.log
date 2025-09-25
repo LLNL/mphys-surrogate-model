@@ -1,0 +1,6 @@
+Using cpu device
+Loading and initializing model.
+Encoding data.
+Predicting the calibration and testing data.
+Running split conformal predictions on decoder and full outputs.
+Running split conformal predictions on latent trajectories.

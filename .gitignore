@@ -5,6 +5,7 @@
 *.nc
 *.pyc
 *.html
+*.pdf
 .idea/*
 trained_models/
 *.DS_Store

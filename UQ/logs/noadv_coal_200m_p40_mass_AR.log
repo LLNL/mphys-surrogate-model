@@ -1,0 +1,17 @@
+srun: Step created for StepId=3748876.19
+testing for coverage 1-alpha=90.0%
+Mean percent of real test trajectories that fall within: 89.60063791614061
+Median percent of real test trajectories that fall within: 89.98451213216315
+Standard deviation of percent of real test trajectories that fall within: 0.8417291907081583
+testing for coverage 1-alpha=95.0%
+Mean percent of real test trajectories that fall within: 93.73533636275347
+Median percent of real test trajectories that fall within: 93.59834796076407
+Standard deviation of percent of real test trajectories that fall within: 0.2773443886746085
+testing for coverage 1-alpha=97.5%
+Mean percent of real test trajectories that fall within: 97.37012937225578
+Median percent of real test trajectories that fall within: 97.52194114610222
+Standard deviation of percent of real test trajectories that fall within: 0.447822906385109
+testing for coverage 1-alpha=99.0%
+Mean percent of real test trajectories that fall within: 98.29173418116201
+Median percent of real test trajectories that fall within: 98.34796076406815
+Standard deviation of percent of real test trajectories that fall within: 0.14348685420056578

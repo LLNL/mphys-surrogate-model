@@ -114,7 +114,7 @@ def open_mass_dataset(
     """
     # 1) load
     if filepath is None:
-        filepath = (data_dir / name).with_suffix(".nc")
+        filepath = (data_dir / Path(name)).with_suffix(".nc")
     ds = xr.open_dataset(filepath)
 
     # 2) optional subsample in time
@@ -160,6 +160,7 @@ def open_mass_dataset(
         "m_test": m_test,
         "idx_test": idx_test,
         "r_bins_edges": ds["rbin_l"].to_numpy(),
+        "r_bins_edges_r": ds["rbin_r"].to_numpy(),
         "n_bins": x_train.shape[-1],
         "dsd_time": ds["t"].to_numpy() - ds["t"].to_numpy()[0],
         "m_scale": m_scale,
@@ -177,10 +178,10 @@ def open_congestus_dataset(
     test_size=0.2,
     calib_size=None,
     random_state=1952,
-    data_dir=Path(__file__).parent.parent / "data",
+    data_dir=Path(__file__).parent.parent / "data" / "erf_data" / "congestus",
 ):
     return open_mass_dataset(
-        name="congestus_coal_200m",
+        name="noadv_coal_200m",
         data_dir=data_dir,
         sample_time=sample_time,
         test_size=test_size,
@@ -194,7 +195,7 @@ def open_rico_dataset(
     test_size=0.2,
     calib_size=None,
     random_state=1952,
-    data_dir=Path(__file__).parent.parent / "data",
+    data_dir=Path(__file__).parent.parent / "data" / "rico",
 ):
     return open_mass_dataset(
         name="rico_coal_200m",
@@ -222,8 +223,10 @@ def open_congestus_calib_train_rico_test(
        x_train, m_train, x_calib, m_calib, x_test, m_test, r_bins, n_bins, dsd_time
     """
     # --- 1) load both datasets
-    cong_path = (data_dir / "congestus_coal_200m").with_suffix(".nc")
-    rico_path = (data_dir / "rico_coal_200m").with_suffix(".nc")
+    cong_path = (data_dir / "erf_data" / "congestus" / "noadv_coal_200m").with_suffix(
+        ".nc"
+    )
+    rico_path = (data_dir / "rico" / "rico_coal_200m").with_suffix(".nc")
 
     ds_cong = xr.open_dataset(cong_path)
     ds_rico = xr.open_dataset(rico_path)
@@ -267,7 +270,6 @@ def open_congestus_calib_train_rico_test(
         "idx_calib": idx_calib,
         "x_test": x_test,
         "m_test": m_test,
-        "idx_test": idx_test,
         "r_bins_edges": r_bins,
         "n_bins": n_bins,
         "dsd_time": dsd_time,
@@ -288,8 +290,10 @@ def open_congestus_train_rico_calib_test(
     4) Returns dict of numpy arrays:
        x_train, m_train, x_calib, m_calib, x_test, m_test, r_bins, n_bins, dsd_time
     """
-    cong_path = (data_dir / "congestus_coal_200m").with_suffix(".nc")
-    rico_path = (data_dir / "rico_coal_200m").with_suffix(".nc")
+    cong_path = (data_dir / "erf_data" / "congestus" / "noadv_coal_200m").with_suffix(
+        ".nc"
+    )
+    rico_path = (data_dir / "rico" / "rico_coal_200m").with_suffix(".nc")
 
     ds_cong = xr.open_dataset(cong_path)
     ds_rico = xr.open_dataset(rico_path)
@@ -326,7 +330,6 @@ def open_congestus_train_rico_calib_test(
     return {
         "x_train": x_train,
         "m_train": m_train,
-        "idx_train": idx_train,
         "x_calib": x_calib,
         "m_calib": m_calib,
         "idx_calib": idx_calib,
@@ -349,10 +352,12 @@ def open_congestus_train_rico_test(
        to the first nt_cong timesteps (default nt_cong=61).
     4) Compute m_scale from congestus only.
     5) Prepare and return numpy arrays:
-       x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time
+       x_train, m_train, x_test, m_test, r_bins_edges, r_bins_edges_r, n_bins, dsd_time
     """
-    cong_path = (data_dir / "congestus_coal_200m").with_suffix(".nc")
-    rico_path = (data_dir / "rico_coal_200m").with_suffix(".nc")
+    cong_path = (data_dir / "erf_data" / "congestus" / "noadv_coal_200m").with_suffix(
+        ".nc"
+    )
+    rico_path = (data_dir / "rico" / "rico_coal_200m").with_suffix(".nc")
 
     ds_cong = xr.open_dataset(cong_path)
     ds_rico = xr.open_dataset(rico_path)
@@ -386,10 +391,8 @@ def open_congestus_train_rico_test(
     return {
         "x_train": x_train,  # shape: (n_train_loc, nt, n_bins)
         "m_train": m_train,  # shape: (n_train_loc, nt)
-        "idx_train": idx_train,
         "x_test": x_test,  # shape: (n_test_loc,  nt, n_bins)
         "m_test": m_test,  # shape: (n_test_loc,  nt)
-        "idx_test": idx_test,
         "r_bins_edges": r_bins_edges,  # 1D array, length = n_bins+1 or n_bins
         "n_bins": n_bins,
         "dsd_time": dsd_time,  # 1D array, length = nt
@@ -510,6 +513,37 @@ def simulate(z0, T, dz_network, z_lim):
     sol = solve_ivp(f, [T[0], T[-1]], z0, method="RK45", t_eval=T)
     Z = sol.y.T
     return Z
+
+
+def simulate_damped(z0, T, dz_network, eps, p):
+    """
+    z0: (D,) initial state (latent L plus mass 1)
+    T:  (T,) time grid
+    dz_network: callable taking torch tensor (1, D) or (D,) -> returning (1, D) or (D,)
+    eps: damping coefficient (>0)
+    p:   odd integer exponent (e.g., 3, 5)
+    """
+    z0 = np.asarray(z0, dtype=float)
+    D = z0.shape[0]
+
+    if p <= 0 or p % 2 == 0:
+        raise ValueError("p must be a positive odd integer")
+
+    def f(t, z):
+        # evaluate network derivative
+        dz = dz_network(torch.as_tensor(z, dtype=torch.float32).unsqueeze(0))
+        dz = np.asarray(dz.detach().cpu().numpy()).ravel()
+        if dz.shape[0] != D:
+            raise ValueError(
+                f"dz_network returned length {dz.shape[0]} but expected {D}"
+            )
+
+        # apply damping to *all* coordinates (latent and mass)
+        dz -= eps * z * (np.abs(z) ** (p - 1))
+        return dz
+
+    sol = solve_ivp(f, [float(T[0]), float(T[-1])], z0, method="LSODA", t_eval=T)
+    return sol.y.T
 
 
 def champion_calculate_weights(ds, lambda1_metaweight=0.5, lambda3=1.0):
