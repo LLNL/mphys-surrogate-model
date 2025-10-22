@@ -1,3 +1,7 @@
+"""
+Main script that defines AE-SINDy model and training
+"""
+
 import copy
 import json
 import os

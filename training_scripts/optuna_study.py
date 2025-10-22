@@ -1,3 +1,7 @@
+"""
+Script to conduct hyperparameter optimization with Optuna for each of the three models
+"""
+
 import csv
 import json
 import os

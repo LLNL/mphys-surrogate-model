@@ -1,3 +1,7 @@
+"""
+Script to test random seed variation for each of the three models
+"""
+
 import json
 import os
 import random
@@ -13,7 +17,7 @@ import pandas as pd
 import torch
 from matplotlib import pyplot as plt
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 sys.path.append(project_root)
 
 import src.data_utils as du
@@ -154,7 +158,7 @@ if __name__ == "__main__":
         params["loss_weight_sindy_z"] = lambda2
 
     # Set up save folder
-    base_output_directory = Path("./")
+    base_output_directory = Path("../ng_scripts/Random_Seed_Variation/")
     id = str(uuid.uuid4().hex)
     output_directory = base_output_directory / (
         f"{MODEL_TYPE}_" + datetime.now().isoformat().split(".")[0] + "_" + id

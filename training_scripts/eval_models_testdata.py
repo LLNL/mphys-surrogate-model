@@ -1,3 +1,7 @@
+"""
+Evaluate the three trained models for various data and test sizes all at once
+"""
+
 import json
 import os
 import sys
