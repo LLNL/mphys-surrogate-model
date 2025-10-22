@@ -7,6 +7,13 @@ from src import data_utils as du
 
 class FFNNEncoder(torch.nn.Module):
     def __init__(self, n_bins=64, n_latent=3):
+        """
+        Pytorch model for the feed-forward neural network encoder part of an
+        autoencoder. Used in multiple other models.
+
+        :param n_bins: Number of bins for the droplet size distributions
+        :param n_latent: Number of latent variables
+        """
         super(FFNNEncoder, self).__init__()
         self.n_bins = n_bins
         self.layer1 = Linear(n_bins, int(n_bins / 2))
@@ -63,6 +70,16 @@ class FFNNEncoder(torch.nn.Module):
 
 class FFNNDecoder(torch.nn.Module):
     def __init__(self, n_bins=64, n_latent=3, distribution=True):
+        """
+        Pytorch model for the feed-forward neural network decoder part of an
+        autoencoder. Used in multiple other models.
+
+        :param n_bins: Number of bins for the droplet size distributions
+        :param n_latent: Number of latent variables
+        :param distribution: Flag to indicate whether output is a true
+                             distribution (area under curve is 1) or
+                             not normalized.
+        """
         super(FFNNDecoder, self).__init__()
 
         self.n_bins = n_bins
@@ -123,6 +140,12 @@ class FFNNDecoder(torch.nn.Module):
 
 class FFNNAutoEncoder(torch.nn.Module):
     def __init__(self, n_bins=100, n_latent=10):
+        """
+        Combines FFNNEncoder and FFNNDecoder into a single autoencoder model
+
+        :param n_bins: Number of bins for the droplet size distributions
+        :param n_latent: Number of latent variables
+        """
         super(FFNNAutoEncoder, self).__init__()
 
         self.encoder = FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
@@ -137,6 +160,15 @@ class FFNNAutoEncoder(torch.nn.Module):
 
 class SINDyDeriv(torch.nn.Module):
     def __init__(self, n_latent=10, poly_order=2, use_thresholds=False):
+        """
+        Pytorch SINDy model that is to be paired with autoencoder. Works directly
+        from latent variables.
+
+        :param n_latent: Number of latent variables
+        :param poly_order: SINDy polynomial order, should typically be 2 or 3
+        :param use_thresholds: Flag to indicate whether coefficients are thresholded
+                               during training.
+        """
         super(SINDyDeriv, self).__init__()
         self.library_size = du.library_size(n_latent, poly_order)
         self.n_latent = n_latent
@@ -176,13 +208,18 @@ class SINDyDeriv(torch.nn.Module):
         self.sindy_coeffs.weight.data = self.mask * self.sindy_coeffs.weight.data
 
 
-"""
-Black-box network for predicting time derivatives
-"""
-
-
 class NNDerivatives(torch.nn.Module):
     def __init__(self, n_latent=3, layer_size=None):
+        """
+        Pytorch black box model to predict time derivatives directly  of droplet
+        size distributions directly (while SINDy predicts a simplified equation form
+        of time derivatives). Paired with autoencoder.
+
+        :param n_latent: Number of latent variables
+        :param layer_size: Number of layers and sizes used in network, e.g. [40, 45, 35]
+                           is a three layer network with 40, 45, and 35 nodes for each
+                           hidden layer.
+        """
         super(NNDerivatives, self).__init__()
         self.n_latent = n_latent
         if layer_size is None:
@@ -251,6 +288,16 @@ class NNDerivatives(torch.nn.Module):
 
 class Autoregressive(torch.nn.Module):
     def __init__(self, n_bins=3, n_bins_in=None, layer_size=None):
+        """
+        Pytorch model to predict the next droplet size distribution time step directly.
+        SINDy and dzdt predict time derivatives of droplet size dsitributions, whereas
+        this model is an autoregressive model that only works with the DSDs. Paired
+        with autoencoder.
+
+        :param n_bins:
+        :param n_bins_in:
+        :param layer_size:
+        """
         super(Autoregressive, self).__init__()
         self.n_bins = n_bins
         if layer_size is None:
@@ -297,4 +344,10 @@ class Autoregressive(torch.nn.Module):
 
 
 def count_parameters(model):
+    """
+    Count the number of parameters in a model
+
+    :param model: Pytorch model
+    :return: Number of parameters
+    """
     return sum(p.numel() for p in model.parameters() if p.requires_grad)

@@ -1,3 +1,7 @@
+"""
+Main script that defines AE-AR model and training
+"""
+
 import copy
 import json
 import os

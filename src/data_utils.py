@@ -11,6 +11,11 @@ from torch.utils.data import Dataset
 
 
 def open_box_dataset():
+    """
+    Open box dataset. Paths are hardcoded but relative.
+
+    :return: X train, mass train, X test, mass test, radius bin edges, number of bins, DSD time
+    """
     # Set path
     dpath = Path(__file__).parent.parent / "data" / "pysdm"
 
@@ -38,6 +43,13 @@ def open_box_dataset():
 
 
 def open_erf_dataset(path=None, sample_time=None):
+    """
+    Open ERF dataset. Paths are hardcoded but relative.
+
+    :param path: Optional path to read from different location
+    :param sample_time: Optional specific sample time to read
+    :return: X train, mass train, X test, mass test, radius bin edges, number of bins, DSD time
+    """
     if path is None:
         path = Path(__file__).parent.parent / "data"
         ds_all = xr.open_dataset(path / "congestus_coal_200m_train.nc")
@@ -63,13 +75,15 @@ def open_erf_dataset(path=None, sample_time=None):
     return (x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time)
 
 
-# define code for taking xarray Dataset and doing train-test split on it
-
-
 def split_by_index(ds: xr.Dataset, dim: str, test_size: float, random_state: int = 0):
     """
     Splits a Dataset along one integer dimension into train/test.
-    Returns (ds_train, idx_train, ds_test, idx_test).
+
+    :param ds: Dataset to split
+    :param dim: Which dimension to split
+    :param test_size: Fraction of dataset to use for testing, between 0 and 1
+    :param random_state: Random state to use for splitting
+    :return: Train data set, train data indices, test data set, test indices
     """
     idx = np.arange(ds.sizes[dim])
     train_idx, test_idx = train_test_split(
@@ -81,8 +95,12 @@ def split_by_index(ds: xr.Dataset, dim: str, test_size: float, random_state: int
 def prepare(ds_sub: xr.Dataset, m_scale: float):
     """
     From a dataset returns (x, m) arrays:
-        x[loc, t, bin] = normalized DSD across bins
-        m[loc, t]      = mass fraction / m_scale
+    x[loc, t, bin] = normalized DSD across bins
+    m[loc, t]      = mass fraction / m_scale
+
+    :param ds_sub: Dataset to prepare
+    :param m_scale: Scaling factor for mass
+    :return: Normalized DSD and mass fraction
     """
     dmdlnr = ds_sub["dmdlnr"]
     # sum over bin → shape (t, loc); then transpose → (loc, t)
@@ -90,12 +108,6 @@ def prepare(ds_sub: xr.Dataset, m_scale: float):
     # x has shape (loc, t, bin)
     x = (dmdlnr / m).transpose("loc", "t", "bin")
     return x.to_numpy(), (m / m_scale).to_numpy()
-
-
-"""
-Opens any dataset (e.g., RICO or Congestus) and does a specified train(-calibrate-)test split.
-output depends on if a calibration set is specified or not
-"""
 
 
 def open_mass_dataset(
@@ -109,8 +121,17 @@ def open_mass_dataset(
     m_scale=None,
 ):
     """
-    Opens a *.nc named name under data_dir, splits into train/test(/calib),
-    normalizes dmdlnr to get DSD and returns numpy arrays.
+    Open the mass dataset. Primarily used for conformal prediction work.
+
+    :param name: Dataset name
+    :param data_dir: Directory to read data from
+    :param filepath: Used instead name and data_dir
+    :param sample_time: Optional specific sample time to read
+    :param test_size: Fraction of dataset to use for testing, between 0 and 1
+    :param calib_size: Fraction of dataset to use for calibration, between 0 and 1
+    :param random_state: Random state to use for splitting
+    :param m_scale: Scaling factor for mass
+    :return: Dictionary of named outputs
     """
     # 1) load
     if filepath is None:
@@ -180,6 +201,16 @@ def open_congestus_dataset(
     random_state=1952,
     data_dir=Path(__file__).parent.parent / "data" / "erf_data" / "congestus",
 ):
+    """
+    Wrapper for `open_mass_dataset` to specifically open the mass dataset.
+
+    :param sample_time: Optional specific sample time to read
+    :param test_size: Fraction of dataset to use for testing, between 0 and 1
+    :param calib_size: Fraction of dataset to use for calibration, between 0 and 1
+    :param random_state: Random state to use for splitting
+    :param data_dir: Directory to read data from
+    :return: Dictionary of named outputs
+    """
     return open_mass_dataset(
         name="noadv_coal_200m",
         data_dir=data_dir,
@@ -197,6 +228,16 @@ def open_rico_dataset(
     random_state=1952,
     data_dir=Path(__file__).parent.parent / "data" / "rico",
 ):
+    """
+    Wrapper for `open_mass_dataset` to specifically open the rico dataset.
+
+    :param sample_time: Optional specific sample time to read
+    :param test_size: Fraction of dataset to use for testing, between 0 and 1
+    :param calib_size: Fraction of dataset to use for calibration, between 0 and 1
+    :param random_state: Random state to use for splitting
+    :param data_dir: Directory to read data from
+    :return: Dictionary of named outputs
+    """
     return open_mass_dataset(
         name="rico_coal_200m",
         data_dir=data_dir,
@@ -399,19 +440,19 @@ def open_congestus_train_rico_test(
     }
 
 
-"""
-The following function generates indices for the bootstrap replicate of a provided training dataset.
-In other words, it resamples the sample indices with replacement.
-"""
-
-
 def resampled_indices(test_data):
     return np.random.randint(0, len(test_data), size=len(test_data))
 
 
-# Create torch dataset
 class NormedBinDatasetDzDt(Dataset):
     def __init__(self, dmdlnr_normed, dsd_time, M):
+        """
+        Normed binned dataset pytorch class
+
+        :param dmdlnr_normed: Original normed dmdlnr data
+        :param dsd_time: Time
+        :param M: Mass
+        """
         self.nbin = dmdlnr_normed.shape[2]
         self.t = dsd_time
         self.dt = self.t[1] - self.t[0]
@@ -428,9 +469,15 @@ class NormedBinDatasetDzDt(Dataset):
         return self.x[idx, :], self.dx[idx, :], self.M[idx]
 
 
-# Create torch dataset
 class NormedBinDatasetAR(Dataset):
     def __init__(self, dmdlnr_normed, M, lag=1):
+        """
+        Normed binned dataset pytorch class for AR model
+
+        :param dmdlnr_normed: Original normed dmdlnr data
+        :param M: Mass
+        :param lag: Lags to use for AR model
+        """
         self.nbin = dmdlnr_normed.shape[2]
         self.lag = lag
         self.bin0 = (
@@ -458,6 +505,14 @@ class NormedBinDatasetAR(Dataset):
 
 
 def sindy_library_tensor(z, latent_dim, poly_order):
+    """
+    Create SINDy "library" tensor
+
+    :param z: Latent variables
+    :param latent_dim: Latent dimension
+    :param poly_order: Polynomial order used in SINDy
+    :return: Matrix representing SINDy library
+    """
     library_dim = library_size(latent_dim, poly_order)
     if len(z.shape) == 1:
         z = z.unsqueeze(0)
@@ -495,6 +550,13 @@ def sindy_library_tensor(z, latent_dim, poly_order):
 
 
 def library_size(n, poly_order):
+    """
+    Calculate size of SINDy library
+
+    :param n:
+    :param poly_order: Polynomial order used in SINDy
+    :return: SINDy library size
+    """
     l = 0
     for k in range(poly_order + 1):
         l += int(binom(n + k - 1, k))
@@ -502,6 +564,16 @@ def library_size(n, poly_order):
 
 
 def simulate(z0, T, dz_network, z_lim):
+    """
+    Simulate the DSD evolution using the latent space predictions
+
+    :param z0: Initial latent variables
+    :param T: Time
+    :param dz_network: Network to calculate dz
+    :param z_lim:
+    :return:
+    """
+
     def f(t, z):
         n_latent = z.size
         dz = dz_network(torch.Tensor(z)).squeeze().detach().numpy()
@@ -548,7 +620,9 @@ def simulate_damped(z0, T, dz_network, eps, p):
 
 def champion_calculate_weights(ds, lambda1_metaweight=0.5, lambda3=1.0):
     """
-    See Champion et al. supplementary materials for information.
+    Calculate weights (lambdas) for loss terms.
+    See Champion et al. supplementary materials for information on how these
+    are calculated.
 
     :param ds: Training dataset
     :param lambda1_metaweight: lambda1 is specified as "slightly less than", this sets that
