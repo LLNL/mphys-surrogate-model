@@ -188,7 +188,7 @@ if subset == "mass":
             linewidth=1.5,
         )  # representative band
         ax[i].set_title(f"AE-{m}")
-        ax[i].set_xlabel("time [s]")
+        ax[i].set_xlabel("Elapsed time (s)")
     ax[0].set_ylabel("Normalized mass [-]")
     ax[-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 else:
@@ -217,24 +217,23 @@ else:
                 label="Data",
                 color="black",
                 linestyle="solid",
-                linewidth=1,
+                linewidth=1.5,
             )
             ax[j][i].step(
                 bin_mids,
                 reps[m][ids_rel_to_test, t],
                 label="Model",
-                color="rebeccapurple",
+                color="gainsboro",
                 linestyle="solid",
-                linewidth=1,
+                linewidth=1.5,
             )  # representative band
             ax[j][i].set_xscale("log")
         ax[0][i].set_title(f"AE-{m}")
-        ax[-1][i].set_xlabel("radius [m]")
+        ax[-1][i].set_xlabel("radius (m)")
         ax[j][i].set_ylim(0, 0.8)
     for j, t in enumerate(tplt):
         ax[j][0].set_ylabel(
-            rf"Normalized $\frac{{dm}}{{d\ln r}}$ [-]"
-            f'\nat t={outputs["dsd_time"][t]} s  '
+            f'dmdlnr at t={outputs["dsd_time"][t]} s'
         )
     ax[0][-1].legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 if args.title == "y":

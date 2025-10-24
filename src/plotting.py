@@ -340,9 +340,9 @@ def plot_latent_trajectories_heatmap(
 
     # Accoutrements
     for i in range(n_latent):
-        ax[0][i].set_title(f"z{i + 1}")
+        ax[0][i].set_title(f"$z_{i + 1}$")
         ax[0][i].set_xlim([0, dsd_time.max()])
-    ax[0][-1].set_title("mass (rescaled)")
+    ax[0][-1].set_title("$M$ (rescaled)")
     ax[0][0].set_ylabel("Data")
     ax[1][0].set_ylabel("Model")
     fig.suptitle(f"Test set predicted Z(t)")
@@ -705,7 +705,7 @@ def plot_testset_quantiles_pred(
             ax[j][i].set_xscale("log")
             ax[j][i].set_xscale("log")
         ax[0][i].set_title(f"{qtiles[i] * 100}th percentile")
-        ax[-1][i].set_xlabel("radius (um)")
+        ax[-1][i].set_xlabel("radius (m)")
 
     # Accoutrements
     for j, t in enumerate(tplt):

@@ -146,10 +146,10 @@ for model in models:
 # ----------------
 # Architecture labels & mapping
 if args.subset == "nomass":
-    arch_labels = ["reconstruction", "latent dynamics", "end-to-end"]
+    arch_labels = ["Reconstruction", "Latent dynamics", "End-to-end"]
 else:  # "all"
     # 2x2 with recon / end-to-end top, latent / mass bottom
-    arch_labels = ["reconstruction", "end-to-end", "latent dynamics", "mass"]
+    arch_labels = ["Reconstruction", "End-to-end", "Latent dynamics", "Mass"]
 
 # Common style
 model_colors = {"SINDy": "tab:orange", "NNdzdt": "tab:green", "AR": "tab:red"}
@@ -162,7 +162,7 @@ alpha_linestyles = {
 def plot_panel(ax, label):
     """Plot one panel given the axis and which label it is."""
     for model in models:
-        if label == "mass":
+        if label == "Mass":
             # (K,T) -> plot vs t_pos starting from index 1 to match previous behavior
             y = m_diffs[model][:, 1:]
             for k, alpha in enumerate(alphas):
@@ -173,8 +173,8 @@ def plot_panel(ax, label):
                     linestyle=alpha_linestyles[alpha],
                 )
             ax.set_yscale("log")
-            ax.set_ylabel("mass [-]")
-        elif label == "latent dynamics":
+            ax.set_ylabel("Mass interval")
+        elif label == "Latent dynamics":
             y = volumes[model][:, 1:]  # (K,T-1)
             for k, alpha in enumerate(alphas):
                 ax.plot(
@@ -184,10 +184,10 @@ def plot_panel(ax, label):
                     linestyle=alpha_linestyles[alpha],
                 )
             ax.set_yscale("log")
-            ax.set_ylabel("latent volume [-]")
+            ax.set_ylabel("Latent volume interval")
         else:
             # reconstruction or end-to-end
-            idx = 0 if label == "reconstruction" else 1
+            idx = 0 if label == "Reconstruction" else 1
             y = DSD_areas[model][idx]  # (K,T)
             for k, alpha in enumerate(alphas):
                 ax.plot(
@@ -196,8 +196,8 @@ def plot_panel(ax, label):
                     color=model_colors[model],
                     linestyle=alpha_linestyles[alpha],
                 )
-            ax.set_ylabel(f"{label} [-]")
-    ax.set_xlabel("time [s]")
+            ax.set_ylabel(f"{label} interval")
+    ax.set_xlabel("Elapsed time (s)")
     ax.set_title(label)
 
 
@@ -206,14 +206,14 @@ if args.subset == "all":
     fig, axes = plt.subplots(
         2, 2, figsize=(6, 5), sharex=False, sharey=False, constrained_layout=True
     )
-    order = ["reconstruction", "end-to-end", "latent dynamics", "mass"]  # row-major
+    order = ["Reconstruction", "End-to-end", "Latent dynamics", "Mass"]  # row-major
     for ax, label in zip(axes.flat, order):
         plot_panel(ax, label)
 else:  # nomass -> 3x1 vertical
     fig, axes = plt.subplots(
         1, 3, figsize=(12, 3.6), sharex=False, sharey=False, constrained_layout=True
     )
-    for ax, label in zip(axes, ["reconstruction", "latent dynamics", "end-to-end"]):
+    for ax, label in zip(axes, ["Reconstruction", "Latent dynamics", "End-to-end"]):
         plot_panel(ax, label)
 
 # Legends: (1) models (colors) and (2) miscoverage (linestyles)
