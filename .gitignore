@@ -10,3 +10,7 @@
 trained_models/
 *.DS_Store
 ng_scripts/
+
+# Sphinx documentation
+docs/build/
+docs/_build/
