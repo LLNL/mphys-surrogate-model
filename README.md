@@ -57,7 +57,11 @@ An additional training dataset pipeline is included for reference in
 `data/pysdm`, which uses jupyter notebooks to generate and postprocess box-model SDM simulations using `PySDM`.
 Generating SDM data using this pipeline necessitates [PySDM](https://github.com/open-atmos/PySDM) as an additional dependency:
 - `pysdm` (available via `pip`)
-- `pysdm-examples` development version: \url{https://github.com/open-atmos/PySDM} with `dvdlnr` added as an additional output product
+- `pysdm-examples` development version: https://github.com/open-atmos/PySDM with `dvdlnr` added as an additional output product
+
+### Documentation
+Sphinx autodocs are available in the `docs` folder. The docs can be built using the `build_all_docs.sh` script
+located in the same folder.
 
 ## Authors
 Core contributors to this codebase include:
