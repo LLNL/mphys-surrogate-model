@@ -24,7 +24,7 @@ from src import diagnostics, models, plotting
 from torch.utils.data import DataLoader
 
 params = {
-    "data_src": "erf",
+    "data_src": "box64",
     "random_seed": 10,
     "num_epochs": 1000,
     "batch_size": 25,
@@ -38,7 +38,7 @@ params = {
     "lambda1_metaweight": 0.500989969537634,
     "print_frequency": 1,
     "emily_save": True,
-    "nipun_save": True,
+    "nipun_save": False,
 }
 
 # Global variables and settings
@@ -276,6 +276,15 @@ if __name__ == "__main__":
             n_bins,
             dsd_time,
         ) = du.open_box_dataset()
+    elif params["data_src"] == "box64":
+        outputs = du.open_mass_dataset("../../data/pysdm/box64.nc", "box64")
+        x_train = outputs["x_train"]
+        m_train = outputs["m_train"]
+        x_test = outputs["x_test"]
+        m_test = outputs["m_test"]
+        r_bins_edges = outputs["r_bins_edges"]
+        n_bins = outputs["n_bins"]
+        dsd_time = outputs["dsd_time"]
     elif params["data_src"] == "erf":
         (
             x_train,
@@ -510,10 +519,10 @@ if __name__ == "__main__":
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_full_test_recon.png"))
 
-    test_kl, test_wass, test_wun = diagnostics.get_performance_metrics(
+    test_kl, test_wass, test_mse_un, test_mass_diff = diagnostics.get_performance_metrics(
         x_test, m_test, z_pred, x_pred
     )
-    fig = plotting.plot_full_testset_performance_pred(test_kl, test_wass, test_wun)
+    fig = plotting.plot_full_testset_performance_pred(test_kl, test_wass, test_mse_un)
     if params["emily_save"]:
         fig.savefig(tpsp_plot_dir / (case_name + "_full_test_pred.png"))
     if params["nipun_save"]:

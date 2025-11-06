@@ -221,7 +221,7 @@ common_params = {
 }
 #%%
 n_runs = 1
-n_samples = 3
+n_samples = 1000
 sampler = qmc.LatinHypercube(d=3)
 sample = sampler.random(n=n_samples)
 
@@ -269,4 +269,21 @@ for i in range(n_samples):
         if coal_diff < coal_tol:
             print(f"{ir+1} runs; Not enough coalescence")
             break
-    print(f"runs saved")
+    print(f"{i} runs saved")
+
+
+#combine all the data
+import xarray as xr
+ds = xr.open_mfdataset('box_data_64/*.nc', combine='nested', concat_dim='loc')
+rhow = 1000.0
+ds['dmdlnr'] = ds['dv/dlnr'] * rhow
+ds = ds.rename_dims({'dv/dlnr_bin_index': 'bin', 'time': 't'})
+ds['t'] = ds['t'] * dt_out
+radius_bins_edges = np.logspace(
+            np.log10(1 * 1e-6), np.log10(5e3 * 1e-6), num=65, endpoint=True
+        )
+ds['rbin_l'] = ('bin', radius_bins_edges[:-1])
+ds['rbin_r'] = ('bin', radius_bins_edges[1:])
+ds = ds.drop('dv/dlnr')
+ds = ds.drop('dv/dlnr_bin_index')
+ds.to_netcdf('./box64.nc')
