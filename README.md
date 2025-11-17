@@ -60,7 +60,7 @@ Generating SDM data using this pipeline necessitates [PySDM](https://github.com/
 - `pysdm-examples` development version: https://github.com/open-atmos/PySDM with `dvdlnr` added as an additional output product
 
 ### Documentation
-Sphinx autodocs are available in the `docs` folder. The docs can be built using the `build_all_docs.sh` script
+Sphinx autodocs are available in the `docs` folder. The docs can be built running the `build_all_docs.sh` script
 located in the same folder.
 
 ## Authors
