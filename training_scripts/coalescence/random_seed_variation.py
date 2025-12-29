@@ -27,11 +27,11 @@ import src.data_utils as du
 MODEL_TYPE = "AE-SINDy"
 
 if MODEL_TYPE == "AE-AR":
-    from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
+    from training_scripts.coalescence.train_ae_ar import AEAutoregressor, params, train_and_eval
 elif MODEL_TYPE == "NNdzdt":
-    from training_scripts.train_ae_NNdzdt import AENNdzdt, params, train_and_eval
+    from training_scripts.coalescence.train_ae_NNdzdt import AENNdzdt, params, train_and_eval
 elif MODEL_TYPE == "AE-SINDy":
-    from training_scripts.train_ae_sindy import AESINDy, params, train_and_eval
+    from training_scripts.coalescence.train_ae_sindy import AESINDy, params, train_and_eval
 else:
     raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 

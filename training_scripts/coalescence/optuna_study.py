@@ -29,11 +29,11 @@ MODEL_TYPE = "AE-AR"
 # MODEL_TYPE = "AE-SINDy"
 
 if MODEL_TYPE == "AE-AR":
-    from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
+    from training_scripts.coalescence.train_ae_ar import AEAutoregressor, params, train_and_eval
 elif MODEL_TYPE == "NNdzdt":
-    from training_scripts.train_ae_NNdzdt import AENNdzdt, params, train_and_eval
+    from training_scripts.coalescence.train_ae_NNdzdt import AENNdzdt, params, train_and_eval
 elif MODEL_TYPE == "AE-SINDy":
-    from training_scripts.train_ae_sindy import AESINDy, params, train_and_eval
+    from training_scripts.coalescence.train_ae_sindy import AESINDy, params, train_and_eval
 else:
     raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
@@ -231,7 +231,7 @@ if __name__ == "__main__":
         params["loss_weight_sindy_z"] = lambda2
 
     # Set up save folder
-    base_output_directory = Path("../results/Optuna/")
+    base_output_directory = Path("../../results/Optuna/")
     id = str(uuid.uuid4().hex)
     output_directory = base_output_directory / (
         f"{MODEL_TYPE}_" + datetime.now().isoformat().split(".")[0]  # + "_" + id

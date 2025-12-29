@@ -371,7 +371,7 @@ if __name__ == "__main__":
     print(f"Save ID is {case_name}")
 
     # Emily save dirs
-    tpsp_out_dir = Path("../trained_models/ae_SINDy")
+    tpsp_out_dir = Path("../../trained_models/ae_SINDy")
     if not tpsp_out_dir.exists():
         tpsp_out_dir.mkdir(parents=True, exist_ok=True)
     if not (tpsp_loss_dir := tpsp_out_dir / "losses").exists():
@@ -386,7 +386,7 @@ if __name__ == "__main__":
         )
 
     # Nipun save dirs
-    runsp_out_dir = Path("../ng_scripts/trained_models/ae_SINDy") / case_name
+    runsp_out_dir = Path("../../ng_scripts/trained_models/ae_SINDy") / case_name
     if not runsp_out_dir.exists():
         runsp_out_dir.mkdir(parents=True, exist_ok=True)
     if params["nipun_save"]:

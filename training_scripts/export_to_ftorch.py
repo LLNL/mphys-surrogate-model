@@ -11,7 +11,7 @@ sys.path.append(project_root)
 
 import torch
 
-from eval_models_testdata import get_model
+from training_scripts.coalescence.eval_models_testdata import get_model
 
 if __name__ == "__main__":
     ae_sindy = get_model("SINDy")
