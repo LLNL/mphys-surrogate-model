@@ -24,9 +24,9 @@ from src import diagnostics, models, plotting
 from torch.utils.data import DataLoader
 
 params = {
-    "data_src": "erf",
+    "data_src": "erfCond",
     "random_seed": 10,
-    "num_epochs": 1000,
+    "num_epochs": 10,
     "batch_size": 25,
     "learning_rate": 0.004204813405972317,
     "latent_dim": 3,
@@ -37,7 +37,7 @@ params = {
     "wd": 1e-3,
     "lambda1_metaweight": 0.500989969537634,
     "print_frequency": 1,
-    "emily_save": True,
+    "emily_save": False,
     "nipun_save": True,
 }
 
@@ -54,32 +54,33 @@ divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 # ----------------------------------------------------------------------------------------------------------------------
 # Model
 # ----------------------------------------------------------------------------------------------------------------------
-class AESINDy(torch.nn.Module):
+class AESINDyThermo(torch.nn.Module):
     def __init__(
         self,
         n_channels=1,
         n_bins=100,
         n_latent=10,
         poly_order=2,
+        n_thermo=3,
     ):
-        super(AESINDy, self).__init__()
+        super(AESINDyThermo, self).__init__()
         self.poly_order = poly_order
+        self.n_thermo = n_thermo
         assert n_channels == 1
         self.encoder = models.FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
         self.decoder = models.FFNNDecoder(
             n_bins=n_bins, n_latent=n_latent, distribution=True
         )
         self.dzdt = models.SINDyDeriv(
-            n_latent=n_latent + 1,
+            n_latent=n_latent + n_thermo,
             poly_order=poly_order,
             use_thresholds=False,
         )
 
-    def forward(self, bin0, M):
+    def forward(self, bin0, thermo):
         z0 = self.encoder(bin0)
-        dzMdt = self.dzdt(z0, M)
-        dzdt = dzMdt[:, :, :-1]
-        return dzdt
+        dzMdt = self.dzdt(z0, thermo)
+        return dzMdt
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -107,10 +108,12 @@ def train_and_eval(
     recon_losses = np.zeros(n_epochs) * np.nan
     dx_losses = np.zeros(n_epochs) * np.nan
     dz_losses = np.zeros(n_epochs) * np.nan
+    dM_losses = np.zeros(n_epochs) * np.nan
     test_losses = np.zeros(n_epochs) * np.nan
     test_recon_losses = np.zeros(n_epochs) * np.nan
     test_dx_losses = np.zeros(n_epochs) * np.nan
     test_dz_losses = np.zeros(n_epochs) * np.nan
+    test_dM_losses = np.zeros(n_epochs) * np.nan
     best_test_loss = float("inf")
     best_model = None
 
@@ -118,23 +121,26 @@ def train_and_eval(
         # Train
         epoch_start_time = time.time()
         model.train()
-        mean_epoch_loss = [0, 0, 0, 0]
-        for batch_x, batch_dx, batch_M in train_loader:
+        mean_epoch_loss = [0, 0, 0, 0, 0]
+        for batch_x, batch_dx, batch_M, batch_dM in train_loader:
             batch_x = batch_x.to(device)
             batch_dx = batch_dx.to(device)
             batch_M = batch_M.to(device)
+            batch_dM = batch_dM.to(device)
 
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
             z = model.encoder(batch_x)
             zz = z.clone().detach().requires_grad_()
-            pred_dz_int = model.dzdt(z, batch_M)
-            pred_dz = pred_dz_int[:, :, :-1]
+            pred_dzM = model.dzdt(z, batch_M)
+            pred_dz = pred_dzM[:, :, :-model.n_thermo]
+            pred_dM = pred_dzM[:, :, -model.n_thermo:]
             _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
             _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
 
             # Calculate train loss
             loss_dz = criterion(pred_dz, dz)
+            loss_dM = criterion(pred_dM, batch_dM)
             loss_dx = criterion(pred_dx, batch_dx)
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
@@ -144,12 +150,14 @@ def train_and_eval(
                 parameters["loss_weight_sindy_x"] * loss_dx
                 + parameters["loss_weight_recon"] * loss_recon
                 + parameters["loss_weight_sindy_z"] * loss_dz
+                + parameters["loss_weight_sindy_m"] * loss_dM
             )
 
             mean_epoch_loss[0] += loss.item()
             mean_epoch_loss[1] += loss_recon.item()
             mean_epoch_loss[2] += loss_dx.item()
             mean_epoch_loss[3] += loss_dz.item()
+            mean_epoch_loss[4] += loss_dM.item()
 
             # Backward pass and optimization
             optimizer.zero_grad(set_to_none=True)
@@ -161,24 +169,29 @@ def train_and_eval(
         recon_losses[epoch] = mean_epoch_loss[1] / len(train_loader)
         dx_losses[epoch] = mean_epoch_loss[2] / len(train_loader)
         dz_losses[epoch] = mean_epoch_loss[3] / len(train_loader)
+        dM_losses[epoch] = mean_epoch_loss[4] / len(train_loader)
 
         # Test
         model.eval()
-        for batch_x, batch_dx, batch_M in test_loader:
+        for batch_x, batch_dx, batch_M, batch_dM in test_loader:
             batch_x = batch_x.to(device)
             batch_dx = batch_dx.to(device)
             batch_M = batch_M.to(device)
+            batch_dM = batch_dM.to(device)
 
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
             z = model.encoder(batch_x)
             zz = z.clone().detach().requires_grad_()
-            pred_dz = model.dzdt(z, batch_M)[:, :, :-1]
+            pred_dzM = model.dzdt(z, batch_M)
+            pred_dz = pred_dzM[:, :, :-model.n_thermo]
+            pred_dM = pred_dzM[:, :, -model.n_thermo:]
             _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
             _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
 
             # Calculate test loss
             loss_dz = criterion(pred_dz, dz)
+            loss_dM = criterion(pred_dM, batch_dM)
             loss_dx = criterion(pred_dx, batch_dx)
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
@@ -189,6 +202,7 @@ def train_and_eval(
                 parameters["loss_weight_sindy_x"] * loss_dx
                 + parameters["loss_weight_recon"] * loss_recon
                 + parameters["loss_weight_sindy_z"] * loss_dz
+                + parameters["loss_weight_sindy_m"] * loss_dM
             )
 
         # Save test losses
@@ -196,6 +210,7 @@ def train_and_eval(
         test_recon_losses[epoch] = loss_recon.item()
         test_dx_losses[epoch] = loss_dx.item()
         test_dz_losses[epoch] = loss_dz.item()
+        test_dM_losses[epoch] = loss_dM.item()
 
         # Save good model
         if loss < best_test_loss:
@@ -221,6 +236,7 @@ def train_and_eval(
                 f"Recon: {parameters['loss_weight_recon'] * recon_losses[epoch]:.4f} | "
                 f"dx: {parameters['loss_weight_sindy_x'] * dx_losses[epoch]:.4f} | "
                 f"dz: {parameters['loss_weight_sindy_z'] * dz_losses[epoch]:.4f} | "
+                f"dM: {parameters['loss_weight_sindy_m'] * dM_losses[epoch]:.4f}"
             )
 
         # Optional optuna report
@@ -243,10 +259,12 @@ def train_and_eval(
         recon_losses,
         dx_losses,
         dz_losses,
+        dM_losses,
         test_losses,
         test_recon_losses,
         test_dx_losses,
         test_dz_losses,
+        test_dM_losses,
     )
 
 
@@ -266,40 +284,31 @@ if __name__ == "__main__":
     print(f"Using {device} device")
 
     # Open dataset
-    if params["data_src"] == "box":
-        (
-            x_train,
-            m_train,
-            x_test,
-            m_test,
-            r_bins_edges,
-            n_bins,
-            dsd_time,
-        ) = du.open_box_dataset()
-    elif params["data_src"] == "erf":
-        (
-            x_train,
-            m_train,
-            x_test,
-            m_test,
-            r_bins_edges,
-            n_bins,
-            dsd_time,
-        ) = du.open_erf_dataset(sample_time=np.arange(0, 61, 5))
-    else:
-        raise NotImplementedError("only erf and box data options exist")
+    data = du.open_cond_dataset("../../data/erf_data/congestus/cond_tendency_14400_200m_filtered.nc")
+    n_bins = data["n_bins"]
 
-    train_data = du.NormedBinDatasetDzDt(x_train, dsd_time, m_train)
+    train_data = du.NormedBinThermoDatasetDzDt(
+        data["x_train"],
+        data["dx_train"],
+        data["thermo_train"],
+        data["dthermo_train"],
+    )
     train_loader = DataLoader(train_data, batch_size=params["batch_size"], shuffle=True)
-    test_data = du.NormedBinDatasetDzDt(x_test, dsd_time, m_test)
-    test_loader = DataLoader(test_data, batch_size=x_test.shape[0], shuffle=True)
+    test_data = du.NormedBinThermoDatasetDzDt(
+        data["x_test"],
+        data["dx_test"],
+        data["thermo_test"],
+        data["dthermo_test"],
+    )
+    test_loader = DataLoader(test_data, batch_size=data["x_test"].shape[0], shuffle=True)
 
     # Initialize the model
-    model = AESINDy(
+    model = AESINDyThermo(
         n_channels=1,
         n_bins=n_bins,
         n_latent=params["latent_dim"],
         poly_order=params["poly_order"],
+        n_thermo=3
     )
 
     # Optimizer and scheduling
@@ -323,6 +332,7 @@ if __name__ == "__main__":
     params["loss_weight_recon"] = 1.0
     params["loss_weight_sindy_x"] = lambda1
     params["loss_weight_sindy_z"] = lambda2
+    params["loss_weight_sindy_m"] = lambda2 # TODO: can explore this quantity
 
     # Training loop
     # ----------------------------------------------------------------------------------
@@ -332,10 +342,12 @@ if __name__ == "__main__":
         recon_losses,
         dx_losses,
         dz_losses,
+        dM_losses,
         test_losses,
         test_recon_losses,
         test_dx_losses,
         test_dz_losses,
+        test_dM_losses,
     ) = train_and_eval(
         params["num_epochs"],
         model,
@@ -366,6 +378,7 @@ if __name__ == "__main__":
         params["loss_weight_recon"],
         params["loss_weight_sindy_z"],
         params["loss_weight_sindy_x"],
+        params["loss_weight_sindy_m"],
         id,
     )
     print(f"Save ID is {case_name}")
@@ -406,10 +419,12 @@ if __name__ == "__main__":
                     recon_losses,
                     dx_losses,
                     dz_losses,
+                    dM_losses,
                     test_losses,
                     test_recon_losses,
                     test_dx_losses,
                     test_dz_losses,
+                    test_dM_losses,
                 ),
                 pickle_file,
             )
@@ -443,9 +458,10 @@ if __name__ == "__main__":
         sub_losses=[
             params["loss_weight_sindy_x"] * np.array(dx_losses),
             params["loss_weight_sindy_z"] * np.array(dz_losses),
+            params["loss_weight_sindy_m"] * np.array(dM_losses),
             params["loss_weight_recon"] * np.array(recon_losses),
         ],
-        labels=["dx/dt", "dz/dt", "Recon"],
+        labels=["dx/dt", "dz/dt", "dThermo/dt", "Recon"],
         title=f"Training Loss",
     )
     if params["emily_save"]:
@@ -457,84 +473,14 @@ if __name__ == "__main__":
     fig = plotting.plot_reconstructions(
         best_model,
         test_ids,
-        x_test,
-        r_bins_edges,
+        data["x_test"],
+        data["r_bins_edges"],
     )
     if params["emily_save"]:
         fig.savefig(tpsp_plot_dir / (case_name + "_reconstructions.png"))
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
 
-    # Predictions: Multi time step
-    fig = plotting.plot_predictions_dzdt(
-        test_ids,
-        tplt,
-        params["latent_dim"],
-        best_model,
-        dsd_time,
-        x_test,
-        m_test,
-        x_train,
-        m_train,
-        r_bins_edges,
-    )
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_predictions.png"))
-    if params["nipun_save"]:
-        fig.savefig(runsp_out_dir / (case_name + "_predictions.png"))
-
-    # Plot trajectories of the latent variables
-    z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_dzdt(
-        params["latent_dim"],
-        best_model,
-        test_data.t,
-        x_test,
-        m_test,
-        x_train,
-        m_train,
-    )
-    fig = plotting.plot_latent_trajectories(
-        params["latent_dim"], test_data.t, z_pred, z_data
-    )
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_trajectories.png"))
-    if params["nipun_save"]:
-        fig.savefig(runsp_out_dir / (case_name + "_trajectories.png"))
-
-    # Plot full test set performance
-    fig = plotting.plot_full_testset_performance_recon(
-        best_model, x_test, params["tol"]
-    )
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_recon.png"))
-    if params["nipun_save"]:
-        fig.savefig(runsp_out_dir / (case_name + "_full_test_recon.png"))
-
-    test_kl, test_wass, test_wun = diagnostics.get_performance_metrics(
-        x_test, m_test, z_pred, x_pred
-    )
-    fig = plotting.plot_full_testset_performance_pred(test_kl, test_wass, test_wun)
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_pred.png"))
-    if params["nipun_save"]:
-        fig.savefig(runsp_out_dir / (case_name + "_full_test_pred.png"))
-
-    # Plot quantiles from test set
-    fig = plotting.plot_testset_quantiles_pred(
-        x_test, x_pred, test_wass, tplt, dsd_time, r_bins_edges
-    )
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_quantiles_test_pred.png"))
-    if params["nipun_save"]:
-        fig.savefig(runsp_out_dir / (case_name + "_quantiles_test_pred.png"))
-
-    # Plot latent space
-    fig = plotting.viz_3d_latent_space(
-        best_model,
-        x_test,
-        dsd_time,
-    )
-    if params["emily_save"]:
-        fig.write_html(tpsp_plot_dir / (case_name + "_latent_space.html"))
-    if params["nipun_save"]:
-        fig.write_html(runsp_out_dir / (case_name + "_latent_space.html"))
+# TODO: update utilty functions from here...
+# - e.g. parity plot of the predicted vs. actual time derivatives of M or bins
+# - e.g. predictions stepped forward in time, but with no "truth" comparison
