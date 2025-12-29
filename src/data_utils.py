@@ -74,6 +74,135 @@ def open_erf_dataset(path=None, sample_time=None):
 
     return (x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time)
 
+def open_cond_dataset(
+    name,
+    data_dir="../data",
+    filepath=None,
+    sample_time=None,
+    test_size=0.2,
+    calib_size=None,
+    random_state=1952,
+    m_scale=None,
+    T_scale=None,
+    S_scale=None,
+):
+    """
+    Open the condensation mass dataset.
+
+    :param name: Dataset name
+    :param data_dir: Directory to read data from
+    :param filepath: Used instead name and data_dir
+    :param sample_time: Optional specific sample time to read
+    :param test_size: Fraction of dataset to use for testing, between 0 and 1
+    :param calib_size: Fraction of dataset to use for calibration, between 0 and 1
+    :param random_state: Random state to use for splitting
+    :param m_scale: Scaling factor for mass
+    :param T_scale: Scaling factor for temperature
+    :param S_scale: Scaling factor for Supersaturation
+    :return: Dictionary of named outputs
+
+    """
+
+    # 1) load
+    if filepath is None:
+        filepath = (data_dir / Path(name)).with_suffix(".nc")
+    ds = xr.open_dataset(filepath)
+
+    # add supersaturation
+    ds["supersat"] = ds['rh'] - 1.0
+
+    # 2) optional subsample in time
+    if sample_time is not None:
+        ds = ds.isel(t=sample_time)
+
+    # 3) train/test split on 'loc'
+    ds_train, idx_train, ds_test, idx_test = split_by_index(
+        ds, dim="loc", test_size=test_size, random_state=random_state
+    )
+
+    # 4) calibration split from ds_train if requested
+    ds_calib = None
+    if calib_size is not None:
+        # convert calib_size relative to the full dataset → relative to train only
+        calib_size = calib_size / (1 - test_size)
+        ds_train, idx_train, ds_calib, idx_calib = split_by_index(
+            ds_train, dim="loc", test_size=calib_size, random_state=random_state
+        )
+
+    # 5) compute global m_scale, T_scale, RH_scale from full ds_train (before calib‐split)
+    ds_for_scale = (
+        ds_train if ds_calib is None else xr.concat([ds_train, ds_calib], dim="loc")
+    )
+    if m_scale is None:
+        m_scale = (
+            ds_for_scale["dmdlnr"]
+            .sum(dim="bin")
+            .transpose("loc", "t")
+            .max()
+            .item()  # scalar
+        )
+    if T_scale is None:
+        T_scale = (
+            ds_for_scale["temp"]
+            .transpose("loc", "t")
+            .max()
+            .item()  # scalar
+        ) - 273.15
+    T_train = (ds_train['temp'] - 273.15).transpose("loc", "t").to_numpy() / T_scale
+    T_test = (ds_test['temp'] - 273.15).transpose("loc", "t").to_numpy() / T_scale
+    if S_scale is None:
+        S_scale = (
+            ds_for_scale["supersat"]
+            .transpose("loc", "t")
+            .max()
+        )
+    S_train = (ds_train['supersat'] / S_scale).transpose("loc", "t").to_numpy()
+    S_test = (ds_test['supersat'] / S_scale).transpose("loc", "t").to_numpy()
+
+    x_train, m_train = prepare(ds_train, m_scale)
+    thermo_train = np.concatenate([m_train, T_train, S_train], axis=-1)
+    dx_train = ds_train["dgdt_cond"].transpose("loc", "t", "bin").to_numpy() / m_train[:, :, np.newaxis]
+    dM_train = ds_train["dgdt_cond"].transpose("loc", "t", "bin").sum(dim="bin").to_numpy() / m_scale
+    dT_train = 0.0 * dM_train
+    dS_train = 0.0 * dM_train
+    dthermo_train = np.concatenate([dM_train, dT_train, dS_train], axis=-1)
+
+    x_test, m_test = prepare(ds_test, m_scale)
+    thermo_test = np.concatenate([m_test, T_test, S_test], axis=-1)
+    dx_test = ds_test["dgdt_cond"].transpose("loc", "t", "bin").to_numpy() / m_test[:, :, np.newaxis]
+    dM_test = ds_test["dgdt_cond"].transpose("loc", "t", "bin").sum(dim="bin").to_numpy() / m_scale
+    dT_test = 0.0 * dM_test
+    dS_test = 0.0 * dM_test
+    dthermo_test = np.concatenate([dM_test, dT_test, dS_test], axis=-1)
+
+    # gather outputs
+    outputs = {
+        "x_train": x_train,
+        "thermo_train": thermo_train,
+        "m_train": m_train,
+        "dx_train": dx_train,
+        "dthermo_train": dthermo_train,
+        "idx_train": idx_train,
+        "x_test": x_test,
+        "thermo_test": thermo_test,
+        "m_test": m_test,
+        "dx_test": dx_test,
+        "dthermo_test": dthermo_test,
+        "idx_test": idx_test,
+        "r_bins_edges": ds["rbin_l"].to_numpy(),
+        "r_bins_edges_r": ds["rbin_r"].to_numpy(),
+        "n_bins": x_train.shape[-1],
+        "dsd_time": ds["t"].to_numpy() - ds["t"].to_numpy()[0],
+        "m_scale": m_scale,
+        "T_scale": T_scale,
+        "S_scale": S_scale,
+    }
+
+    if ds_calib is not None:
+        x_calib, m_calib = prepare(ds_calib, m_scale)
+        outputs.update({"x_calib": x_calib, "m_calib": m_calib, "idx_calib": idx_calib})
+
+    return outputs
 
 def split_by_index(ds: xr.Dataset, dim: str, test_size: float, random_state: int = 0):
     """
@@ -467,6 +596,32 @@ class NormedBinDatasetDzDt(Dataset):
 
     def __getitem__(self, idx):
         return self.x[idx, :], self.dx[idx, :], self.M[idx]
+
+
+class NormedBinThermoDatasetDzDt(Dataset):
+    def __init__(self, dmdlnr_normed, dgdt, thermo, dTdt):
+        """
+        Normed binned dataset pytorch class
+
+        :param dmdlnr_normed: Original normed dmdlnr data
+        :param dgdt: bin-wise time-derivative of dmdlnr
+        :param thermo: Various thermodynaic quantities
+        :param dTdt: time-derivative of thermodynamic quantities
+        """
+        self.nbin = dmdlnr_normed.shape[2]
+        self.x = dmdlnr_normed.reshape(-1, 1, self.nbin).astype(np.float32)
+        self.dx = dgdt.reshape(-1, 1, self.nbin).astype(np.float32)
+        self.n_scalars = thermo.shape[-1]
+        assert len(thermo) == len(dTdt)
+        assert thermo.shape[-1] == dTdt.shape[-1]
+        self.thermo = thermo.reshape(-1, 1, self.n_scalars).astype(np.float32)
+        self.dTdt = dTdt.reshape(-1, 1, self.n_scalars).astype(np.float32)
+
+    def __len__(self):
+        return int(self.x.shape[0])
+
+    def __getitem__(self, idx):
+        return self.x[idx, :], self.dx[idx, :], self.thermo[idx], self.dTdt[idx]
 
 
 class NormedBinDatasetAR(Dataset):

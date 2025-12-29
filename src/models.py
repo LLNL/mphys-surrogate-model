@@ -159,13 +159,14 @@ class FFNNAutoEncoder(torch.nn.Module):
 
 
 class SINDyDeriv(torch.nn.Module):
-    def __init__(self, n_latent=10, poly_order=2, use_thresholds=False):
+    def __init__(self, n_latent=10, poly_order=2, n_scalar=1, use_thresholds=False):
         """
         Pytorch SINDy model that is to be paired with autoencoder. Works directly
         from latent variables.
 
         :param n_latent: Number of latent variables
         :param poly_order: SINDy polynomial order, should typically be 2 or 3
+        :param n_scalar: Number of scalar variables (Such as total mass, temperature, etc.)
         :param use_thresholds: Flag to indicate whether coefficients are thresholded
                                during training.
         """
@@ -173,6 +174,7 @@ class SINDyDeriv(torch.nn.Module):
         self.library_size = du.library_size(n_latent, poly_order)
         self.n_latent = n_latent
         self.poly_order = poly_order
+        self.n_scalar = n_scalar
 
         self.sindy_coeffs = torch.nn.Linear(
             self.library_size, self.n_latent, bias=False
