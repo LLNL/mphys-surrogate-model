@@ -8,9 +8,9 @@ project_root = os.path.relpath("../..")
 sys.path.append(project_root)
 
 from src import data_utils as du
-from training_scripts.train_ae_ar import AEAutoregressor
-from training_scripts.train_ae_sindy import AESINDy
-from training_scripts.train_ae_NNdzdt import AENNdzdt
+from training_scripts.coalescence.train_ae_ar import AEAutoregressor
+from training_scripts.coalescence.train_ae_sindy import AESINDy
+from training_scripts.coalescence.train_ae_NNdzdt import AENNdzdt
 import matplotlib.pyplot as plt
 
 # %%

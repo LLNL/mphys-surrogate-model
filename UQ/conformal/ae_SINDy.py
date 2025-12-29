@@ -20,7 +20,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 from src import data_utils as du
-from training_scripts import train_ae_sindy as train
+from training_scripts.coalescence import train_ae_sindy as train
 from math import ceil
 from sklearn.covariance import LedoitWolf
 

@@ -92,8 +92,6 @@ if subset == "latent":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if args.model == "AR":
-        from training_scripts import train_ae_ar as train
-
         params.update(
             {
                 "n_lag": 1,
@@ -124,8 +122,6 @@ if subset == "latent":
         )
         model.load_state_dict(ae_ar_checkpoint)
     if args.model == "NNdzdt":
-        from training_scripts import train_ae_NNdzdt as train
-
         params.update(
             {
                 "layer_size": (42, 36, 46),
@@ -154,7 +150,7 @@ if subset == "latent":
         )
         model.load_state_dict(ae_NNdzdt_checkpoint)
     if args.model == "SINDy":
-        from training_scripts import train_ae_sindy as train
+        from training_scripts.coalescence import train_ae_sindy as train, train_ae_NNdzdt as train, train_ae_ar as train
 
         params.update(
             {
