@@ -142,6 +142,7 @@ def open_cond_dataset(
             .item()  # scalar
         )
     if T_scale is None:
+        # TODO: potentially standard scaling instead
         T_scale = (
             ds_for_scale["temp"]
             .transpose("loc", "t")
@@ -151,11 +152,8 @@ def open_cond_dataset(
     T_train = (ds_train['temp'] - 273.15).transpose("loc", "t").to_numpy() / T_scale
     T_test = (ds_test['temp'] - 273.15).transpose("loc", "t").to_numpy() / T_scale
     if S_scale is None:
-        S_scale = (
-            ds_for_scale["supersat"]
-            .transpose("loc", "t")
-            .max()
-        )
+        S_scale = 1.0
+        # TODO: Think about this scaling
     S_train = (ds_train['supersat'] / S_scale).transpose("loc", "t").to_numpy()
     S_test = (ds_test['supersat'] / S_scale).transpose("loc", "t").to_numpy()
 
@@ -177,11 +175,11 @@ def open_cond_dataset(
 
     # gather outputs
     outputs = {
-        "x_train": x_train,
-        "thermo_train": thermo_train,
-        "m_train": m_train,
-        "dx_train": dx_train,
-        "dthermo_train": dthermo_train,
+        "x_train": x_train,             # normalized DSD
+        "thermo_train": thermo_train,   # re-scaled M, T, S
+        "m_train": m_train,             # re-scaled M (same as within above)
+        "dx_train": dx_train,           # d/dt normalized DSD
+        "dthermo_train": dthermo_train, # d/dt [M, T, S]; d/dt{T, S} = 0
         "idx_train": idx_train,
         "x_test": x_test,
         "thermo_test": thermo_test,
@@ -193,7 +191,7 @@ def open_cond_dataset(
         "r_bins_edges_r": ds["rbin_r"].to_numpy(),
         "n_bins": x_train.shape[-1],
         "dsd_time": ds["t"].to_numpy() - ds["t"].to_numpy()[0],
-        "m_scale": m_scale,
+        "m_scale": m_scale,             # scalar quantities used to scale thermo_train
         "T_scale": T_scale,
         "S_scale": S_scale,
     }

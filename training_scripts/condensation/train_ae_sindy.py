@@ -483,4 +483,5 @@ if __name__ == "__main__":
 
 # TODO: update utilty functions from here...
 # - e.g. parity plot of the predicted vs. actual time derivatives of M or bins
-# - e.g. predictions stepped forward in time, but with no "truth" comparison
+# Look at: dM/dt vs input S for predictions: model vs data
+# - e.g. predictions stepped forward in time
