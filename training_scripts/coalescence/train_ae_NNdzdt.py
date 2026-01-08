@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "erf",
     "random_seed": 0,
-    "num_epochs": 1000,
+    "num_epochs": 100,
     "batch_size": 4,
     "learning_rate": 0.00314227212817401,
     "latent_dim": 3,
@@ -36,7 +36,7 @@ params = {
     "wd": 1e-3,
     "layer_size": (42, 36, 46),
     "print_frequency": 1,
-    "emily_save": True,
+    "emily_save": False,
     "nipun_save": True,
 }
 
@@ -497,7 +497,7 @@ if __name__ == "__main__":
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_full_test_recon.png"))
 
-    test_kl, test_wass, test_wun = diagnostics.get_performance_metrics(
+    test_kl, test_wass, test_wun, _ = diagnostics.get_performance_metrics(
         x_test, m_test, z_pred, x_pred
     )
     fig = plotting.plot_full_testset_performance_pred(test_kl, test_wass, test_wun)
