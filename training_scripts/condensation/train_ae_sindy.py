@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "erfCond",
     "random_seed": 10,
-    "num_epochs": 10,
+    "num_epochs": 1000,
     "batch_size": 25,
     "learning_rate": 0.004204813405972317,
     "latent_dim": 3,

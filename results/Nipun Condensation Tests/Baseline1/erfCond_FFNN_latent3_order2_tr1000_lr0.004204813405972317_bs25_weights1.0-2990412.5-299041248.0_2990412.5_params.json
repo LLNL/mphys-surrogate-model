@@ -1,0 +1,21 @@
+{
+    "data_src": "erfCond",
+    "random_seed": 10,
+    "num_epochs": 1000,
+    "batch_size": 25,
+    "learning_rate": 0.004204813405972317,
+    "latent_dim": 3,
+    "poly_order": 2,
+    "lr_sched": true,
+    "patience": 50,
+    "tol": 1e-08,
+    "wd": 0.001,
+    "lambda1_metaweight": 0.500989969537634,
+    "print_frequency": 1,
+    "emily_save": false,
+    "nipun_save": true,
+    "loss_weight_recon": 1.0,
+    "loss_weight_sindy_x": 299041248.0,
+    "loss_weight_sindy_z": 2990412.5,
+    "loss_weight_sindy_m": 2990412.5
+}
