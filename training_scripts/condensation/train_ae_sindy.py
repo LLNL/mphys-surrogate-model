@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "erfCond",
     "random_seed": 10,
-    "num_epochs": 1000,
+    "num_epochs": 10,
     "batch_size": 25,
     "learning_rate": 0.004204813405972317,
     "latent_dim": 3,
@@ -129,19 +129,20 @@ def train_and_eval(
             batch_dM = batch_dM.to(device)
 
             # Forward pass
-            pred_x_recon = model.decoder(model.encoder(batch_x))
+            pred_x_recon = model.decoder(model.encoder(batch_x))  # Better reconstruction is the prerequisite for good performance - Good temporal predictions come from recon
             z = model.encoder(batch_x)
             zz = z.clone().detach().requires_grad_()
-            pred_dzM = model.dzdt(z, batch_M)
-            pred_dz = pred_dzM[:, :, :-model.n_thermo]
-            pred_dM = pred_dzM[:, :, -model.n_thermo:]
-            _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
-            _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
+            pred_dzM = model.dzdt(z, batch_M)  # In z-space, what is the time deriviative of the input? One thing to look at in parity plots
+            pred_dz = pred_dzM[:, :, :-model.n_thermo]  # Z-space dsd component
+            pred_dM = pred_dzM[:, :, -model.n_thermo:]  # Z-space mass/thermo component (physics variables)
+            _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))  # Projection of time derivatives through encoder. dz is dx passed through encoder. dz should be compared to pred_dz. "Truth"
+            _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))  # Decoded z space time derivative prediction
+            # Anything with `pred` prefix involves SINDy, other vars (except pred_x_recon) is everything else
 
             # Calculate train loss
-            loss_dz = criterion(pred_dz, dz)
-            loss_dM = criterion(pred_dM, batch_dM)
-            loss_dx = criterion(pred_dx, batch_dx)
+            loss_dz = criterion(pred_dz, dz)  # One candidate for parity plot
+            loss_dM = criterion(pred_dM, batch_dM)    # One candidate for parity plot (physics) - For now, only worried about mass time derivative, others are 0
+            loss_dx = criterion(pred_dx, batch_dx)    # Lower priority but candidate for parity plot (dsd), visualization would be hard because we need to compare 64 bins and multiple samples
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
                 torch.log(batch_x + parameters["tol"]),
