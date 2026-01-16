@@ -108,12 +108,12 @@ def train_and_eval(
     recon_losses = np.zeros(n_epochs) * np.nan
     dx_losses = np.zeros(n_epochs) * np.nan
     dz_losses = np.zeros(n_epochs) * np.nan
-    dM_losses = np.zeros(n_epochs) * np.nan
+    dS_losses = np.zeros(n_epochs) * np.nan
     test_losses = np.zeros(n_epochs) * np.nan
     test_recon_losses = np.zeros(n_epochs) * np.nan
     test_dx_losses = np.zeros(n_epochs) * np.nan
     test_dz_losses = np.zeros(n_epochs) * np.nan
-    test_dM_losses = np.zeros(n_epochs) * np.nan
+    test_dS_losses = np.zeros(n_epochs) * np.nan
     best_test_loss = float("inf")
     best_model = None
 
@@ -122,26 +122,26 @@ def train_and_eval(
         epoch_start_time = time.time()
         model.train()
         mean_epoch_loss = [0, 0, 0, 0, 0]
-        for batch_x, batch_dx, batch_M, batch_dM in train_loader:
+        for batch_x, batch_dx, batch_S, batch_dS in train_loader:
             batch_x = batch_x.to(device)
             batch_dx = batch_dx.to(device)
-            batch_M = batch_M.to(device)
-            batch_dM = batch_dM.to(device)
+            batch_S = batch_S.to(device)
+            batch_dS = batch_dS.to(device)
 
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))  # Better reconstruction is the prerequisite for good performance - Good temporal predictions come from recon
             z = model.encoder(batch_x)
             zz = z.clone().detach().requires_grad_()
-            pred_dzM = model.dzdt(z, batch_M)  # In z-space, what is the time deriviative of the input? One thing to look at in parity plots
-            pred_dz = pred_dzM[:, :, :-model.n_thermo]  # Z-space dsd component
-            pred_dM = pred_dzM[:, :, -model.n_thermo:]  # Z-space mass/thermo component (physics variables)
+            pred_dz_tot = model.dzdt(z, batch_S)  # In z-space, what is the time derivative of the input? One thing to look at in parity plots
+            pred_dz = pred_dz_tot[:, :, :-model.n_thermo]  # Z-space dsd component
+            pred_dS = pred_dz_tot[:, :, -model.n_thermo:]  # Z-space thermo component (physics/state variables)
             _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))  # Projection of time derivatives through encoder. dz is dx passed through encoder. dz should be compared to pred_dz. "Truth"
             _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))  # Decoded z space time derivative prediction
             # Anything with `pred` prefix involves SINDy, other vars (except pred_x_recon) is everything else
 
             # Calculate train loss
             loss_dz = criterion(pred_dz, dz)  # One candidate for parity plot
-            loss_dM = criterion(pred_dM, batch_dM)    # One candidate for parity plot (physics) - For now, only worried about mass time derivative, others are 0
+            loss_dS = criterion(pred_dS, batch_dS)    # One candidate for parity plot (physics) - For now, only worried about mass time derivative, others are 0
             loss_dx = criterion(pred_dx, batch_dx)    # Lower priority but candidate for parity plot (dsd), visualization would be hard because we need to compare 64 bins and multiple samples
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
@@ -151,14 +151,14 @@ def train_and_eval(
                 parameters["loss_weight_sindy_x"] * loss_dx
                 + parameters["loss_weight_recon"] * loss_recon
                 + parameters["loss_weight_sindy_z"] * loss_dz
-                + parameters["loss_weight_sindy_m"] * loss_dM
+                + parameters["loss_weight_sindy_S"] * loss_dS
             )
 
             mean_epoch_loss[0] += loss.item()
             mean_epoch_loss[1] += loss_recon.item()
             mean_epoch_loss[2] += loss_dx.item()
             mean_epoch_loss[3] += loss_dz.item()
-            mean_epoch_loss[4] += loss_dM.item()
+            mean_epoch_loss[4] += loss_dS.item()
 
             # Backward pass and optimization
             optimizer.zero_grad(set_to_none=True)
@@ -170,29 +170,29 @@ def train_and_eval(
         recon_losses[epoch] = mean_epoch_loss[1] / len(train_loader)
         dx_losses[epoch] = mean_epoch_loss[2] / len(train_loader)
         dz_losses[epoch] = mean_epoch_loss[3] / len(train_loader)
-        dM_losses[epoch] = mean_epoch_loss[4] / len(train_loader)
+        dS_losses[epoch] = mean_epoch_loss[4] / len(train_loader)
 
         # Test
         model.eval()
-        for batch_x, batch_dx, batch_M, batch_dM in test_loader:
+        for batch_x, batch_dx, batch_S, batch_dS in test_loader:
             batch_x = batch_x.to(device)
             batch_dx = batch_dx.to(device)
-            batch_M = batch_M.to(device)
-            batch_dM = batch_dM.to(device)
+            batch_S = batch_S.to(device)
+            batch_dS = batch_dS.to(device)
 
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
             z = model.encoder(batch_x)
             zz = z.clone().detach().requires_grad_()
-            pred_dzM = model.dzdt(z, batch_M)
-            pred_dz = pred_dzM[:, :, :-model.n_thermo]
-            pred_dM = pred_dzM[:, :, -model.n_thermo:]
+            pred_dz_tot = model.dzdt(z, batch_S)
+            pred_dz = pred_dz_tot[:, :, :-model.n_thermo]
+            pred_dS = pred_dz_tot[:, :, -model.n_thermo:]
             _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
             _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
 
             # Calculate test loss
             loss_dz = criterion(pred_dz, dz)
-            loss_dM = criterion(pred_dM, batch_dM)
+            loss_dS = criterion(pred_dS, batch_dS)
             loss_dx = criterion(pred_dx, batch_dx)
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
@@ -203,7 +203,7 @@ def train_and_eval(
                 parameters["loss_weight_sindy_x"] * loss_dx
                 + parameters["loss_weight_recon"] * loss_recon
                 + parameters["loss_weight_sindy_z"] * loss_dz
-                + parameters["loss_weight_sindy_m"] * loss_dM
+                + parameters["loss_weight_sindy_S"] * loss_dS
             )
 
         # Save test losses
@@ -211,7 +211,7 @@ def train_and_eval(
         test_recon_losses[epoch] = loss_recon.item()
         test_dx_losses[epoch] = loss_dx.item()
         test_dz_losses[epoch] = loss_dz.item()
-        test_dM_losses[epoch] = loss_dM.item()
+        test_dS_losses[epoch] = loss_dS.item()
 
         # Save good model
         if loss < best_test_loss:
@@ -237,7 +237,7 @@ def train_and_eval(
                 f"Recon: {parameters['loss_weight_recon'] * recon_losses[epoch]:.4f} | "
                 f"dx: {parameters['loss_weight_sindy_x'] * dx_losses[epoch]:.4f} | "
                 f"dz: {parameters['loss_weight_sindy_z'] * dz_losses[epoch]:.4f} | "
-                f"dM: {parameters['loss_weight_sindy_m'] * dM_losses[epoch]:.4f}"
+                f"dS: {parameters['loss_weight_sindy_S'] * dS_losses[epoch]:.4f}"
             )
 
         # Optional optuna report
@@ -260,12 +260,12 @@ def train_and_eval(
         recon_losses,
         dx_losses,
         dz_losses,
-        dM_losses,
+        dS_losses,
         test_losses,
         test_recon_losses,
         test_dx_losses,
         test_dz_losses,
-        test_dM_losses,
+        test_dS_losses,
     )
 
 
@@ -333,7 +333,7 @@ if __name__ == "__main__":
     params["loss_weight_recon"] = 1.0
     params["loss_weight_sindy_x"] = lambda1
     params["loss_weight_sindy_z"] = lambda2
-    params["loss_weight_sindy_m"] = lambda2 # TODO: can explore this quantity
+    params["loss_weight_sindy_S"] = lambda2 # TODO: can explore this quantity
 
     # Training loop
     # ----------------------------------------------------------------------------------
@@ -343,12 +343,12 @@ if __name__ == "__main__":
         recon_losses,
         dx_losses,
         dz_losses,
-        dM_losses,
+        dS_losses,
         test_losses,
         test_recon_losses,
         test_dx_losses,
         test_dz_losses,
-        test_dM_losses,
+        test_dS_losses,
     ) = train_and_eval(
         params["num_epochs"],
         model,
@@ -379,7 +379,7 @@ if __name__ == "__main__":
         params["loss_weight_recon"],
         params["loss_weight_sindy_z"],
         params["loss_weight_sindy_x"],
-        params["loss_weight_sindy_m"],
+        params["loss_weight_sindy_S"],
         id,
     )
     print(f"Save ID is {case_name}")
@@ -420,12 +420,12 @@ if __name__ == "__main__":
                     recon_losses,
                     dx_losses,
                     dz_losses,
-                    dM_losses,
+                    dS_losses,
                     test_losses,
                     test_recon_losses,
                     test_dx_losses,
                     test_dz_losses,
-                    test_dM_losses,
+                    test_dS_losses,
                 ),
                 pickle_file,
             )
@@ -459,10 +459,10 @@ if __name__ == "__main__":
         sub_losses=[
             params["loss_weight_sindy_x"] * np.array(dx_losses),
             params["loss_weight_sindy_z"] * np.array(dz_losses),
-            params["loss_weight_sindy_m"] * np.array(dM_losses),
+            params["loss_weight_sindy_S"] * np.array(dS_losses),
             params["loss_weight_recon"] * np.array(recon_losses),
         ],
-        labels=["dx/dt", "dz/dt", "dThermo/dt", "Recon"],
+        labels=["dx/dt", "dz/dt", "dS/dt", "Recon"],
         title=f"Training Loss",
     )
     if params["emily_save"]:
