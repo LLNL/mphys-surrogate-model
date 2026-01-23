@@ -74,6 +74,7 @@ def open_erf_dataset(path=None, sample_time=None):
 
     return (x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time)
 
+
 def open_cond_dataset(
     name,
     data_dir="../data",
@@ -109,7 +110,7 @@ def open_cond_dataset(
     ds = xr.open_dataset(filepath)
 
     # add supersaturation
-    ds["supersat"] = ds['rh'] - 1.0
+    ds["supersat"] = ds["rh"] - 1.0
 
     # 2) optional subsample in time
     if sample_time is not None:
@@ -144,42 +145,51 @@ def open_cond_dataset(
     if T_scale is None:
         # TODO: potentially standard scaling instead
         T_scale = (
-            ds_for_scale["temp"]
-            .transpose("loc", "t")
-            .max()
-            .item()  # scalar
+            ds_for_scale["temp"].transpose("loc", "t").max().item()  # scalar
         ) - 273.15
-    T_train = (ds_train['temp'] - 273.15).transpose("loc", "t").to_numpy() / T_scale
-    T_test = (ds_test['temp'] - 273.15).transpose("loc", "t").to_numpy() / T_scale
+    T_train = (ds_train["temp"] - 273.15).transpose("loc", "t").to_numpy() / T_scale
+    T_test = (ds_test["temp"] - 273.15).transpose("loc", "t").to_numpy() / T_scale
     if S_scale is None:
         S_scale = 1.0
         # TODO: Think about this scaling
-    S_train = (ds_train['supersat'] / S_scale).transpose("loc", "t").to_numpy()
-    S_test = (ds_test['supersat'] / S_scale).transpose("loc", "t").to_numpy()
+    S_train = (ds_train["supersat"] / S_scale).transpose("loc", "t").to_numpy()
+    S_test = (ds_test["supersat"] / S_scale).transpose("loc", "t").to_numpy()
 
     x_train, m_train = prepare(ds_train, m_scale)
     thermo_train = np.concatenate([m_train, T_train, S_train], axis=-1)
-    dx_train = ds_train["dgdt_cond"].transpose("loc", "t", "bin").to_numpy() / m_train[:, :, np.newaxis]
-    dM_train = ds_train["dgdt_cond"].transpose("loc", "t", "bin").sum(dim="bin").to_numpy() / m_scale
+    dx_train = (
+        ds_train["dgdt_cond"].transpose("loc", "t", "bin").to_numpy()
+        / m_train[:, :, np.newaxis]
+    )
+    dM_train = (
+        ds_train["dgdt_cond"].transpose("loc", "t", "bin").sum(dim="bin").to_numpy()
+        / m_scale
+    )
     dT_train = 0.0 * dM_train
     dS_train = 0.0 * dM_train
     dthermo_train = np.concatenate([dM_train, dT_train, dS_train], axis=-1)
 
     x_test, m_test = prepare(ds_test, m_scale)
     thermo_test = np.concatenate([m_test, T_test, S_test], axis=-1)
-    dx_test = ds_test["dgdt_cond"].transpose("loc", "t", "bin").to_numpy() / m_test[:, :, np.newaxis]
-    dM_test = ds_test["dgdt_cond"].transpose("loc", "t", "bin").sum(dim="bin").to_numpy() / m_scale
+    dx_test = (
+        ds_test["dgdt_cond"].transpose("loc", "t", "bin").to_numpy()
+        / m_test[:, :, np.newaxis]
+    )
+    dM_test = (
+        ds_test["dgdt_cond"].transpose("loc", "t", "bin").sum(dim="bin").to_numpy()
+        / m_scale
+    )
     dT_test = 0.0 * dM_test
     dS_test = 0.0 * dM_test
     dthermo_test = np.concatenate([dM_test, dT_test, dS_test], axis=-1)
 
     # gather outputs
     outputs = {
-        "x_train": x_train,             # normalized DSD
-        "thermo_train": thermo_train,   # re-scaled M, T, S
-        "m_train": m_train,             # re-scaled M (same as within above)
-        "dx_train": dx_train,           # d/dt normalized DSD
-        "dthermo_train": dthermo_train, # d/dt [M, T, S]; d/dt{T, S} = 0
+        "x_train": x_train,  # normalized DSD
+        "thermo_train": thermo_train,  # re-scaled M, T, S
+        "m_train": m_train,  # re-scaled M (same as within above)
+        "dx_train": dx_train,  # d/dt normalized DSD
+        "dthermo_train": dthermo_train,  # d/dt [M, T, S]; d/dt{T, S} = 0
         "idx_train": idx_train,
         "x_test": x_test,
         "thermo_test": thermo_test,
@@ -191,7 +201,7 @@ def open_cond_dataset(
         "r_bins_edges_r": ds["rbin_r"].to_numpy(),
         "n_bins": x_train.shape[-1],
         "dsd_time": ds["t"].to_numpy() - ds["t"].to_numpy()[0],
-        "m_scale": m_scale,             # scalar quantities used to scale thermo_train
+        "m_scale": m_scale,  # scalar quantities used to scale thermo_train
         "T_scale": T_scale,
         "S_scale": S_scale,
     }
@@ -201,6 +211,7 @@ def open_cond_dataset(
         outputs.update({"x_calib": x_calib, "m_calib": m_calib, "idx_calib": idx_calib})
 
     return outputs
+
 
 def split_by_index(ds: xr.Dataset, dim: str, test_size: float, random_state: int = 0):
     """

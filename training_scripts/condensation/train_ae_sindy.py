@@ -130,20 +130,34 @@ def train_and_eval(
             batch_dS = batch_dS.to(device)
 
             # Forward pass
-            pred_x_recon = model.decoder(model.encoder(batch_x))  # Better reconstruction is the prerequisite for good performance - Good temporal predictions come from recon
+            pred_x_recon = model.decoder(
+                model.encoder(batch_x)
+            )  # Better reconstruction is the prerequisite for good performance - Good temporal predictions come from recon
             z = model.encoder(batch_x)
             zz = z.clone().detach().requires_grad_()
-            pred_dz_tot = model.dzdt(z, batch_S)  # In z-space, what is the time derivative of the input? One thing to look at in parity plots
-            pred_dz = pred_dz_tot[:, :, :-model.n_thermo]  # Z-space dsd component
-            pred_dS = pred_dz_tot[:, :, -model.n_thermo:]  # Z-space thermo component (physics/state variables)
-            _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))  # Projection of time derivatives through encoder. dz is dx passed through encoder. dz should be compared to pred_dz. "Truth"
-            _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))  # Decoded z space time derivative prediction
+            pred_dz_tot = model.dzdt(
+                z, batch_S
+            )  # In z-space, what is the time derivative of the input? One thing to look at in parity plots
+            pred_dz = pred_dz_tot[:, :, : -model.n_thermo]  # Z-space dsd component
+            pred_dS = pred_dz_tot[
+                :, :, -model.n_thermo :
+            ]  # Z-space thermo component (physics/state variables)
+            _, dz = torch.func.jvp(
+                model.encoder, (batch_x,), (batch_dx,)
+            )  # Projection of time derivatives through encoder. dz is dx passed through encoder. dz should be compared to pred_dz. "Truth"
+            _, pred_dx = torch.func.jvp(
+                model.decoder, (zz,), (pred_dz,)
+            )  # Decoded z space time derivative prediction
             # Anything with `pred` prefix involves SINDy, other vars (except pred_x_recon) is everything else
 
             # Calculate train loss
             loss_dz = criterion(pred_dz, dz)  # One candidate for parity plot
-            loss_dS = criterion(pred_dS, batch_dS)    # One candidate for parity plot (physics) - For now, only worried about mass time derivative, others are 0
-            loss_dx = criterion(pred_dx, batch_dx)    # Lower priority but candidate for parity plot (dsd), visualization would be hard because we need to compare 64 bins and multiple samples
+            loss_dS = criterion(
+                pred_dS, batch_dS
+            )  # One candidate for parity plot (physics) - For now, only worried about mass time derivative, others are 0
+            loss_dx = criterion(
+                pred_dx, batch_dx
+            )  # Lower priority but candidate for parity plot (dsd), visualization would be hard because we need to compare 64 bins and multiple samples
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
                 torch.log(batch_x + parameters["tol"]),
@@ -186,8 +200,8 @@ def train_and_eval(
             z = model.encoder(batch_x)
             zz = z.clone().detach().requires_grad_()
             pred_dz_tot = model.dzdt(z, batch_S)
-            pred_dz = pred_dz_tot[:, :, :-model.n_thermo]
-            pred_dS = pred_dz_tot[:, :, -model.n_thermo:]
+            pred_dz = pred_dz_tot[:, :, : -model.n_thermo]
+            pred_dS = pred_dz_tot[:, :, -model.n_thermo :]
             _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
             _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
 
@@ -286,7 +300,9 @@ if __name__ == "__main__":
     print(f"Using {device} device")
 
     # Open dataset
-    data = du.open_cond_dataset("../../data/erf_data/congestus/cond_tendency_14400_200m_filtered.nc")
+    data = du.open_cond_dataset(
+        "../../data/erf_data/congestus/cond_tendency_14400_200m_filtered.nc"
+    )
     n_bins = data["n_bins"]
 
     train_data = du.NormedBinThermoDatasetDzDt(
@@ -302,7 +318,9 @@ if __name__ == "__main__":
         data["thermo_test"],
         data["dthermo_test"],
     )
-    test_loader = DataLoader(test_data, batch_size=data["x_test"].shape[0], shuffle=True)
+    test_loader = DataLoader(
+        test_data, batch_size=data["x_test"].shape[0], shuffle=True
+    )
 
     # Initialize the model
     n_thermo = train_data.n_thermo
@@ -335,7 +353,7 @@ if __name__ == "__main__":
     params["loss_weight_recon"] = 1.0
     params["loss_weight_sindy_x"] = lambda1
     params["loss_weight_sindy_z"] = lambda2
-    params["loss_weight_sindy_S"] = lambda2 # TODO: can explore this quantity
+    params["loss_weight_sindy_S"] = lambda2  # TODO: can explore this quantity
 
     # Training loop
     # ----------------------------------------------------------------------------------
@@ -485,22 +503,43 @@ if __name__ == "__main__":
         fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
 
     # Make predictions using test data to compare
-    test_pred_dz_tot = model(torch.from_numpy(test_data.x), torch.from_numpy(test_data.S))
+    test_pred_dz_tot = model(
+        torch.from_numpy(test_data.x), torch.from_numpy(test_data.S)
+    )
     test_pred_dz = test_pred_dz_tot[:, :, :-n_thermo]
     test_pred_dS = test_pred_dz_tot[:, :, -n_thermo:]
 
     # Plot thermo variables
-    fig, axes = plt.subplots(nrows=1, ncols=n_thermo, figsize=(28, 10), layout="constrained")
+    fig, axes = plt.subplots(
+        nrows=1, ncols=n_thermo, figsize=(28, 10), layout="constrained"
+    )
     for idx, ax in enumerate(axes.flatten()):
         true = test_data.dSdt[:, :, idx].ravel()
         pred = test_pred_dS[:, :, idx].detach().numpy().ravel()
         all_data = np.concatenate((true, pred), axis=0)
-        lb, ub = 0.95*np.min(all_data), 1.05*np.max(all_data)
+        lb, ub = 0.95 * np.min(all_data), 1.05 * np.max(all_data)
         if np.allclose(true, 0.0):
-            ax.text(0.5, 0.5, "N/A", transform=ax.transAxes, fontsize=22, verticalalignment='center', bbox=dict(boxstyle='round', facecolor='gray', alpha=0.75))
+            ax.text(
+                0.5,
+                0.5,
+                "N/A",
+                transform=ax.transAxes,
+                fontsize=22,
+                verticalalignment="center",
+                bbox=dict(boxstyle="round", facecolor="gray", alpha=0.75),
+            )
         else:
-            ax.scatter(true, pred, s=15, c="tab:blue", marker=".", alpha=0.90, label="Data")
-            ax.axline((0.0, 0.0), (1.0, 1.0), color="tab:red", linestyle="--", alpha=0.8, label="1:1 Line")
+            ax.scatter(
+                true, pred, s=15, c="tab:blue", marker=".", alpha=0.90, label="Data"
+            )
+            ax.axline(
+                (0.0, 0.0),
+                (1.0, 1.0),
+                color="tab:red",
+                linestyle="--",
+                alpha=0.8,
+                label="1:1 Line",
+            )
             ax.set_xlim([lb, ub])
             ax.set_ylim([lb, ub])
             ax.legend()
