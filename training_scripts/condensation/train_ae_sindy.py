@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 import optuna
+from matplotlib import pyplot as plt
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
@@ -304,12 +305,13 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_data, batch_size=data["x_test"].shape[0], shuffle=True)
 
     # Initialize the model
+    n_thermo = train_data.n_thermo
     model = AESINDyThermo(
         n_channels=1,
         n_bins=n_bins,
         n_latent=params["latent_dim"],
         poly_order=params["poly_order"],
-        n_thermo=3
+        n_thermo=n_thermo,
     )
 
     # Optimizer and scheduling
@@ -481,6 +483,36 @@ if __name__ == "__main__":
         fig.savefig(tpsp_plot_dir / (case_name + "_reconstructions.png"))
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
+
+    # Make predictions using test data to compare
+    test_pred_dz_tot = model(torch.from_numpy(test_data.x), torch.from_numpy(test_data.S))
+    test_pred_dz = test_pred_dz_tot[:, :, :-n_thermo]
+    test_pred_dS = test_pred_dz_tot[:, :, -n_thermo:]
+
+    # Plot thermo variables
+    fig, axes = plt.subplots(nrows=1, ncols=n_thermo, figsize=(28, 10), layout="constrained")
+    for idx, ax in enumerate(axes.flatten()):
+        true = test_data.dSdt[:, :, idx].ravel()
+        pred = test_pred_dS[:, :, idx].detach().numpy().ravel()
+        all_data = np.concatenate((true, pred), axis=0)
+        lb, ub = 0.95*np.min(all_data), 1.05*np.max(all_data)
+        if np.allclose(true, 0.0):
+            ax.text(0.5, 0.5, "N/A", transform=ax.transAxes, fontsize=22, verticalalignment='center', bbox=dict(boxstyle='round', facecolor='gray', alpha=0.75))
+        else:
+            ax.scatter(true, pred, s=15, c="tab:blue", marker=".", alpha=0.90, label="Data")
+            ax.axline((0.0, 0.0), (1.0, 1.0), color="tab:red", linestyle="--", alpha=0.8, label="1:1 Line")
+            ax.set_xlim([lb, ub])
+            ax.set_ylim([lb, ub])
+            ax.legend()
+        ax.grid(linestyle=":", color="black", alpha=0.25)
+        ax.set_aspect("equal")
+        ax.set_xlabel("Truth")
+        ax.set_ylabel("Prediction")
+        ax.set_title(f"Thermodynamic Variable {idx+1}/{n_thermo}")
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_dSdt_Parity.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_dSdt_Parity.png"))
 
 # TODO: update utilty functions from here...
 # - e.g. parity plot of the predicted vs. actual time derivatives of M or bins

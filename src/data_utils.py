@@ -597,29 +597,30 @@ class NormedBinDatasetDzDt(Dataset):
 
 
 class NormedBinThermoDatasetDzDt(Dataset):
-    def __init__(self, dmdlnr_normed, dgdt, thermo, dTdt):
+    def __init__(self, dmdlnr_normed, dgdt, S, dSdt):
         """
         Normed binned dataset pytorch class
 
         :param dmdlnr_normed: Original normed dmdlnr data
         :param dgdt: bin-wise time-derivative of dmdlnr
-        :param thermo: Various thermodynaic quantities
-        :param dTdt: time-derivative of thermodynamic quantities
+        :param S: Various thermodynamic quantities (i.e., state variables, S)
+        :param dSdt: time-derivative of thermodynamic quantities
         """
         self.nbin = dmdlnr_normed.shape[2]
         self.x = dmdlnr_normed.reshape(-1, 1, self.nbin).astype(np.float32)
         self.dx = dgdt.reshape(-1, 1, self.nbin).astype(np.float32)
-        self.n_scalars = thermo.shape[-1]
-        assert len(thermo) == len(dTdt)
-        assert thermo.shape[-1] == dTdt.shape[-1]
-        self.thermo = thermo.reshape(-1, 1, self.n_scalars).astype(np.float32)
-        self.dTdt = dTdt.reshape(-1, 1, self.n_scalars).astype(np.float32)
+        self.n_scalars = S.shape[-1]
+        assert len(S) == len(dSdt)
+        assert S.shape[-1] == dSdt.shape[-1]
+        self.S = S.reshape(-1, 1, self.n_scalars).astype(np.float32)
+        self.dSdt = dSdt.reshape(-1, 1, self.n_scalars).astype(np.float32)
+        self.n_thermo = S.shape[-1]
 
     def __len__(self):
         return int(self.x.shape[0])
 
     def __getitem__(self, idx):
-        return self.x[idx, :], self.dx[idx, :], self.thermo[idx], self.dTdt[idx]
+        return self.x[idx, :], self.dx[idx, :], self.S[idx], self.dSdt[idx]
 
 
 class NormedBinDatasetAR(Dataset):
