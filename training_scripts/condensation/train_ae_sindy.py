@@ -151,10 +151,8 @@ def train_and_eval(
             # Anything with `pred` prefix involves SINDy, other vars (except pred_x_recon) is everything else
 
             # Calculate train loss
-            loss_dz = criterion(pred_dz, dz)  # One candidate for parity plot
-            loss_dS = criterion(
-                pred_dS, batch_dS
-            )  # One candidate for parity plot (physics) - For now, only worried about mass time derivative, others are 0
+            loss_dz = criterion(pred_dz, dz)
+            loss_dS = criterion(pred_dS, batch_dS)
             loss_dx = criterion(
                 pred_dx, batch_dx
             )  # Lower priority but candidate for parity plot (dsd), visualization would be hard because we need to compare 64 bins and multiple samples
@@ -503,11 +501,16 @@ if __name__ == "__main__":
         fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
 
     # Make predictions using test data to compare
-    test_pred_dz_tot = model(
+    test_pred_dz_tot = best_model(
         torch.from_numpy(test_data.x), torch.from_numpy(test_data.S)
     )
     test_pred_dz = test_pred_dz_tot[:, :, :-n_thermo]
     test_pred_dS = test_pred_dz_tot[:, :, -n_thermo:]
+    test_true_dz = torch.func.jvp(
+        best_model.encoder,
+        (torch.from_numpy(test_data.x),),
+        (torch.from_numpy(test_data.dx),),
+    )[1]
 
     # Plot thermo variables
     fig, axes = plt.subplots(
@@ -552,6 +555,37 @@ if __name__ == "__main__":
         fig.savefig(tpsp_plot_dir / (case_name + "_dSdt_Parity.png"))
     if params["nipun_save"]:
         fig.savefig(runsp_out_dir / (case_name + "_dSdt_Parity.png"))
+
+    # Plot z-space
+    fig, axes = plt.subplots(
+        nrows=1, ncols=params["latent_dim"], figsize=(28, 10), layout="constrained"
+    )
+    for idx, ax in enumerate(axes.flatten()):
+        true = test_true_dz[:, :, idx].detach().numpy().ravel()
+        pred = test_pred_dz[:, :, idx].detach().numpy().ravel()
+        all_data = np.concatenate((true, pred), axis=0)
+        lb, ub = 0.95 * np.min(all_data), 1.05 * np.max(all_data)
+        ax.scatter(true, pred, s=15, c="tab:blue", marker=".", alpha=0.90, label="Data")
+        ax.axline(
+            (0.0, 0.0),
+            (1.0, 1.0),
+            color="tab:red",
+            linestyle="--",
+            alpha=0.8,
+            label="1:1 Line",
+        )
+        ax.set_xlim([lb, ub])
+        ax.set_ylim([lb, ub])
+        ax.legend()
+        ax.grid(linestyle=":", color="black", alpha=0.25)
+        ax.set_aspect("equal")
+        ax.set_xlabel("Truth")
+        ax.set_ylabel("Prediction")
+        ax.set_title(f"Z-Space Derivatives {idx+1}/{n_thermo}")
+    if params["emily_save"]:
+        fig.savefig(tpsp_plot_dir / (case_name + "_dz_Parity.png"))
+    if params["nipun_save"]:
+        fig.savefig(runsp_out_dir / (case_name + "_dz_Parity.png"))
 
 # TODO: update utilty functions from here...
 # - e.g. parity plot of the predicted vs. actual time derivatives of M or bins
