@@ -29,15 +29,15 @@ params = {
     "data_src": "erfCond",
     "random_seed": 10,
     "num_epochs": 1000,
-    "batch_size": 14,
-    "learning_rate": 9.184941089801632e-05,
+    "batch_size": 109,
+    "learning_rate": 0.00012466702443702146,
     "latent_dim": 2,
     "poly_order": 2,
     "lr_sched": True,
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "lambda1_metaweight": 0.5741281973617612,
+    "lambda1_metaweight": 1.1529577846545873,
     "print_frequency": 1,
 }
 
@@ -378,7 +378,9 @@ if __name__ == "__main__":
     params["loss_weight_recon"] = 1.0
     params["loss_weight_sindy_x"] = lambda1
     params["loss_weight_sindy_z"] = lambda2
-    params["loss_weight_sindy_S"] = lambda2  # TODO: can explore this quantity
+    params["loss_weight_sindy_S"] = (
+        1.9763186450207038  # TODO: can explore this quantity
+    )
 
     # Training loop
     # ----------------------------------------------------------------------------------
