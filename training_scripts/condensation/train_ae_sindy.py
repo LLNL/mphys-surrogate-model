@@ -28,7 +28,7 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "erfCond",
     "random_seed": 10,
-    "num_epochs": 10,
+    "num_epochs": 1000,
     "batch_size": 25,
     "learning_rate": 0.004204813405972317,
     "latent_dim": 3,
@@ -564,7 +564,7 @@ if __name__ == "__main__":
     vmax = np.max(all_data)
 
     # Plot distribution comparison
-    fig, axes = plt.subplots(3, 1, figsize=(34, 13), layout="constrained")
+    fig, axes = plt.subplots(2, 1, figsize=(34, 13), layout="constrained")
     cbar_kwargs = {"fraction": 0.046, "pad": 0.01}
     # ---
     ax = axes[0]
@@ -581,7 +581,7 @@ if __name__ == "__main__":
     )
     ax.set_xlabel("Sample")
     ax.set_ylabel("Bin")
-    ax.set_title(f"True Normalized dx Distribution")
+    ax.set_title(f"True Normalized dx")
     # ---
     ax = axes[1]
     sns.heatmap(
@@ -597,34 +597,7 @@ if __name__ == "__main__":
     )
     ax.set_xlabel("Sample")
     ax.set_ylabel("Bin")
-    ax.set_title(f"Predicted Normalized dx Distribution")
-    # ---
-    ax = axes[2]
-    xvals = np.arange(tdx.shape[0])
-    ymin = np.sum(tdx, axis=1)
-    ymax = np.sum(pdx, axis=1)
-    ax.plot(
-        xvals,
-        ymin,
-        color="tab:green",
-        linestyle="none",
-        marker=".",
-        label="True",
-    )
-    ax.plot(
-        xvals,
-        ymax,
-        color="tab:blue",
-        linestyle="none",
-        marker=".",
-        label="Predicted",
-    )
-    ax.vlines(xvals, ymin, ymax, colors="tab:red", linestyle=":")
-    ax.legend()
-    ax.set_xlim([-1, tdx.shape[0] + 1])
-    ax.set_xlabel("Sample")
-    ax.set_ylabel("Distribution Sum")
-    ax.set_title(f"True vs. Predicted dx Distribution Sum")
+    ax.set_title(f"Predicted Normalized dx")
     # ---
     fig.savefig(runsp_out_dir / (case_name + "_dx_Comparison.png"))
 
