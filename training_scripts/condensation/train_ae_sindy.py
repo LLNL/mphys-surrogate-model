@@ -569,7 +569,7 @@ if __name__ == "__main__":
         ax.set_aspect("equal")
         ax.set_xlabel("Truth")
         ax.set_ylabel("Prediction")
-        ax.set_title(f"Z-Space Derivatives {idx+1}/{n_thermo}")
+        ax.set_title(f"Z-Space Derivatives {idx+1}/{params['latent_dim']}")
     fig.savefig(runsp_out_dir / (case_name + "_dz_Parity.png"))
 
     # Convert dx into distributions by normalizing
