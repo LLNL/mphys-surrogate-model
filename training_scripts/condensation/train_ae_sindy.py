@@ -511,6 +511,11 @@ if __name__ == "__main__":
         (torch.from_numpy(test_data.x),),
         (torch.from_numpy(test_data.dx),),
     )[1]
+    test_pred_dx = torch.func.jvp(
+        best_model.decoder,
+        (best_model.encoder(torch.from_numpy(test_data.x)),),
+        (test_pred_dz,),
+    )[1]
 
     # Plot thermo variables
     fig, axes = plt.subplots(
