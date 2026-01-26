@@ -557,22 +557,21 @@ if __name__ == "__main__":
     # Convert dx into distributions by normalizing
     tdx = test_data.dx.squeeze()
     pdx = test_pred_dx.detach().numpy().squeeze()
-    tdx = tdx / np.sum(tdx, axis=1).reshape(-1, 1)
-    pdx = pdx / np.sum(pdx, axis=1).reshape(-1, 1)
     all_data = np.concatenate((tdx, pdx), axis=0)
-    vmin = np.min(all_data)
-    vmax = np.max(all_data)
+    vmin = np.quantile(all_data, q=0.01)
+    vmax = np.quantile(all_data, q=0.99)
 
     # Plot distribution comparison
     fig, axes = plt.subplots(2, 1, figsize=(34, 13), layout="constrained")
     cbar_kwargs = {"fraction": 0.046, "pad": 0.01}
+    cmap = "viridis"
     # ---
     ax = axes[0]
     sns.heatmap(
         tdx.T,
         vmin=vmin,
         vmax=vmax,
-        cmap="viridis",
+        cmap=cmap,
         annot=False,
         xticklabels=False,
         yticklabels=False,
@@ -581,14 +580,14 @@ if __name__ == "__main__":
     )
     ax.set_xlabel("Sample")
     ax.set_ylabel("Bin")
-    ax.set_title(f"True Normalized dx")
+    ax.set_title(f"True dx")
     # ---
     ax = axes[1]
     sns.heatmap(
         pdx.T,
         vmin=vmin,
         vmax=vmax,
-        cmap="viridis",
+        cmap=cmap,
         annot=False,
         xticklabels=False,
         yticklabels=False,
@@ -597,7 +596,7 @@ if __name__ == "__main__":
     )
     ax.set_xlabel("Sample")
     ax.set_ylabel("Bin")
-    ax.set_title(f"Predicted Normalized dx")
+    ax.set_title(f"Predicted dx")
     # ---
     fig.savefig(runsp_out_dir / (case_name + "_dx_Comparison.png"))
 
