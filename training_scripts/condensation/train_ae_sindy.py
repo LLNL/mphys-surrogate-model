@@ -28,7 +28,7 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "erfCond",
     "random_seed": 10,
-    "num_epochs": 1000,
+    "num_epochs": 10,
     "batch_size": 25,
     "learning_rate": 0.004204813405972317,
     "latent_dim": 3,
@@ -281,6 +281,34 @@ def train_and_eval(
     )
 
 
+def get_ae_sindy_preds(data, model):
+    """
+    Return sindy predictions
+
+    Args:
+        data: Data class created by `du.NormedBinThermoDatasetDzDt`
+        model: Instance of AESINDyThermo model
+        n_thermo: Number of thermodynamic variables
+
+    Returns:
+
+    """
+    pred_dz_tot = model(torch.from_numpy(data.x), torch.from_numpy(data.S))
+    pred_dz = pred_dz_tot[:, :, : -data.n_thermo]
+    pred_dS = pred_dz_tot[:, :, -data.n_thermo :]
+    true_dz = torch.func.jvp(
+        model.encoder,
+        (torch.from_numpy(data.x),),
+        (torch.from_numpy(data.dx),),
+    )[1]
+    pred_dx = torch.func.jvp(
+        model.decoder,
+        (model.encoder(torch.from_numpy(data.x)),),
+        (pred_dz,),
+    )[1]
+    return pred_dz, true_dz, pred_dS, pred_dx
+
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Main
 # ----------------------------------------------------------------------------------------------------------------------
@@ -469,21 +497,9 @@ if __name__ == "__main__":
     fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
 
     # Make predictions using test data to compare
-    test_pred_dz_tot = best_model(
-        torch.from_numpy(test_data.x), torch.from_numpy(test_data.S)
+    test_pred_dz, test_true_dz, test_pred_dS, test_pred_dx = get_ae_sindy_preds(
+        test_data, best_model
     )
-    test_pred_dz = test_pred_dz_tot[:, :, :-n_thermo]
-    test_pred_dS = test_pred_dz_tot[:, :, -n_thermo:]
-    test_true_dz = torch.func.jvp(
-        best_model.encoder,
-        (torch.from_numpy(test_data.x),),
-        (torch.from_numpy(test_data.dx),),
-    )[1]
-    test_pred_dx = torch.func.jvp(
-        best_model.decoder,
-        (best_model.encoder(torch.from_numpy(test_data.x)),),
-        (test_pred_dz,),
-    )[1]
 
     # Plot thermo variables
     fig, axes = plt.subplots(
@@ -601,7 +617,4 @@ if __name__ == "__main__":
     fig.savefig(runsp_out_dir / (case_name + "_dx_Comparison.png"))
 
 
-# TODO: update utilty functions from here...
-# - e.g. parity plot of the predicted vs. actual time derivatives of M or bins
-# Look at: dM/dt vs input S for predictions: model vs data
-# - e.g. predictions stepped forward in time
+# - TODO: predictions stepped forward in time
