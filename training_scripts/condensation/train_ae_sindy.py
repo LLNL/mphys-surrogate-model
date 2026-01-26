@@ -19,6 +19,7 @@ import pickle as pkl
 import uuid
 
 import numpy as np
+import seaborn as sns
 import torch
 from src import data_utils as du
 from src import diagnostics, models, plotting
@@ -552,6 +553,81 @@ if __name__ == "__main__":
         ax.set_ylabel("Prediction")
         ax.set_title(f"Z-Space Derivatives {idx+1}/{n_thermo}")
     fig.savefig(runsp_out_dir / (case_name + "_dz_Parity.png"))
+
+    # Convert dx into distributions by normalizing
+    tdx = test_data.dx.squeeze()
+    pdx = test_pred_dx.detach().numpy().squeeze()
+    tdx = tdx / np.sum(tdx, axis=1).reshape(-1, 1)
+    pdx = pdx / np.sum(pdx, axis=1).reshape(-1, 1)
+    all_data = np.concatenate((tdx, pdx), axis=0)
+    vmin = np.min(all_data)
+    vmax = np.max(all_data)
+
+    # Plot distribution comparison
+    fig, axes = plt.subplots(3, 1, figsize=(34, 13), layout="constrained")
+    cbar_kwargs = {"fraction": 0.046, "pad": 0.01}
+    # ---
+    ax = axes[0]
+    sns.heatmap(
+        tdx.T,
+        vmin=vmin,
+        vmax=vmax,
+        cmap="viridis",
+        annot=False,
+        xticklabels=False,
+        yticklabels=False,
+        cbar_kws=cbar_kwargs,
+        ax=ax,
+    )
+    ax.set_xlabel("Sample")
+    ax.set_ylabel("Bin")
+    ax.set_title(f"True Normalized dx Distribution")
+    # ---
+    ax = axes[1]
+    sns.heatmap(
+        pdx.T,
+        vmin=vmin,
+        vmax=vmax,
+        cmap="viridis",
+        annot=False,
+        xticklabels=False,
+        yticklabels=False,
+        cbar_kws=cbar_kwargs,
+        ax=ax,
+    )
+    ax.set_xlabel("Sample")
+    ax.set_ylabel("Bin")
+    ax.set_title(f"Predicted Normalized dx Distribution")
+    # ---
+    ax = axes[2]
+    xvals = np.arange(tdx.shape[0])
+    ymin = np.sum(tdx, axis=1)
+    ymax = np.sum(pdx, axis=1)
+    ax.plot(
+        xvals,
+        ymin,
+        color="tab:green",
+        linestyle="none",
+        marker=".",
+        label="True",
+    )
+    ax.plot(
+        xvals,
+        ymax,
+        color="tab:blue",
+        linestyle="none",
+        marker=".",
+        label="Predicted",
+    )
+    ax.vlines(xvals, ymin, ymax, colors="tab:red", linestyle=":")
+    ax.legend()
+    ax.set_xlim([-1, tdx.shape[0] + 1])
+    ax.set_xlabel("Sample")
+    ax.set_ylabel("Distribution Sum")
+    ax.set_title(f"True vs. Predicted dx Distribution Sum")
+    # ---
+    fig.savefig(runsp_out_dir / (case_name + "_dx_Comparison.png"))
+
 
 # TODO: update utilty functions from here...
 # - e.g. parity plot of the predicted vs. actual time derivatives of M or bins
