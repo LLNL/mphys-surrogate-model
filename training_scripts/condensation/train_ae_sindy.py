@@ -28,16 +28,16 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "erfCond",
     "random_seed": 10,
-    "num_epochs": 10,
-    "batch_size": 25,
-    "learning_rate": 0.004204813405972317,
-    "latent_dim": 3,
+    "num_epochs": 1000,
+    "batch_size": 14,
+    "learning_rate": 9.184941089801632e-05,
+    "latent_dim": 2,
     "poly_order": 2,
     "lr_sched": True,
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "lambda1_metaweight": 0.500989969537634,
+    "lambda1_metaweight": 0.5741281973617612,
     "print_frequency": 1,
 }
 
