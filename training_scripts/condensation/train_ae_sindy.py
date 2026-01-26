@@ -38,8 +38,6 @@ params = {
     "wd": 1e-3,
     "lambda1_metaweight": 0.500989969537634,
     "print_frequency": 1,
-    "emily_save": False,
-    "nipun_save": True,
 }
 
 # Global variables and settings
@@ -402,34 +400,15 @@ if __name__ == "__main__":
     )
     print(f"Save ID is {case_name}")
 
-    # Emily save dirs
-    tpsp_out_dir = Path("../../trained_models/ae_SINDy")
-    if not tpsp_out_dir.exists():
-        tpsp_out_dir.mkdir(parents=True, exist_ok=True)
-    if not (tpsp_loss_dir := tpsp_out_dir / "losses").exists():
-        tpsp_loss_dir.mkdir(parents=True, exist_ok=True)
-    if not (tpsp_mod_dir := tpsp_out_dir / "models").exists():
-        tpsp_mod_dir.mkdir(parents=True, exist_ok=True)
-    if not (tpsp_plot_dir := tpsp_out_dir / "plots").exists():
-        tpsp_plot_dir.mkdir(parents=True, exist_ok=True)
-    if params["emily_save"]:
-        print(
-            f"Saving output files to the respective folders at {tpsp_out_dir}/{{losses,models,plots}}/{case_name}*"
-        )
-
-    # Nipun save dirs
+    # Set save dir
     runsp_out_dir = Path("../../ng_scripts/trained_models/ae_SINDy") / case_name
     if not runsp_out_dir.exists():
         runsp_out_dir.mkdir(parents=True, exist_ok=True)
-    if params["nipun_save"]:
-        print(f"Saving output files to {runsp_out_dir}*")
+    print(f"Saving output files to {runsp_out_dir}*")
 
     # Save losses
     pkl_out_files = []
-    if params["emily_save"]:
-        pkl_out_files.append(tpsp_loss_dir / (case_name + ".pkl"))
-    if params["nipun_save"]:
-        pkl_out_files.append(runsp_out_dir / (case_name + ".pkl"))
+    pkl_out_files.append(runsp_out_dir / (case_name + ".pkl"))
     for out_file in pkl_out_files:
         with open(out_file, "wb") as pickle_file:
             pkl.dump(
@@ -450,10 +429,7 @@ if __name__ == "__main__":
 
     # Save params
     params_out_files = []
-    if params["emily_save"]:
-        params_out_files.append(tpsp_mod_dir / (case_name + "_params.json"))
-    if params["nipun_save"]:
-        params_out_files.append(runsp_out_dir / (case_name + "_params.json"))
+    params_out_files.append(runsp_out_dir / (case_name + "_params.json"))
     params_save = copy.deepcopy(params)
     for key, value in params_save.items():
         if type(value) is np.float32 or type(value) is np.float64:
@@ -463,10 +439,7 @@ if __name__ == "__main__":
 
     # Save model
     mdl_out_files = []
-    if params["emily_save"]:
-        mdl_out_files.append(tpsp_mod_dir / (case_name + ".pth"))
-    if params["nipun_save"]:
-        mdl_out_files.append(runsp_out_dir / (case_name + ".pth"))
+    mdl_out_files.append(runsp_out_dir / (case_name + ".pth"))
     for out_file in mdl_out_files:
         torch.save(best_model.state_dict(), out_file)
 
@@ -483,10 +456,7 @@ if __name__ == "__main__":
         labels=["dx/dt", "dz/dt", "dS/dt", "Recon"],
         title=f"Training Loss",
     )
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_losses.png"))
-    if params["nipun_save"]:
-        fig.savefig(runsp_out_dir / (case_name + "_losses.png"))
+    fig.savefig(runsp_out_dir / (case_name + "_losses.png"))
 
     # Plot distributions: reconstruction
     fig = plotting.plot_reconstructions(
@@ -495,10 +465,7 @@ if __name__ == "__main__":
         data["x_test"],
         data["r_bins_edges"],
     )
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_reconstructions.png"))
-    if params["nipun_save"]:
-        fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
+    fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
 
     # Make predictions using test data to compare
     test_pred_dz_tot = best_model(
@@ -556,10 +523,7 @@ if __name__ == "__main__":
         ax.set_xlabel("Truth")
         ax.set_ylabel("Prediction")
         ax.set_title(f"Thermodynamic Variable {idx+1}/{n_thermo}")
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_dSdt_Parity.png"))
-    if params["nipun_save"]:
-        fig.savefig(runsp_out_dir / (case_name + "_dSdt_Parity.png"))
+    fig.savefig(runsp_out_dir / (case_name + "_dSdt_Parity.png"))
 
     # Plot z-space
     fig, axes = plt.subplots(
@@ -587,10 +551,7 @@ if __name__ == "__main__":
         ax.set_xlabel("Truth")
         ax.set_ylabel("Prediction")
         ax.set_title(f"Z-Space Derivatives {idx+1}/{n_thermo}")
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_dz_Parity.png"))
-    if params["nipun_save"]:
-        fig.savefig(runsp_out_dir / (case_name + "_dz_Parity.png"))
+    fig.savefig(runsp_out_dir / (case_name + "_dz_Parity.png"))
 
 # TODO: update utilty functions from here...
 # - e.g. parity plot of the predicted vs. actual time derivatives of M or bins
