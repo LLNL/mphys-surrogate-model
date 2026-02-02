@@ -38,6 +38,7 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "lambda1_metaweight": 1.1529577846545873,
+    "loss_weight_sindy_S": 1.9763186450207038,  # TODO: explore more
     "print_frequency": 1,
 }
 
@@ -371,16 +372,12 @@ if __name__ == "__main__":
     )
 
     # Compute & set weights based on Champion et al recs
-    lambda1, lambda2, _ = du.champion_calculate_weights(
+    lambda_x, lambda_z, _ = du.champion_calculate_weights(
         train_data, lambda1_metaweight=params["lambda1_metaweight"]
     )
-    print(f"lambda: 1.0, {lambda1}, {lambda2}")
     params["loss_weight_recon"] = 1.0
-    params["loss_weight_sindy_x"] = lambda1
-    params["loss_weight_sindy_z"] = lambda2
-    params["loss_weight_sindy_S"] = (
-        1.9763186450207038  # TODO: can explore this quantity
-    )
+    params["loss_weight_sindy_x"] = lambda_x
+    params["loss_weight_sindy_z"] = lambda_z
 
     # Training loop
     # ----------------------------------------------------------------------------------
