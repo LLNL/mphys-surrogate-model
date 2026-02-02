@@ -78,10 +78,13 @@ def objective(trial, params, n_bins, train_data, test_data):
         layer3_size = trial.suggest_int("layer3_size", 20, 60)
         lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
     elif MODEL_TYPE == "AE-SINDy":
+        # # Latent dim and poly order
         # latent_dim = trial.suggest_int("latent_dim", 1, 4)
         # poly_order = trial.suggest_int("poly_order", 2, 3)
         # params["latent_dim"] = latent_dim
         # params["poly_order"] = poly_order
+
+        # Weights
         lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
         lambda_S = trial.suggest_float("lambda_S", 0.1, 2.0)
     else:
