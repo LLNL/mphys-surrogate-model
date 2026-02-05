@@ -159,7 +159,7 @@ def open_cond_dataset(
     thermo_train = np.concatenate([m_train, T_train, S_train], axis=-1)
     dx_train = (
         ds_train["dgdt_cond"].transpose("loc", "t", "bin").to_numpy()
-        / m_train[:, :, np.newaxis]
+        / (m_train[:, :, np.newaxis] * m_scale) # divide by the dimensioned mass
     )
     dM_train = (
         ds_train["dgdt_cond"].transpose("loc", "t", "bin").sum(dim="bin").to_numpy()
@@ -173,7 +173,7 @@ def open_cond_dataset(
     thermo_test = np.concatenate([m_test, T_test, S_test], axis=-1)
     dx_test = (
         ds_test["dgdt_cond"].transpose("loc", "t", "bin").to_numpy()
-        / m_test[:, :, np.newaxis]
+        / (m_test[:, :, np.newaxis] * m_scale)
     )
     dM_test = (
         ds_test["dgdt_cond"].transpose("loc", "t", "bin").sum(dim="bin").to_numpy()
