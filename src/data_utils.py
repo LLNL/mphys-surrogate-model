@@ -74,6 +74,28 @@ def open_erf_dataset(path=None, sample_time=None):
 
     return (x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time)
 
+def compute_timescale(
+        x,
+        dxdt,
+        S,
+        dSdt,
+        percentile = 99
+):
+    """
+    Determines a timescale for nondimensionalization of the time derivatives
+
+    x: dimensionless DSD
+    dxdt: dDSD / dtime (units 1/s)
+    S: dimensionless thermodynamic quantities
+    dSdt: dS / dtime (units 1/s)
+
+    Returns tau: time scale (s)
+    """
+    invtau_x = np.percentile(np.abs(dxdt[x > 0] / x[x > 0]), percentile)
+    invtau_S = np.percentile(np.abs(dSdt[S > 0] / S[S > 0]), percentile)
+    invtau = np.min([invtau_x, invtau_S])
+
+    return 1/invtau
 
 def open_cond_dataset(
     name,
@@ -83,6 +105,7 @@ def open_cond_dataset(
     test_size=0.2,
     calib_size=None,
     random_state=1952,
+    rescale_time=True,
     m_scale=None,
     T_scale=None,
     S_scale=None,
@@ -182,6 +205,13 @@ def open_cond_dataset(
     dT_test = 0.0 * dM_test
     dS_test = 0.0 * dM_test
     dthermo_test = np.concatenate([dM_test, dT_test, dS_test], axis=-1)
+
+    if rescale_time:
+        tau = compute_timescale(x_train, dx_train, thermo_train, dthermo_train)
+        dx_train *= tau
+        dthermo_train *= tau
+        dx_test *= tau
+        dthermo_test *= tau
 
     # gather outputs
     outputs = {
