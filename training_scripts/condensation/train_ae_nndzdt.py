@@ -12,6 +12,8 @@ from pathlib import Path
 import optuna
 from matplotlib import pyplot as plt
 
+from training_scripts.coalescence.train_ae_NNdzdt import AENNdzdt
+
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
@@ -30,17 +32,18 @@ params = {
     "random_seed": 10,
     "num_epochs": 300,
     "batch_size": 100,
-    "learning_rate": 1e-2, #0.00012466702443702146,
+    "learning_rate": 1e-3, #0.00012466702443702146,
     "latent_dim": 3,
     "poly_order": 4,
     "lr_sched": True,
-    "patience": 20,
+    "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "lambda1_metaweight": 10,
+    "lambda1_metaweight": 1,
     "loss_weight_sindy_S": 1000,  # TODO: explore more
     "print_frequency": 1,
-    "load_ae_from": "../../results/Optuna/ERF Dataset/AE-SINDy_LimParams/erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc",
+    "load_ae_from": None,
+        #"../../results/Optuna/ERF Dataset/NNdzdt_2025-07-20T23:31:20_3a400c596947422389559813cd41dfe6/erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3",
 }
 
 # Global variables and settings
@@ -56,27 +59,24 @@ divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 # ----------------------------------------------------------------------------------------------------------------------
 # Model
 # ----------------------------------------------------------------------------------------------------------------------
-class AESINDyThermo(torch.nn.Module):
+class AENNdzdtThermo(torch.nn.Module):
     def __init__(
         self,
         n_channels=1,
         n_bins=100,
         n_latent=10,
-        poly_order=2,
         n_thermo=3,
     ):
-        super(AESINDyThermo, self).__init__()
-        self.poly_order = poly_order
+        super(AENNdzdtThermo, self).__init__()
         self.n_thermo = n_thermo
         assert n_channels == 1
         self.encoder = models.FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
         self.decoder = models.FFNNDecoder(
             n_bins=n_bins, n_latent=n_latent, distribution=True
         )
-        self.dzdt = models.SINDyDeriv(
+        self.dzdt = models.NNDerivatives(
             n_latent=n_latent + n_thermo,
-            poly_order=poly_order,
-            use_thresholds=False,
+            layer_size=[42, 36, 46]
         )
 
     def forward(self, bin0, thermo):
@@ -351,21 +351,19 @@ if __name__ == "__main__":
 
     # Initialize the model
     n_thermo = train_data.n_thermo
-    model = AESINDyThermo(
+    model = AENNdzdtThermo(
         n_channels=1,
         n_bins=n_bins,
         n_latent=params["latent_dim"],
-        poly_order=params["poly_order"],
         n_thermo=n_thermo,
     )
 
     if params["load_ae_from"] is not None:
         # Load the coalescence ROM
-        ae_sindy = AESINDyThermo(
+        ae_sindy = AENNdzdtThermo(
             n_channels=1,
             n_bins=n_bins,
             n_latent=3,
-            poly_order=2,
             n_thermo=1,
         )
         model_dir = Path(
@@ -378,13 +376,13 @@ if __name__ == "__main__":
 
         # transfer and fix the autoencoder parameters
         model.encoder = ae_sindy.encoder
-        for param in model.encoder.parameters():
-            param.requires_grad = False
+        # for param in model.encoder.parameters():
+        #     param.requires_grad = False
         model.decoder = ae_sindy.decoder
-        for param in model.decoder.parameters():
-            param.requires_grad = False
-        model.encoder.eval()
-        model.decoder.eval()
+        # for param in model.decoder.parameters():
+        #     param.requires_grad = False
+        # model.encoder.eval()
+        # model.decoder.eval()
 
     # Optimizer and scheduling
     optimizer = torch.optim.AdamW(
@@ -457,7 +455,7 @@ if __name__ == "__main__":
     print(f"Save ID is {case_name}")
 
     # Set save dir
-    runsp_out_dir = Path("../../ng_scripts/trained_models/ae_SINDy") / case_name
+    runsp_out_dir = Path("../../ng_scripts/trained_models/ae_NNdzdt") / case_name
     if not runsp_out_dir.exists():
         runsp_out_dir.mkdir(parents=True, exist_ok=True)
     print(f"Saving output files to {runsp_out_dir}*")
