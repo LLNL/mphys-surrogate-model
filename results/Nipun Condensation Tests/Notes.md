@@ -12,3 +12,9 @@ folders and the changes made to them.
               No tuning has happened, but performance increased due to the normalization.
               Likely the previous troubles were due to optimizer struggles. A previous
               autoencoder was not loaded.
+* `Baseline4` Optuna showed very little sensitivity to the loss weights, which was
+              surprising. However, this test was the first one which showed good
+              autoencoder performance, specifically getting the bimodal distribution
+              in run 10 of the reconstruction plot. Maybe better initialization
+              is needed? It's strange that the shape of the distributions in
+              the heatmap comparison plot is roughly correct, but the values aren't.

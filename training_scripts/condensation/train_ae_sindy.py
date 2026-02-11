@@ -30,15 +30,15 @@ params = {
     "random_seed": 10,
     "num_epochs": 1000,
     "batch_size": 4,
-    "learning_rate": 0.0028728982841464018,
+    "learning_rate": 0.003365166078721918,
     "latent_dim": 4,
     "poly_order": 3,
     "lr_sched": True,
     "patience": 20,
     "tol": 1e-8,
     "wd": 1e-3,
-    "lambda1_metaweight": 10,
-    "loss_weight_sindy_S": 1000,  # TODO: explore more
+    "lambda1_metaweight": 1.301768397667494,
+    "loss_weight_sindy_S": 1.0432026964488583,  # TODO: explore more
     "print_frequency": 1,
     "load_ae_from": None,
     # "load_ae_from": "../../results/Optuna/ERF Dataset/AE-SINDy_LimParams/erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc",
@@ -403,8 +403,8 @@ if __name__ == "__main__":
         train_data, lambda1_metaweight=params["lambda1_metaweight"]
     )
     params["loss_weight_recon"] = 1.0
-    params["loss_weight_sindy_x"] = 10 * lambda_x
-    params["loss_weight_sindy_z"] = 10 * lambda_z
+    params["loss_weight_sindy_x"] = lambda_x
+    params["loss_weight_sindy_z"] = lambda_z
 
     # Training loop
     # ----------------------------------------------------------------------------------
