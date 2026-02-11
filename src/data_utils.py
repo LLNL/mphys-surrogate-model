@@ -185,6 +185,7 @@ def open_mass_dataset(
         "n_bins": x_train.shape[-1],
         "dsd_time": ds["t"].to_numpy() - ds["t"].to_numpy()[0],
         "m_scale": m_scale,
+        "ds_test": ds_test,
     }
 
     if ds_calib is not None:
