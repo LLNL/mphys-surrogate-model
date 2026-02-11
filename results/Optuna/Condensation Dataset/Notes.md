@@ -28,5 +28,6 @@ aren't.
 
 ## Post-Normalization Results
 `PostNorm_AE-SINDy_Poly_Latent_1` contains a tune looking at batch size, learning rate, latent
-dimension, and poly order. The full epoch run is in `FOLDERNAME`. Performance is
-okay and shows that `latent_dim=4` and `poly_order=3` is the best.
+dimension, and poly order. It shows that `latent_dim=4` and `poly_order=3` is the best. The full epoch run
+is in `erfCond_FFNN_latent4_order3_tr1000_lr0.0028728982841464018_bs4_weights1.0-7.244993209838867-724.4993896484375_1000`
+and the performance isn't great, but I'd say a little better than `PreNorm_AE-SINDy_Poly_Latent_1`
