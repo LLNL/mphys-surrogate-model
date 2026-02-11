@@ -28,9 +28,9 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "erfCond",
     "random_seed": 10,
-    "num_epochs": 300,
+    "num_epochs": 1000,
     "batch_size": 100,
-    "learning_rate": 1e-2, #0.00012466702443702146,
+    "learning_rate": 1e-2,
     "latent_dim": 3,
     "poly_order": 4,
     "lr_sched": True,
@@ -40,7 +40,8 @@ params = {
     "lambda1_metaweight": 10,
     "loss_weight_sindy_S": 1000,  # TODO: explore more
     "print_frequency": 1,
-    "load_ae_from": "../../results/Optuna/ERF Dataset/AE-SINDy_LimParams/erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc",
+    "load_ae_from": None,
+    # "load_ae_from": "../../results/Optuna/ERF Dataset/AE-SINDy_LimParams/erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc",
 }
 
 # Global variables and settings
@@ -154,9 +155,7 @@ def train_and_eval(
             # Calculate train loss
             loss_dz = criterion(pred_dz, dz)
             loss_dS = criterion(pred_dS, batch_dS)
-            loss_dx = criterion(
-                pred_dx, batch_dx
-            )  # Lower priority but candidate for parity plot (dsd), visualization would be hard because we need to compare 64 bins and multiple samples
+            loss_dx = criterion(pred_dx, batch_dx)
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
                 torch.log(batch_x + parameters["tol"]),
@@ -368,9 +367,7 @@ if __name__ == "__main__":
             poly_order=2,
             n_thermo=1,
         )
-        model_dir = Path(
-            params["load_ae_from"]
-        )
+        model_dir = Path(params["load_ae_from"])
         model_files = list(model_dir.glob(f"*.pth"))
         if not model_files:
             raise FileNotFoundError(f"No model files found")
@@ -388,7 +385,9 @@ if __name__ == "__main__":
 
     # Optimizer and scheduling
     optimizer = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()), lr=params["learning_rate"], weight_decay=params["wd"]
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=params["learning_rate"],
+        weight_decay=params["wd"],
     )
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
     early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
@@ -404,8 +403,8 @@ if __name__ == "__main__":
         train_data, lambda1_metaweight=params["lambda1_metaweight"]
     )
     params["loss_weight_recon"] = 1.0
-    params["loss_weight_sindy_x"] = 10*lambda_x
-    params["loss_weight_sindy_z"] = 10*lambda_z
+    params["loss_weight_sindy_x"] = 10 * lambda_x
+    params["loss_weight_sindy_z"] = 10 * lambda_z
 
     # Training loop
     # ----------------------------------------------------------------------------------

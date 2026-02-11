@@ -1,0 +1,20 @@
+{
+    "data_src": "erfCond",
+    "random_seed": 10,
+    "num_epochs": 1000,
+    "batch_size": 100,
+    "learning_rate": 0.01,
+    "latent_dim": 3,
+    "poly_order": 4,
+    "lr_sched": true,
+    "patience": 20,
+    "tol": 1e-08,
+    "wd": 0.001,
+    "lambda1_metaweight": 10,
+    "loss_weight_sindy_S": 1000,
+    "print_frequency": 1,
+    "load_ae_from": null,
+    "loss_weight_recon": 1.0,
+    "loss_weight_sindy_x": 724.4993896484375,
+    "loss_weight_sindy_z": 7.244993209838867
+}
