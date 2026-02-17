@@ -328,8 +328,8 @@ def plot_latent_trajectories_heatmap(
         h_data, tedges, zedges = h_data_list[i]
         h_pred, tedges, zedges = h_pred_list[i]
 
-        pcm = ax[0][i].pcolormesh(tedges, zedges, h_data.T, cmap=cmap, norm=norm)
-        ax[1][i].pcolormesh(tedges, zedges, h_pred.T, cmap=cmap, norm=norm)
+        pcm = ax[0][i].pcolormesh(tedges, zedges, h_data.T, edgecolors='face', linewidth=0, cmap=cmap, norm=norm)
+        ax[1][i].pcolormesh(tedges, zedges, h_pred.T, cmap=cmap, norm=norm, antialiased=False)
 
         ax[-1][i].set_xlabel("Time (s)")
         ax[0][i].yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
