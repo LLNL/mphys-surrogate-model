@@ -25,7 +25,7 @@ from src import diagnostics, models, plotting
 params = {
     "data_src": "erf",
     "random_seed": 10,
-    "num_epochs": 1000,
+    "num_epochs": 100,
     "batch_size": 8,
     "learning_rate": 0.0030348411572892766,
     "latent_dim": 3,
@@ -39,7 +39,7 @@ params = {
     "wd": 1e-3,
     "layer_size": (141, 154, 40),
     "print_frequency": 1,
-    "emily_save": True,
+    "emily_save": False,
     "nipun_save": True,
 }
 

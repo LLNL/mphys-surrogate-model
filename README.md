@@ -19,6 +19,11 @@ pip install -r requirements_os.txt
 ```
 though package versions may not be compatible with all operating systems.
 
+A pyproject.toml file is also included for uv users. After 
+[installing uv](https://docs.astral.sh/uv/getting-started/installation/),
+you should be able to run `uv sync` in the repository folder, and it will create a virtual environment for you that you can activate.
+If you don't have the right python version available, you may need to run `uv python install 3.11.9` before running `uv sync`.
+
 ### Installing & Running
 Simply clone this repository from github and run the desired script locally; all paths are specified as relative, and no further
 installation is necessary.
