@@ -149,7 +149,7 @@ if args.subset == "nomass":
     arch_labels = ["Reconstruction", "Latent dynamics", "End-to-end"]
 else:  # "all"
     # 2x2 with recon / end-to-end top, latent / mass bottom
-    arch_labels = ["Reconstruction", "End-to-end", "Latent dynamics", "Mass"]
+    arch_labels = ["End-to-end", "Reconstruction", "Latent dynamics", "Mass"]
 
 # Common style
 model_colors = {"SINDy": "tab:orange", "NNdzdt": "tab:green", "AR": "tab:red"}
@@ -206,7 +206,7 @@ if args.subset == "all":
     fig, axes = plt.subplots(
         2, 2, figsize=(6, 5), sharex=False, sharey=False, constrained_layout=True
     )
-    order = ["Reconstruction", "End-to-end", "Latent dynamics", "Mass"]  # row-major
+    order = ["End-to-end", "Reconstruction", "Latent dynamics", "Mass"]  # row-major
     for ax, label in zip(axes.flat, order):
         plot_panel(ax, label)
 else:  # nomass -> 3x1 vertical
@@ -232,10 +232,10 @@ fig.legend(
 )
 fig.legend(
     ls_handles,
-    [rf"$\alpha={100*a:.0f}\%$" for a in alphas],
+    [rf"${100*(1-a):.1f}\%$" for a in alphas],
     loc="lower left",
     bbox_to_anchor=(1.02, 0.0),
-    title="Miscoverage rate",
+    title="Coverage",
 )
 
 # Save
