@@ -151,7 +151,7 @@ if __name__ == "__main__":
 
             # plot full testset performance
             fig = plotting.plot_full_testset_performance_pred(
-                test_kl, test_wass, test_mass_diff
+                test_kl, test_wass, test_mass_diff, dsd_time,
             )
             fig.show()
 

@@ -525,7 +525,7 @@ if __name__ == "__main__":
     test_kl, test_wass, test_wun, _ = diagnostics.get_performance_metrics(
         x_test, m_test, z_pred, x_pred
     )
-    fig = plotting.plot_full_testset_performance_pred(test_kl, test_wass, test_wun)
+    fig = plotting.plot_full_testset_performance_pred(test_kl, test_wass, test_wun, dsd_time)
     if params["emily_save"]:
         fig.savefig(tpsp_plot_dir / (case_name + "_full_test_pred.png"))
     if params["nipun_save"]:
