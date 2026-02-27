@@ -132,10 +132,8 @@ def train_and_eval(
             batch_dS = batch_dS.to(device)
 
             # Forward pass
-            pred_x_recon = model.decoder(
-                model.encoder(batch_x)
-            )  # Better reconstruction is the prerequisite for good performance - Good temporal predictions come from recon
             z = model.encoder(batch_x)
+            pred_x_recon = model.decoder(z)
             zz = z.clone().detach().requires_grad_()
             pred_dz_tot = model.dzdt(
                 z, batch_S
@@ -175,7 +173,7 @@ def train_and_eval(
 
             # Backward pass and optimization
             optimizer.zero_grad(set_to_none=True)
-            loss.backward(retain_graph=True)
+            loss.backward(retain_graph=False)
             optimizer.step()
 
         # Save train losses
@@ -187,44 +185,52 @@ def train_and_eval(
 
         # Test
         model.eval()
-        for batch_x, batch_dx, batch_S, batch_dS in test_loader:
-            batch_x = batch_x.to(device)
-            batch_dx = batch_dx.to(device)
-            batch_S = batch_S.to(device)
-            batch_dS = batch_dS.to(device)
+        mean_test_loss = [0, 0, 0, 0, 0]
+        with torch.no_grad():
+            for batch_x, batch_dx, batch_S, batch_dS in test_loader:
+                batch_x = batch_x.to(device)
+                batch_dx = batch_dx.to(device)
+                batch_S = batch_S.to(device)
+                batch_dS = batch_dS.to(device)
 
-            # Forward pass
-            pred_x_recon = model.decoder(model.encoder(batch_x))
-            z = model.encoder(batch_x)
-            zz = z.clone().detach().requires_grad_()
-            pred_dz_tot = model.dzdt(z, batch_S)
-            pred_dz = pred_dz_tot[:, :, : -model.n_thermo]
-            pred_dS = pred_dz_tot[:, :, -model.n_thermo :]
-            _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
-            _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
+                # Forward pass
+                pred_x_recon = model.decoder(model.encoder(batch_x))
+                z = model.encoder(batch_x)
+                zz = z.clone().detach().requires_grad_()
+                pred_dz_tot = model.dzdt(z, batch_S)
+                pred_dz = pred_dz_tot[:, :, : -model.n_thermo]
+                pred_dS = pred_dz_tot[:, :, -model.n_thermo :]
+                _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
+                _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
 
-            # Calculate test loss
-            loss_dz = criterion(pred_dz, dz)
-            loss_dS = criterion(pred_dS, batch_dS)
-            loss_dx = criterion(pred_dx, batch_dx)
-            loss_recon = divergence(
-                torch.log(pred_x_recon + parameters["tol"]),
-                torch.log(batch_x + parameters["tol"]),
-            )
+                # Calculate test loss
+                loss_dz = criterion(pred_dz, dz)
+                loss_dS = criterion(pred_dS, batch_dS)
+                loss_dx = criterion(pred_dx, batch_dx)
+                loss_recon = divergence(
+                    torch.log(pred_x_recon + parameters["tol"]),
+                    torch.log(batch_x + parameters["tol"]),
+                )
 
-            loss = (
-                parameters["loss_weight_sindy_x"] * loss_dx
-                + parameters["loss_weight_recon"] * loss_recon
-                + parameters["loss_weight_sindy_z"] * loss_dz
-                + parameters["loss_weight_sindy_S"] * loss_dS
-            )
+                loss = (
+                    parameters["loss_weight_sindy_x"] * loss_dx
+                    + parameters["loss_weight_recon"] * loss_recon
+                    + parameters["loss_weight_sindy_z"] * loss_dz
+                    + parameters["loss_weight_sindy_S"] * loss_dS
+                )
+
+                mean_test_loss[0] += loss.item()
+                mean_test_loss[1] += loss_recon.item()
+                mean_test_loss[2] += loss_dx.item()
+                mean_test_loss[3] += loss_dz.item()
+                mean_test_loss[4] += loss_dS.item()
 
         # Save test losses
-        test_losses[epoch] = loss.item()
-        test_recon_losses[epoch] = loss_recon.item()
-        test_dx_losses[epoch] = loss_dx.item()
-        test_dz_losses[epoch] = loss_dz.item()
-        test_dS_losses[epoch] = loss_dS.item()
+        test_losses[epoch] = mean_test_loss[0] / len(test_loader)
+        test_recon_losses[epoch] = mean_test_loss[1] / len(test_loader)
+        test_dx_losses[epoch] = mean_test_loss[2] / len(test_loader)
+        test_dz_losses[epoch] = mean_test_loss[3] / len(test_loader)
+        test_dS_losses[epoch] = mean_test_loss[4] / len(test_loader)
 
         # Save good model
         if loss < best_test_loss:

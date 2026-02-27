@@ -49,7 +49,7 @@ class FFNNEncoder(torch.nn.Module):
 
     def init_weights(self, m):
         if isinstance(m, nn.Linear):
-            torch.nn.init.xavier_uniform_(m.weight)
+            torch.nn.init.kaiming_uniform_(m.weight, mode="fan_in", nonlinearity="relu")
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias)
 
@@ -119,7 +119,7 @@ class FFNNDecoder(torch.nn.Module):
 
     def init_weights(self, m):
         if isinstance(m, nn.Linear):
-            torch.nn.init.xavier_uniform_(m.weight)
+            torch.nn.init.kaiming_uniform_(m.weight, mode="fan_in", nonlinearity="relu")
             if m.bias is not None:
                 torch.nn.init.zeros_(m.bias)
 
