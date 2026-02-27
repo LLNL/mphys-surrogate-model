@@ -1,5 +1,5 @@
 """
-Main script that defines AE-SINDy model and training
+Main script that defines AE-NNdzdt model and training
 """
 
 import copy
@@ -30,9 +30,9 @@ from torch.utils.data import DataLoader
 params = {
     "data_src": "erfCond",
     "random_seed": 10,
-    "num_epochs": 300,
+    "num_epochs": 1000,
     "batch_size": 100,
-    "learning_rate": 1e-3, #0.00012466702443702146,
+    "learning_rate": 1e-3,
     "latent_dim": 3,
     "poly_order": 4,
     "lr_sched": True,
@@ -43,7 +43,7 @@ params = {
     "loss_weight_sindy_S": 1000,  # TODO: explore more
     "print_frequency": 1,
     "load_ae_from": None,
-        #"../../results/Optuna/ERF Dataset/NNdzdt_2025-07-20T23:31:20_3a400c596947422389559813cd41dfe6/erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3",
+    # "../../results/Optuna/ERF Dataset/NNdzdt_2025-07-20T23:31:20_3a400c596947422389559813cd41dfe6/erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3",
 }
 
 # Global variables and settings
@@ -75,8 +75,7 @@ class AENNdzdtThermo(torch.nn.Module):
             n_bins=n_bins, n_latent=n_latent, distribution=True
         )
         self.dzdt = models.NNDerivatives(
-            n_latent=n_latent + n_thermo,
-            layer_size=[42, 36, 46]
+            n_latent=n_latent + n_thermo, layer_size=[42, 36, 46]
         )
 
     def forward(self, bin0, thermo):
@@ -366,9 +365,7 @@ if __name__ == "__main__":
             n_latent=3,
             n_thermo=1,
         )
-        model_dir = Path(
-            params["load_ae_from"]
-        )
+        model_dir = Path(params["load_ae_from"])
         model_files = list(model_dir.glob(f"*.pth"))
         if not model_files:
             raise FileNotFoundError(f"No model files found")
@@ -386,7 +383,9 @@ if __name__ == "__main__":
 
     # Optimizer and scheduling
     optimizer = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()), lr=params["learning_rate"], weight_decay=params["wd"]
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=params["learning_rate"],
+        weight_decay=params["wd"],
     )
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
     early_stopping = diagnostics.EarlyStopping(patience=params["patience"])
@@ -402,8 +401,8 @@ if __name__ == "__main__":
         train_data, lambda1_metaweight=params["lambda1_metaweight"]
     )
     params["loss_weight_recon"] = 1.0
-    params["loss_weight_sindy_x"] = 10*lambda_x
-    params["loss_weight_sindy_z"] = 10*lambda_z
+    params["loss_weight_sindy_x"] = lambda_x
+    params["loss_weight_sindy_z"] = lambda_z
 
     # Training loop
     # ----------------------------------------------------------------------------------
