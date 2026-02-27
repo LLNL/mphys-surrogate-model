@@ -18,3 +18,24 @@ folders and the changes made to them.
               in run 10 of the reconstruction plot. Maybe better initialization
               is needed? It's strange that the shape of the distributions in
               the heatmap comparison plot is roughly correct, but the values aren't.
+* `Baseline5` Claude had several suggestions to improve performance. I didn't want to
+              do a separate test for each suggestion, so the notes are here combined
+              into one test.  
+              1. *Kaiming*: Recommended to switch from Xavier to Kaiming initialization
+              because ReLUs are used. Not a huge change but makes it a little less
+              "fuzzy". Will keep the change.  
+              2. *Repeated Calculations*: The lines of code
+              `pred_x_recon = model.decoder(model.encoder(batch_x)); z = model.encoder(batch_x)`
+              run the encoder twice, and those gradients are accumulated, and the graph
+              recieves twice the gradient, messing with the weights and doubling
+              computation/memory. The code is switched to 
+              `z = model.encoder(batch_x); pred_x_recon = model.decoder(z)`. Also
+              doesn't produce a huge change, which is in some ways heartening. Still,
+              the change will be kept.  
+              3. *Remove detach*: The old code had the line `zz = z.clone().detach().requires_grad_()`,
+              and the `detach()` term meant that `loss_dx` couldn't send gradients
+              backward, so the encoder wasn't actually trained by the `loss_dx`
+              term. This doesn't improve performance, but shortens the sawtooth
+              loss region significantly, which is promising.  
+              Claude also suggested playing with the loss weights, but that will
+              be saved for the next test.

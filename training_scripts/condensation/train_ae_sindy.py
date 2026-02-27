@@ -134,7 +134,6 @@ def train_and_eval(
             # Forward pass
             z = model.encoder(batch_x)
             pred_x_recon = model.decoder(z)
-            zz = z.clone().detach().requires_grad_()
             pred_dz_tot = model.dzdt(
                 z, batch_S
             )  # In z-space, what is the time derivative of the input? One thing to look at in parity plots
@@ -146,7 +145,7 @@ def train_and_eval(
                 model.encoder, (batch_x,), (batch_dx,)
             )  # Projection of time derivatives through encoder. dz is dx passed through encoder. dz should be compared to pred_dz. "Truth"
             _, pred_dx = torch.func.jvp(
-                model.decoder, (zz,), (pred_dz,)
+                model.decoder, (z,), (pred_dz,)
             )  # Decoded z space time derivative prediction
             # Anything with `pred` prefix involves SINDy, other vars (except pred_x_recon) is everything else
 
@@ -196,12 +195,11 @@ def train_and_eval(
                 # Forward pass
                 pred_x_recon = model.decoder(model.encoder(batch_x))
                 z = model.encoder(batch_x)
-                zz = z.clone().detach().requires_grad_()
                 pred_dz_tot = model.dzdt(z, batch_S)
                 pred_dz = pred_dz_tot[:, :, : -model.n_thermo]
                 pred_dS = pred_dz_tot[:, :, -model.n_thermo :]
                 _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
-                _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
+                _, pred_dx = torch.func.jvp(model.decoder, (z,), (pred_dz,))
 
                 # Calculate test loss
                 loss_dz = criterion(pred_dz, dz)
