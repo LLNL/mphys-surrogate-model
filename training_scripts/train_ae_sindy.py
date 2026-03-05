@@ -505,6 +505,7 @@ if __name__ == "__main__":
     fig = plotting.plot_full_testset_performance_recon(
         best_model, x_test, params["tol"]
     )
+    fig.show()
     if params["emily_save"]:
         fig.savefig(tpsp_plot_dir / (case_name + "_full_test_recon.png"))
     if params["nipun_save"]:

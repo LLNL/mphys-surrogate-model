@@ -544,20 +544,21 @@ def plot_full_testset_performance_recon(model, x_test, tol, saveas=None):
     divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 
     # Determine best and worst performing members
-    test_preds = model.decoder(model.encoder(torch.Tensor(x_test)))
-    test_kl = np.zeros(x_test.shape[0:2])
-    test_wass = np.zeros(x_test.shape[0:2])
-    for nm in range(n_test):
-        for nt in range(n_timesteps):
-            pred_dist = test_preds[nm, nt]
-            true_dist = torch.Tensor(x_test[nm, nt]).reshape(1, 1, -1)
-            test_kl[nm, nt] = divergence(
-                torch.log(pred_dist + tol),
-                torch.log(true_dist + tol),
-            )
-            test_wass[nm, nt] = wasserstein_distance(
-                pred_dist.detach().numpy().ravel(), true_dist.detach().numpy().ravel()
-            )
+    with torch.no_grad():
+        test_preds = model.decoder(model.encoder(torch.Tensor(x_test)))
+        test_kl = np.zeros(x_test.shape[0:2])
+        test_wass = np.zeros(x_test.shape[0:2])
+        for nm in range(n_test):
+            for nt in range(n_timesteps):
+                pred_dist = test_preds[nm, nt]
+                true_dist = torch.Tensor(x_test[nm, nt]).reshape(1, 1, -1)
+                test_kl[nm, nt] = divergence(
+                    torch.log(pred_dist + tol),
+                    torch.log(true_dist + tol),
+                )
+                test_wass[nm, nt] = wasserstein_distance(
+                    pred_dist.detach().numpy().ravel(), true_dist.detach().numpy().ravel()
+                )
 
     # Plot
     fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(34, 5), layout="constrained")
