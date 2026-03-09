@@ -29,14 +29,14 @@ params = {
     "num_epochs": 50,
     "batch_size": 25,
     "learning_rate": 1e-3,
-    "latent_dim": 2,
+    "latent_dim": 3,
     "num_blocks": 3,
     "hidden_size": 128,
     "lr_sched": True,
     "patience": 10,
     "tol": 1e-12,
     "wd": 1e-3,
-    "loss_weight_l2": 1000.0,
+    "loss_weight_l2": 1.0,
     "print_frequency": 1,
     "nipun_save": True,
 }
@@ -240,14 +240,21 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_data, batch_size=x_test.shape[0], shuffle=True)
 
     # Initialize the model
-    enc = nwi.SimpleNWIEncoder(n_bins=64,
-                               n_latent=params["latent_dim"],
-                            )
-    dec = nwi.SimpleDecoder(n_bins=64,
-                               n_latent=params["latent_dim"],
-                               hidden_features=params["hidden_size"],
-                               num_blocks=params["num_blocks"]
-                        )
+    enc = nwi.LinearEncoder(n_bins=64, n_latent=params["latent_dim"])
+    # enc = nwi.SimpleNWIEncoder(n_bins=64,
+    #                            n_latent=params["latent_dim"],
+    #                         )
+    dec = nwi.DeepDecoder(
+        n_bins=64,
+        n_latent=params["latent_dim"],
+        hidden_features=params["hidden_size"],
+        num_blocks=params["num_blocks"],
+    )
+    # dec = nwi.SimpleDecoder(n_bins=64,
+    #                            n_latent=params["latent_dim"],
+    #                            hidden_features=params["hidden_size"],
+    #                            num_blocks=params["num_blocks"]
+    #                     )
     model = nwi.NNWIAutoencoder(enc, dec)
 
     for x_train, _, _ in train_loader:
@@ -295,7 +302,7 @@ if __name__ == "__main__":
     best_model.eval()
     best_model = best_model.to("cpu")
     id = str(uuid.uuid4().hex)
-    prefix = params["data_src"] + "_Simple"
+    prefix = params["data_src"] + "_SimpleLog_fnm"
     case_name = prefix + "_latent{}_hs{}_nb{}_tr{}_lr{}_bs{}_l2w{}_{}".format(
         params["latent_dim"],
         params["hidden_size"],
@@ -378,11 +385,26 @@ if __name__ == "__main__":
     fig.show()
     fig.savefig(runsp_out_dir / (case_name + "_full_test_recon.png"))
 
+    # Plot weight functions
+    import matplotlib.pyplot as plt
+    W = model.encoder.wf_mat().detach().numpy()
+    (fig, ax) = plt.subplots(1, 1, figsize=(6, 4))
+    for i in range(W.shape[-1]):
+        ax.step(r_bins_edges, W[:, i], label=f"W_{i}")
+    plt.xscale('log')
+    plt.legend()
+    plt.xlabel('r (um)')
+    plt.yscale('log')
+    plt.title("NNWI Weight Functions")
+    fig.show()
+    fig.savefig(runsp_out_dir / (case_name + "_weights.png"))
 
-    # Plot latent space
-    fig = plotting.viz_3d_latent_space(
-        best_model,
-        x_test,
-        dsd_time,
-    )
-    fig.write_html(runsp_out_dir / (case_name + "_latent_space.html"))
+    # # Plot latent space
+    # fig = plotting.viz_3d_latent_space(
+    #     best_model,
+    #     x_test,
+    #     dsd_time,
+    # )
+    # fig.write_html(runsp_out_dir / (case_name + "_latent_space.html"))
+
+
