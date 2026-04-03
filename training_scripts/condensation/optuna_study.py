@@ -56,6 +56,8 @@ elif MODEL_TYPE == "AE-SINDy":
 else:
     raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
+MAX_EPOCHS = 100
+
 
 def objective(trial, params, n_bins, train_data, test_data):
     # Set seed
@@ -64,8 +66,8 @@ def objective(trial, params, n_bins, train_data, test_data):
     random.seed(params["random_seed"])
 
     # Hyperparameter options
-    lr = trial.suggest_float("lr", 1e-6, 1e-1, log=True)
-    batch_size = trial.suggest_int("batch_size", 4, 256)
+    lr = trial.suggest_float("lr", 1e-6, 1e-2, log=True)
+    batch_size = trial.suggest_categorical("batch_size", [2**i for i in range(2, 10)])
     if MODEL_TYPE == "AE-AR":
         layer1_size = trial.suggest_int("layer1_size", 20, 180)
         layer2_size = trial.suggest_int("layer2_size", 20, 180)
@@ -97,7 +99,7 @@ def objective(trial, params, n_bins, train_data, test_data):
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
     # Fixed parameters
-    num_epochs = 30  # Reduced for faster trials
+    num_epochs = MAX_EPOCHS  # Reduced for faster trials
 
     # Initialize the model
     if MODEL_TYPE == "AE-AR":
@@ -202,7 +204,7 @@ def optimize_worker(args):
 
 
 if __name__ == "__main__":
-    total_trials = 1000  # On mac with 8 perf. cores, choose multiple of 8 total_trials
+    total_trials = 512  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
     # Open dataset
@@ -248,7 +250,11 @@ if __name__ == "__main__":
 
     # Set up study
     sampler = optuna.samplers.TPESampler()
-    pruner = optuna.pruners.HyperbandPruner()
+    pruner = optuna.pruners.HyperbandPruner(
+        min_resource=MAX_EPOCHS / 2,  # don't consider pruning before epoch 50
+        max_resource=MAX_EPOCHS,  # maximum epochs per trial
+        reduction_factor=3,  # default, controls bracket sizes)
+    )
     study = optuna.create_study(
         storage=storage_url,
         sampler=sampler,
