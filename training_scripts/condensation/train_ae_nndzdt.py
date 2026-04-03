@@ -12,8 +12,6 @@ from pathlib import Path
 import optuna
 from matplotlib import pyplot as plt
 
-from training_scripts.coalescence.train_ae_NNdzdt import AENNdzdt
-
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
@@ -40,7 +38,7 @@ params = {
     "tol": 1e-8,
     "wd": 1e-3,
     "lambda1_metaweight": 1,
-    "loss_weight_sindy_S": 1000,  # TODO: explore more
+    "loss_weight_S": 1000,  # TODO: explore more
     "print_frequency": 1,
     "load_ae_from": None,
     # "../../results/Optuna/ERF Dataset/NNdzdt_2025-07-20T23:31:20_3a400c596947422389559813cd41dfe6/erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3",
@@ -131,11 +129,8 @@ def train_and_eval(
             batch_dS = batch_dS.to(device)
 
             # Forward pass
-            pred_x_recon = model.decoder(
-                model.encoder(batch_x)
-            )  # Better reconstruction is the prerequisite for good performance - Good temporal predictions come from recon
             z = model.encoder(batch_x)
-            zz = z.clone().detach().requires_grad_()
+            pred_x_recon = model.decoder(z)
             pred_dz_tot = model.dzdt(
                 z, batch_S
             )  # In z-space, what is the time derivative of the input? One thing to look at in parity plots
@@ -147,7 +142,7 @@ def train_and_eval(
                 model.encoder, (batch_x,), (batch_dx,)
             )  # Projection of time derivatives through encoder. dz is dx passed through encoder. dz should be compared to pred_dz. "Truth"
             _, pred_dx = torch.func.jvp(
-                model.decoder, (zz,), (pred_dz,)
+                model.decoder, (z,), (pred_dz,)
             )  # Decoded z space time derivative prediction
             # Anything with `pred` prefix involves SINDy, other vars (except pred_x_recon) is everything else
 
@@ -162,10 +157,10 @@ def train_and_eval(
                 torch.log(batch_x + parameters["tol"]),
             )
             loss = (
-                parameters["loss_weight_sindy_x"] * loss_dx
+                parameters["loss_weight_x"] * loss_dx
                 + parameters["loss_weight_recon"] * loss_recon
-                + parameters["loss_weight_sindy_z"] * loss_dz
-                + parameters["loss_weight_sindy_S"] * loss_dS
+                + parameters["loss_weight_z"] * loss_dz
+                + parameters["loss_weight_S"] * loss_dS
             )
 
             mean_epoch_loss[0] += loss.item()
@@ -176,7 +171,7 @@ def train_and_eval(
 
             # Backward pass and optimization
             optimizer.zero_grad(set_to_none=True)
-            loss.backward(retain_graph=True)
+            loss.backward(retain_graph=False)
             optimizer.step()
 
         # Save train losses
@@ -188,44 +183,51 @@ def train_and_eval(
 
         # Test
         model.eval()
-        for batch_x, batch_dx, batch_S, batch_dS in test_loader:
-            batch_x = batch_x.to(device)
-            batch_dx = batch_dx.to(device)
-            batch_S = batch_S.to(device)
-            batch_dS = batch_dS.to(device)
+        mean_test_loss = [0, 0, 0, 0, 0]
+        with torch.no_grad():
+            for batch_x, batch_dx, batch_S, batch_dS in test_loader:
+                batch_x = batch_x.to(device)
+                batch_dx = batch_dx.to(device)
+                batch_S = batch_S.to(device)
+                batch_dS = batch_dS.to(device)
 
-            # Forward pass
-            pred_x_recon = model.decoder(model.encoder(batch_x))
-            z = model.encoder(batch_x)
-            zz = z.clone().detach().requires_grad_()
-            pred_dz_tot = model.dzdt(z, batch_S)
-            pred_dz = pred_dz_tot[:, :, : -model.n_thermo]
-            pred_dS = pred_dz_tot[:, :, -model.n_thermo :]
-            _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
-            _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
+                # Forward pass
+                pred_x_recon = model.decoder(model.encoder(batch_x))
+                z = model.encoder(batch_x)
+                pred_dz_tot = model.dzdt(z, batch_S)
+                pred_dz = pred_dz_tot[:, :, : -model.n_thermo]
+                pred_dS = pred_dz_tot[:, :, -model.n_thermo :]
+                _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
+                _, pred_dx = torch.func.jvp(model.decoder, (z,), (pred_dz,))
 
-            # Calculate test loss
-            loss_dz = criterion(pred_dz, dz)
-            loss_dS = criterion(pred_dS, batch_dS)
-            loss_dx = criterion(pred_dx, batch_dx)
-            loss_recon = divergence(
-                torch.log(pred_x_recon + parameters["tol"]),
-                torch.log(batch_x + parameters["tol"]),
-            )
+                # Calculate test loss
+                loss_dz = criterion(pred_dz, dz)
+                loss_dS = criterion(pred_dS, batch_dS)
+                loss_dx = criterion(pred_dx, batch_dx)
+                loss_recon = divergence(
+                    torch.log(pred_x_recon + parameters["tol"]),
+                    torch.log(batch_x + parameters["tol"]),
+                )
 
-            loss = (
-                parameters["loss_weight_sindy_x"] * loss_dx
-                + parameters["loss_weight_recon"] * loss_recon
-                + parameters["loss_weight_sindy_z"] * loss_dz
-                + parameters["loss_weight_sindy_S"] * loss_dS
-            )
+                loss = (
+                    parameters["loss_weight_x"] * loss_dx
+                    + parameters["loss_weight_recon"] * loss_recon
+                    + parameters["loss_weight_z"] * loss_dz
+                    + parameters["loss_weight_S"] * loss_dS
+                )
+
+                mean_test_loss[0] += loss.item()
+                mean_test_loss[1] += loss_recon.item()
+                mean_test_loss[2] += loss_dx.item()
+                mean_test_loss[3] += loss_dz.item()
+                mean_test_loss[4] += loss_dS.item()
 
         # Save test losses
-        test_losses[epoch] = loss.item()
-        test_recon_losses[epoch] = loss_recon.item()
-        test_dx_losses[epoch] = loss_dx.item()
-        test_dz_losses[epoch] = loss_dz.item()
-        test_dS_losses[epoch] = loss_dS.item()
+        test_losses[epoch] = mean_test_loss[0] / len(test_loader)
+        test_recon_losses[epoch] = mean_test_loss[1] / len(test_loader)
+        test_dx_losses[epoch] = mean_test_loss[2] / len(test_loader)
+        test_dz_losses[epoch] = mean_test_loss[3] / len(test_loader)
+        test_dS_losses[epoch] = mean_test_loss[4] / len(test_loader)
 
         # Save good model
         if loss < best_test_loss:
@@ -249,9 +251,9 @@ def train_and_eval(
             )
             print(
                 f"Recon: {parameters['loss_weight_recon'] * recon_losses[epoch]:.4f} | "
-                f"dx: {parameters['loss_weight_sindy_x'] * dx_losses[epoch]:.4f} | "
-                f"dz: {parameters['loss_weight_sindy_z'] * dz_losses[epoch]:.4f} | "
-                f"dS: {parameters['loss_weight_sindy_S'] * dS_losses[epoch]:.4f}"
+                f"dx: {parameters['loss_weight_x'] * dx_losses[epoch]:.4f} | "
+                f"dz: {parameters['loss_weight_z'] * dz_losses[epoch]:.4f} | "
+                f"dS: {parameters['loss_weight_S'] * dS_losses[epoch]:.4f}"
             )
 
         # Optional optuna report
@@ -402,8 +404,8 @@ if __name__ == "__main__":
         train_data, lambda1_metaweight=params["lambda1_metaweight"]
     )
     params["loss_weight_recon"] = 1.0
-    params["loss_weight_sindy_x"] = lambda_x
-    params["loss_weight_sindy_z"] = lambda_z
+    params["loss_weight_x"] = lambda_x
+    params["loss_weight_z"] = lambda_z
 
     # Training loop
     # ----------------------------------------------------------------------------------
@@ -447,9 +449,9 @@ if __name__ == "__main__":
         params["learning_rate"],
         params["batch_size"],
         params["loss_weight_recon"],
-        params["loss_weight_sindy_z"],
-        params["loss_weight_sindy_x"],
-        params["loss_weight_sindy_S"],
+        params["loss_weight_z"],
+        params["loss_weight_x"],
+        params["loss_weight_S"],
         id,
     )
     print(f"Save ID is {case_name}")
@@ -502,9 +504,9 @@ if __name__ == "__main__":
         losses,
         test_losses=test_losses,
         sub_losses=[
-            params["loss_weight_sindy_x"] * np.array(dx_losses),
-            params["loss_weight_sindy_z"] * np.array(dz_losses),
-            params["loss_weight_sindy_S"] * np.array(dS_losses),
+            params["loss_weight_x"] * np.array(dx_losses),
+            params["loss_weight_z"] * np.array(dz_losses),
+            params["loss_weight_S"] * np.array(dS_losses),
             params["loss_weight_recon"] * np.array(recon_losses),
         ],
         labels=["dx/dt", "dz/dt", "dS/dt", "Recon"],
