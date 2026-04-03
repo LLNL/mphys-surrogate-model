@@ -39,3 +39,6 @@ folders and the changes made to them.
               loss region significantly, which is promising.  
               Claude also suggested playing with the loss weights, but that will
               be saved for the next test.
+
+Testing on the AE-SINDy model has ended as of April 3, 2026. Domain knowledge suggests
+that AE-SINDy isn't a very good model for this task.
