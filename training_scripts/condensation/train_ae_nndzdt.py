@@ -66,6 +66,7 @@ class AENNdzdtThermo(torch.nn.Module):
         n_bins=100,
         n_latent=10,
         n_thermo=3,
+        layer_size=(42, 36, 46),
     ):
         super(AENNdzdtThermo, self).__init__()
         self.n_thermo = n_thermo
@@ -75,7 +76,7 @@ class AENNdzdtThermo(torch.nn.Module):
             n_bins=n_bins, n_latent=n_latent, distribution=True
         )
         self.dzdt = models.NNDerivatives(
-            n_latent=n_latent + n_thermo, layer_size=[42, 36, 46]
+            n_latent=n_latent + n_thermo, layer_size=layer_size
         )
 
     def forward(self, bin0, thermo):
@@ -357,29 +358,29 @@ if __name__ == "__main__":
         n_thermo=n_thermo,
     )
 
-    if params["load_ae_from"] is not None:
-        # Load the coalescence ROM
-        ae_sindy = AENNdzdtThermo(
-            n_channels=1,
-            n_bins=n_bins,
-            n_latent=3,
-            n_thermo=1,
-        )
-        model_dir = Path(params["load_ae_from"])
-        model_files = list(model_dir.glob(f"*.pth"))
-        if not model_files:
-            raise FileNotFoundError(f"No model files found")
-        ae_sindy.load_state_dict(torch.load(model_files[0], weights_only=True))
-
-        # transfer and fix the autoencoder parameters
-        model.encoder = ae_sindy.encoder
-        # for param in model.encoder.parameters():
-        #     param.requires_grad = False
-        model.decoder = ae_sindy.decoder
-        # for param in model.decoder.parameters():
-        #     param.requires_grad = False
-        # model.encoder.eval()
-        # model.decoder.eval()
+    # if params["load_ae_from"] is not None:
+    #     # Load the coalescence ROM
+    #     ae_sindy = AENNdzdtThermo(
+    #         n_channels=1,
+    #         n_bins=n_bins,
+    #         n_latent=3,
+    #         n_thermo=1,
+    #     )
+    #     model_dir = Path(params["load_ae_from"])
+    #     model_files = list(model_dir.glob(f"*.pth"))
+    #     if not model_files:
+    #         raise FileNotFoundError(f"No model files found")
+    #     ae_sindy.load_state_dict(torch.load(model_files[0], weights_only=True))
+    #
+    #     # transfer and fix the autoencoder parameters
+    #     model.encoder = ae_sindy.encoder
+    #     # for param in model.encoder.parameters():
+    #     #     param.requires_grad = False
+    #     model.decoder = ae_sindy.decoder
+    #     # for param in model.decoder.parameters():
+    #     #     param.requires_grad = False
+    #     # model.encoder.eval()
+    #     # model.decoder.eval()
 
     # Optimizer and scheduling
     optimizer = torch.optim.AdamW(
