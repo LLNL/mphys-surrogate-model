@@ -1,5 +1,5 @@
 """
-Script to conduct hyperparameter optimization with Optuna for the AE-SINDy condensation model
+Script to conduct hyperparameter optimization with Optuna for the condensation model
 """
 
 import csv
@@ -24,12 +24,11 @@ sys.path.append(project_root)
 import src.data_utils as du
 
 # MODEL_TYPE = "AE-AR"  # Don't uncomment for now
-# MODEL_TYPE = "NNdzdt"  # Don't uncomment for now
-MODEL_TYPE = "AE-SINDy"
+MODEL_TYPE = "NNdzdt"  # Don't uncomment for now
+# MODEL_TYPE = "AE-SINDy"
 
-# We want to keep code for other models, but for now let's ensure
-# that only the AE-SINDy model is being tested for condensation
-if MODEL_TYPE == "AE-AR" or MODEL_TYPE == "NNdzdt":
+# AE-AR model not implemented for condensation yet
+if MODEL_TYPE == "AE-AR":
     raise NotImplementedError(
         f"Model type {MODEL_TYPE} not implemented for condensation dataset yet"
     )
@@ -41,10 +40,11 @@ if MODEL_TYPE == "AE-AR":
         train_and_eval,
     )
 elif MODEL_TYPE == "NNdzdt":
-    from training_scripts.coalescence.train_ae_NNdzdt import (
-        AENNdzdt,
+    from training_scripts.condensation.train_ae_nndzdt import (
+        AENNdzdtThermo,
         params,
         train_and_eval,
+        get_ae_nndzdt_preds,
     )
 elif MODEL_TYPE == "AE-SINDy":
     from training_scripts.condensation.train_ae_sindy import (
@@ -75,10 +75,13 @@ def objective(trial, params, n_bins, train_data, test_data):
         w_dx = trial.suggest_float("w_dx", 0.1, 1.9)
         w_dz = trial.suggest_float("w_dz", 0.1, 1.9)
     elif MODEL_TYPE == "NNdzdt":
-        layer1_size = trial.suggest_int("layer1_size", 20, 60)
-        layer2_size = trial.suggest_int("layer2_size", 20, 60)
-        layer3_size = trial.suggest_int("layer3_size", 20, 60)
+        num_layers = 3
+        layers = []
+        for i in range(num_layers):
+            ls = trial.suggest_int(f"layer{i}_size", 10, 150)
+            layers.append(ls)
         lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
+        lambda_S = trial.suggest_float("lambda_S", 1e-5, 1e0, log=True)
     elif MODEL_TYPE == "AE-SINDy":
         # # Latent dim and poly order
         # latent_dim = trial.suggest_int("latent_dim", 1, 4)
@@ -117,13 +120,14 @@ def objective(trial, params, n_bins, train_data, test_data):
             train_data, lambda1_metaweight=lambda1_metaweight, lambda3=1.0
         )
         params["loss_weight_recon"] = lambda3
-        params["loss_weight_sindy_x"] = lambda1
-        params["loss_weight_sindy_z"] = lambda2
-        model = AENNdzdt(
+        params["loss_weight_x"] = lambda1
+        params["loss_weight_z"] = lambda2
+        params["loss_weight_S"] = lambda_S
+        model = AENNdzdtThermo(
             n_channels=1,
             n_bins=n_bins,
             n_latent=params["latent_dim"],
-            layer_size=(layer1_size, layer2_size, layer3_size),
+            layer_size=layers,
         )
     elif MODEL_TYPE == "AE-SINDy":
         lambda_x, lambda_z, lambda_r = du.champion_calculate_weights(
@@ -176,9 +180,9 @@ def objective(trial, params, n_bins, train_data, test_data):
             f"Model type {MODEL_TYPE} not implemented for condensation dataset yet"
         )
     elif MODEL_TYPE == "NNdzdt":
-        raise NotImplementedError(
-            f"Model type {MODEL_TYPE} not implemented for condensation dataset yet"
-        )
+        _, _, _, train_pred_dx = get_ae_nndzdt_preds(train_data, best_model)
+        tdx = train_data.dx.squeeze()
+        pdx = train_pred_dx.detach().numpy().squeeze()
     elif MODEL_TYPE == "AE-SINDy":
         _, _, _, train_pred_dx = get_ae_sindy_preds(train_data, best_model)
         tdx = train_data.dx.squeeze()
@@ -204,7 +208,7 @@ def optimize_worker(args):
 
 
 if __name__ == "__main__":
-    total_trials = 512  # On mac with 8 perf. cores, choose multiple of 8 total_trials
+    total_trials = 8  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
     # Open dataset
