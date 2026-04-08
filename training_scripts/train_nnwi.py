@@ -244,17 +244,17 @@ if __name__ == "__main__":
     # enc = nwi.SimpleNWIEncoder(n_bins=64,
     #                            n_latent=params["latent_dim"],
     #                         )
-    dec = nwi.DeepDecoder(
-        n_bins=64,
-        n_latent=params["latent_dim"],
-        hidden_features=params["hidden_size"],
-        num_blocks=params["num_blocks"],
-    )
-    # dec = nwi.SimpleDecoder(n_bins=64,
-    #                            n_latent=params["latent_dim"],
-    #                            hidden_features=params["hidden_size"],
-    #                            num_blocks=params["num_blocks"]
-    #                     )
+    # dec = nwi.DeepDecoder(
+    #     n_bins=64,
+    #     n_latent=params["latent_dim"],
+    #     hidden_features=params["hidden_size"],
+    #     num_blocks=params["num_blocks"],
+    # )
+    dec = nwi.SimpleDecoder(n_bins=64,
+                               n_latent=params["latent_dim"],
+                               hidden_features=params["hidden_size"],
+                               num_blocks=params["num_blocks"]
+                        )
     model = nwi.NNWIAutoencoder(enc, dec)
 
     for x_train, _, _ in train_loader:
