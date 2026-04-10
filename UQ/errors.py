@@ -146,10 +146,10 @@ for model in models:
 # ----------------
 # Architecture labels & mapping
 if args.subset == "nomass":
-    arch_labels = ["Reconstruction", "Latent dynamics", "End-to-end"]
+    arch_labels = ["Reconstruction", "Latent time evolution", "End-to-end"]
 else:  # "all"
     # 2x2 with recon / end-to-end top, latent / mass bottom
-    arch_labels = ["End-to-end", "Reconstruction", "Latent dynamics", "Mass"]
+    arch_labels = ["End-to-end", "Reconstruction", "Latent time evolution", "Mass"]
 
 # Common style
 model_colors = {"SINDy": "tab:orange", "NNdzdt": "tab:green", "AR": "tab:red"}
@@ -174,7 +174,7 @@ def plot_panel(ax, label):
                 )
             ax.set_yscale("log")
             ax.set_ylabel("Mass interval")
-        elif label == "Latent dynamics":
+        elif label == "Latent time evolution":
             y = volumes[model][:, 1:]  # (K,T-1)
             for k, alpha in enumerate(alphas):
                 ax.plot(
@@ -206,14 +206,14 @@ if args.subset == "all":
     fig, axes = plt.subplots(
         2, 2, figsize=(6, 5), sharex=False, sharey=False, constrained_layout=True
     )
-    order = ["End-to-end", "Reconstruction", "Latent dynamics", "Mass"]  # row-major
+    order = ["End-to-end", "Reconstruction", "Latent time evolution", "Mass"]  # row-major
     for ax, label in zip(axes.flat, order):
         plot_panel(ax, label)
 else:  # nomass -> 3x1 vertical
     fig, axes = plt.subplots(
         1, 3, figsize=(12, 3.6), sharex=False, sharey=False, constrained_layout=True
     )
-    for ax, label in zip(axes, ["Reconstruction", "Latent dynamics", "End-to-end"]):
+    for ax, label in zip(axes, ["Reconstruction", "Latent time evolution", "End-to-end"]):
         plot_panel(ax, label)
 
 # Legends: (1) models (colors) and (2) miscoverage (linestyles)
