@@ -66,7 +66,7 @@ def objective(trial, params, n_bins, train_data, test_data):
     random.seed(params["random_seed"])
 
     # Hyperparameter options
-    lr = trial.suggest_float("lr", 1e-6, 1e-2, log=True)
+    lr = trial.suggest_float("lr", 1e-6, 1e-1, log=True)
     batch_size = trial.suggest_categorical("batch_size", [2**i for i in range(2, 10)])
     if MODEL_TYPE == "AE-AR":
         layer1_size = trial.suggest_int("layer1_size", 20, 180)
@@ -258,10 +258,15 @@ if __name__ == "__main__":
 
     # Set up study
     sampler = optuna.samplers.TPESampler()
-    pruner = optuna.pruners.HyperbandPruner(
-        min_resource=MAX_EPOCHS / 2,  # don't consider pruning before epoch 50
-        max_resource=MAX_EPOCHS,  # maximum epochs per trial
-        reduction_factor=3,  # default, controls bracket sizes)
+    # pruner = optuna.pruners.HyperbandPruner(
+    #     min_resource=5,  # Don't consider pruning until epoch 5. With reduction_factor = 3, and max_resources = 100, will consider pruning at epochs 5, 15, 45, 100
+    #     max_resource=MAX_EPOCHS,  # maximum epochs per trial
+    #     reduction_factor=3,  # default, controls bracket sizes)
+    # )
+    pruner = optuna.pruners.MedianPruner(
+        n_startup_trials=10,  # don't prune at all for first 10 trials
+        n_warmup_steps=30,  # don't prune any trial before epoch 30
+        interval_steps=5,  # check every 5 epochs after warmup
     )
     study = optuna.create_study(
         storage=storage_url,
