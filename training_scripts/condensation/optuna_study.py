@@ -75,13 +75,17 @@ def objective(trial, params, n_bins, train_data, test_data):
         w_dx = trial.suggest_float("w_dx", 0.1, 1.9)
         w_dz = trial.suggest_float("w_dz", 0.1, 1.9)
     elif MODEL_TYPE == "NNdzdt":
-        num_layers = 3
+        num_layers = trial.suggest_int("num_layers", 2, 7)
         layers = []
         for i in range(num_layers):
-            ls = trial.suggest_int(f"layer{i}_size", 10, 150)
+            ls = trial.suggest_int(f"layer{i}_size", 10, 200)
             layers.append(ls)
-        lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
-        lambda_S = trial.suggest_float("lambda_S", 1e-5, 1e0, log=True)
+        # lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
+        # lambda_S = trial.suggest_float("lambda_S", 1e-5, 1e0, log=True)
+        lambda_x = trial.suggest_float("lambda_x", 1e-6, 1e1, log=True)
+        lambda_z = trial.suggest_float("lambda_z", 1e-6, 1e1, log=True)
+        lambda_S = trial.suggest_float("lambda_S", 1e-6, 1e1, log=True)
+        lambda_r = 1.0
     elif MODEL_TYPE == "AE-SINDy":
         # # Latent dim and poly order
         # latent_dim = trial.suggest_int("latent_dim", 1, 4)
@@ -116,12 +120,12 @@ def objective(trial, params, n_bins, train_data, test_data):
             n_lag=params["n_lag"],
         )
     elif MODEL_TYPE == "NNdzdt":
-        lambda1, lambda2, lambda3 = du.champion_calculate_weights(
-            train_data, lambda1_metaweight=lambda1_metaweight, lambda3=1.0
-        )
-        params["loss_weight_recon"] = lambda3
-        params["loss_weight_x"] = lambda1
-        params["loss_weight_z"] = lambda2
+        # lambda1, lambda2, lambda3 = du.champion_calculate_weights(
+        #     train_data, lambda1_metaweight=lambda1_metaweight, lambda3=1.0
+        # )
+        params["loss_weight_recon"] = lambda_r
+        params["loss_weight_x"] = lambda_x
+        params["loss_weight_z"] = lambda_z
         params["loss_weight_S"] = lambda_S
         model = AENNdzdtThermo(
             n_channels=1,
@@ -324,22 +328,8 @@ if __name__ == "__main__":
 
     # Save all trials to CSV
     csv_file = output_directory / "all_trials.csv"
-    with csv_file.open("w", newline="") as f:
-        fieldnames = ["trial_number", "value", "state", "duration"] + list(
-            study.best_trial.params.keys()
-        )
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-
-        for trial in study.trials:
-            row = {
-                "trial_number": trial.number,
-                "value": trial.value,
-                "state": trial.state.name,
-                "duration": str(trial.duration),
-            }
-            row.update(trial.params)
-            writer.writerow(row)
+    res_frame = study.trials_dataframe()
+    res_frame.to_csv(csv_file)
 
     # Print best value
     print("Best trial:")
