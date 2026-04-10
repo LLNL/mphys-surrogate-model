@@ -211,81 +211,60 @@ class SINDyDeriv(torch.nn.Module):
 
 
 class NNDerivatives(torch.nn.Module):
-    def __init__(self, n_latent=3, layer_size=None):
+    def __init__(self, n_latent=3, layer_sizes=None):
         """
-        Pytorch black box model to predict time derivatives directly  of droplet
+        Pytorch black box model to predict time derivatives directly of droplet
         size distributions directly (while SINDy predicts a simplified equation form
         of time derivatives). Paired with autoencoder.
 
         :param n_latent: Number of latent variables
-        :param layer_size: Number of layers and sizes used in network, e.g. [40, 45, 35]
-                           is a three layer network with 40, 45, and 35 nodes for each
-                           hidden layer.
+        :param layer_sizes: Tuple of hidden layer sizes, e.g. (40, 45, 35) for a
+                            three-layer network. Defaults to (n_latent, n_latent, n_latent).
         """
         super(NNDerivatives, self).__init__()
         self.n_latent = n_latent
-        if layer_size is None:
-            layer_size = (n_latent, n_latent, n_latent)
-        else:
-            assert len(layer_size) == 3
+        if layer_sizes is None:
+            layer_sizes = (n_latent, n_latent, n_latent)
 
-        self.layer1 = Linear(n_latent, layer_size[0])
-        self.layer2 = Linear(layer_size[0], layer_size[1])
-        self.layer3 = Linear(layer_size[1], layer_size[2])
-        self.layer4 = Linear(layer_size[2], n_latent)
-        self.activation1 = SiLU()
-        self.activation2 = SiLU()
-        self.activation3 = SiLU()
-
-        self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
-        self.act = [
-            self.activation1,
-            self.activation2,
-            self.activation3,
-        ]
+        # Build all layer dimensions: input -> hidden... -> output
+        dims = (n_latent, *layer_sizes, n_latent)
+        self.layers = nn.ModuleList(
+            [Linear(dims[i], dims[i + 1]) for i in range(len(dims) - 1)]
+        )
+        self.activations = nn.ModuleList(
+            [SiLU() for _ in layer_sizes]  # One activation per hidden layer
+        )
 
         self.initialize_network()
 
     def forward(self, z, M=None):
-        if M is not None:
-            x = torch.cat([z, M], dim=-1)
-        else:
-            x = z
-        x = self.layer1(x)
-        x = self.activation1(x)
-        x = self.layer2(x)
-        x = self.activation2(x)
-        x = self.layer3(x)
-        x = self.activation3(x)
-        x = self.layer4(x)
-
+        x = torch.cat([z, M], dim=-1) if M is not None else z
+        for layer, act in zip(self.layers[:-1], self.activations):
+            x = act(layer(x))
+        x = self.layers[-1](x)  # Output layer — no activation
         return x
 
     def get_weights(self):
-        weights = []
-        biases = []
-        for i, layer in enumerate(self.layers):
-            weights.append(layer.weight)
-            biases.append(layer.bias)
-
-        return (weights, biases)
+        weights = [layer.weight for layer in self.layers]
+        biases = [layer.bias for layer in self.layers]
+        return weights, biases
 
     def set_weights(self, weights, biases):
-        for i, layer in enumerate(self.layers):
-            layer.weight.data = weights[i]
-            layer.bias.data = biases[i]
+        for layer, w, b in zip(self.layers, weights, biases):
+            layer.weight.data = w
+            layer.bias.data = b
 
     def initialize_network(self):
-        for i, module in enumerate(self.layers):
-            if isinstance(module, nn.Linear):
-                if i < len(self.layers) - 1:  # Hidden layers with SiLU
+        for i, layer in enumerate(self.layers):
+            if isinstance(layer, nn.Linear):
+                if i < len(self.layers) - 1:  # Hidden layers
                     nn.init.kaiming_normal_(
-                        module.weight, mode="fan_in", nonlinearity="relu"
+                        layer.weight, mode="fan_in", nonlinearity="relu"
                     )
-                    nn.init.constant_(module.bias, 0.0)
-                else:  # Output layer (no activation)
-                    nn.init.normal_(module.weight, mean=0.0, std=0.01)
-                    nn.init.constant_(module.bias, 0.0)
+                    nn.init.constant_(layer.bias, 0.0)
+                else:  # Output layer
+                    nn.init.normal_(layer.weight, mean=0.0, std=0.01)
+                    nn.init.constant_(layer.bias, 0.0)
 
 
 class Autoregressive(torch.nn.Module):

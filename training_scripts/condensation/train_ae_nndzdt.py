@@ -41,7 +41,7 @@ params = {
     "loss_weight_S": 0.03585748394460779,
     "print_frequency": 1,
     "load_ae_from": None,
-    "layer_size": (12, 123, 107),  # For now, has to be 3 layers
+    "layer_sizes": (12, 123, 107),  # For now, has to be 3 layers
     # "../../results/Optuna/ERF Dataset/NNdzdt_2025-07-20T23:31:20_3a400c596947422389559813cd41dfe6/erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3",
 }
 
@@ -63,9 +63,9 @@ class AENNdzdtThermo(torch.nn.Module):
         self,
         n_channels=1,
         n_bins=100,
-        n_latent=10,
+        n_latent=3,
         n_thermo=3,
-        layer_size=(42, 36, 46),
+        layer_sizes=(42, 36, 46),
     ):
         super(AENNdzdtThermo, self).__init__()
         self.n_thermo = n_thermo
@@ -75,7 +75,7 @@ class AENNdzdtThermo(torch.nn.Module):
             n_bins=n_bins, n_latent=n_latent, distribution=True
         )
         self.dzdt = models.NNDerivatives(
-            n_latent=n_latent + n_thermo, layer_size=layer_size
+            n_latent=n_latent + n_thermo, layer_sizes=layer_sizes
         )
 
     def forward(self, bin0, thermo):
@@ -359,7 +359,7 @@ if __name__ == "__main__":
         n_bins=n_bins,
         n_latent=params["latent_dim"],
         n_thermo=n_thermo,
-        layer_size=params["layer_size"],
+        layer_sizes=params["layer_sizes"],
     )
 
     # if params["load_ae_from"] is not None:

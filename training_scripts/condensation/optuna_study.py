@@ -127,7 +127,7 @@ def objective(trial, params, n_bins, train_data, test_data):
             n_channels=1,
             n_bins=n_bins,
             n_latent=params["latent_dim"],
-            layer_size=layers,
+            layer_sizes=layers,
         )
     elif MODEL_TYPE == "AE-SINDy":
         lambda_x, lambda_z, lambda_r = du.champion_calculate_weights(
