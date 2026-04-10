@@ -59,7 +59,7 @@ else:
 MAX_EPOCHS = 100
 
 
-def objective(trial, params, n_bins, train_data, test_data):
+def objective(trial, params, n_bins, train_data, test_data, max_epochs=MAX_EPOCHS):
     # Set seed
     torch.manual_seed(params["random_seed"])
     np.random.seed(params["random_seed"])
@@ -104,9 +104,6 @@ def objective(trial, params, n_bins, train_data, test_data):
         # lambda_r = 1.0
     else:
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
-
-    # Fixed parameters
-    num_epochs = MAX_EPOCHS  # Reduced for faster trials
 
     # Initialize the model
     if MODEL_TYPE == "AE-AR":
@@ -165,7 +162,7 @@ def objective(trial, params, n_bins, train_data, test_data):
 
     # Training loop
     train_output = train_and_eval(
-        num_epochs,
+        max_epochs,
         model,
         train_loader,
         test_loader,
@@ -212,7 +209,10 @@ def optimize_worker(args):
 
 
 if __name__ == "__main__":
-    total_trials = 8  # On mac with 8 perf. cores, choose multiple of 8 total_trials
+    n_startup_trials = 24
+    total_trials = (
+        n_startup_trials + 8
+    )  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
     # Open dataset
@@ -257,7 +257,6 @@ if __name__ == "__main__":
     study_name = MODEL_TYPE
 
     # Set up study
-    sampler = optuna.samplers.TPESampler()
     # pruner = optuna.pruners.HyperbandPruner(
     #     min_resource=5,  # Don't consider pruning until epoch 5. With reduction_factor = 3, and max_resources = 100, will consider pruning at epochs 5, 15, 45, 100
     #     max_resource=MAX_EPOCHS,  # maximum epochs per trial
@@ -268,9 +267,14 @@ if __name__ == "__main__":
         n_warmup_steps=30,  # don't prune any trial before epoch 30
         interval_steps=5,  # check every 5 epochs after warmup
     )
+    tpe_sampler = optuna.samplers.TPESampler(
+        n_startup_trials=n_startup_trials,  # pure random exploration for first trials
+        seed=params["random_seed"],
+        multivariate=True,  # Experimental, may want to remove
+    )
     study = optuna.create_study(
         storage=storage_url,
-        sampler=sampler,
+        sampler=tpe_sampler,
         pruner=pruner,
         study_name=study_name,
         direction="minimize",
