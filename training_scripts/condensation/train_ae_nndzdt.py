@@ -30,7 +30,7 @@ params = {
     "random_seed": 10,
     "num_epochs": 1000,
     "batch_size": 8,
-    "learning_rate": 0.00027336077536142746,
+    "learning_rate": 0.004203623180206573,
     "latent_dim": 3,
     "poly_order": 4,
     "lr_sched": True,
@@ -41,7 +41,7 @@ params = {
     "loss_weight_S": 0.03585748394460779,
     "print_frequency": 1,
     "load_ae_from": None,
-    "layer_sizes": (12, 123, 107),  # For now, has to be 3 layers
+    "layer_sizes": (44, 133, 111),  # For now, has to be 3 layers
     # "../../results/Optuna/ERF Dataset/NNdzdt_2025-07-20T23:31:20_3a400c596947422389559813cd41dfe6/erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3",
 }
 
@@ -402,12 +402,13 @@ if __name__ == "__main__":
     )
 
     # Compute & set weights based on Champion et al recs
-    lambda_x, lambda_z, _ = du.champion_calculate_weights(
-        train_data, lambda1_metaweight=params["lambda1_metaweight"]
-    )
+    # lambda_x, lambda_z, _ = du.champion_calculate_weights(
+    #     train_data, lambda1_metaweight=params["lambda1_metaweight"]
+    # )
     params["loss_weight_recon"] = 1.0
-    params["loss_weight_x"] = lambda_x
-    params["loss_weight_z"] = lambda_z
+    params["loss_weight_x"] = 2.1462587953490413
+    params["loss_weight_z"] = 0.005204891427698845
+    params["loss_weight_S"] = 0.00036211335716386224
 
     # Training loop
     # ----------------------------------------------------------------------------------

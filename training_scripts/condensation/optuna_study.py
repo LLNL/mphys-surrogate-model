@@ -60,6 +60,8 @@ MAX_EPOCHS = 100
 
 
 def objective(trial, params, n_bins, train_data, test_data, max_epochs=MAX_EPOCHS):
+    params = params.copy()
+
     # Set seed
     torch.manual_seed(params["random_seed"])
     np.random.seed(params["random_seed"])
