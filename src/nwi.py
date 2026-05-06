@@ -11,10 +11,10 @@ class ResBlock(nn.Module):
         super(ResBlock, self).__init__()
 
         self.stack = nn.Sequential(
-            nn.BatchNorm1d(num_features),
+            nn.LayerNorm(num_features),
             nn.LeakyReLU(),
             nn.Linear(num_features, num_features),
-            nn.BatchNorm1d(num_features),
+            nn.LayerNorm(num_features),
             nn.LeakyReLU(),
             nn.Linear(num_features, num_features),
         )
@@ -50,7 +50,7 @@ class SimpleBlock(nn.Module):
 # From Huang 2024 https://zenodo.org/records/12866868
 def DNN(in_features, out_features, hidden_features=256, num_resblocks=5):
     return nn.Sequential(
-        nn.BatchNorm1d(in_features),
+        nn.LayerNorm(in_features),
         nn.Linear(in_features, hidden_features),
         *[ResBlock(hidden_features) for _ in range(num_resblocks)],
         nn.Linear(hidden_features, out_features)
@@ -72,16 +72,15 @@ class NNWF(nn.Module):
             ResBlock(num_features=nodes),
             nn.Linear(nodes, 1),
         )
-        self.log_bin_mass = torch.linspace(-1, 1, in_features)[:, None]
+        self.register_buffer(
+            "log_bin_mass",
+            torch.linspace(-1, 1, in_features)[:, None]
+        )
         self.in_features = 1
         self.out_features = 1
 
     def forward(self):
         return self.stack(self.log_bin_mass) # note: exp moved to LinearEncoder softmax
-
-    def to(self, device):
-        self.log_bin_mass = self.log_bin_mass.to(device)
-        return super().to(device)
 
 
 # With inspiration from Huang 2025
@@ -105,10 +104,6 @@ class SimpleNWIEncoder(nn.Module):
     def forward(self, x):
         return x @ self.wf_mat()
 
-    def to(self, device):
-        self.Wlog.to(device)
-        return super().to(device)
-
 # From Huang2025
 class LinearEncoder(nn.Module):
     # in this version, ln(W) = NNWF(ln(m))
@@ -123,11 +118,6 @@ class LinearEncoder(nn.Module):
 
     def forward(self, x):
         return x @ self.wf_mat()
-
-    def to(self, device):
-        for wf in self.wfs:
-            wf = wf.to(device)
-        return super().to(device)
 
 
 class SimpleDecoder(nn.Module):
@@ -170,8 +160,3 @@ class NNWIAutoencoder(nn.Module):
 
     def forward(self, x):
         return self.decoder(self.encoder(x))
-
-    def to(self, device):
-        self.encoder = self.encoder.to(device)
-        self.decoder = self.decoder.to(device)
-        return super().to(device)

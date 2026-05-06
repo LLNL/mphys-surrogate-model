@@ -386,25 +386,8 @@ if __name__ == "__main__":
     fig.savefig(runsp_out_dir / (case_name + "_full_test_recon.png"))
 
     # Plot weight functions
-    import matplotlib.pyplot as plt
-    W = model.encoder.wf_mat().detach().numpy()
-    (fig, ax) = plt.subplots(1, 1, figsize=(6, 4))
-    for i in range(W.shape[-1]):
-        ax.step(r_bins_edges, W[:, i], label=f"W_{i}")
-    plt.xscale('log')
-    plt.legend()
-    plt.xlabel('r (um)')
-    plt.yscale('log')
-    plt.title("NNWI Weight Functions")
+    fig = plotting.plot_nnwi_weights(best_model, r_bins_edges)
     fig.show()
     fig.savefig(runsp_out_dir / (case_name + "_weights.png"))
-
-    # # Plot latent space
-    # fig = plotting.viz_3d_latent_space(
-    #     best_model,
-    #     x_test,
-    #     dsd_time,
-    # )
-    # fig.write_html(runsp_out_dir / (case_name + "_latent_space.html"))
 
 

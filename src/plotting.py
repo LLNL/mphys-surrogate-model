@@ -740,3 +740,15 @@ def plot_testset_quantiles_pred(
 
     # Return fig for further manipulation
     return fig
+
+def plot_nnwi_weights(model, r_bins_edges):
+    W = model.encoder.wf_mat().detach().numpy()
+    (fig, ax) = plt.subplots(1, 1, figsize=(6, 4))
+    for i in range(W.shape[-1]):
+        ax.step(r_bins_edges, W[:, i], label=f"W_{i}")
+    plt.xscale('log')
+    plt.legend()
+    plt.xlabel('r (um)')
+    plt.yscale('log')
+    plt.title("NNWI Weight Functions")
+    return fig
