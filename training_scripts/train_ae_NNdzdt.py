@@ -20,24 +20,27 @@ import uuid
 import numpy as np
 import torch
 from src import data_utils as du
-from src import diagnostics, models, plotting
+from src import diagnostics, models, plotting, nwi
 from torch.utils.data import DataLoader
 
 params = {
     "data_src": "erf",
+    "ae_type": "nwi",  # nwi or ffnn
+    "num_blocks": 3,  # only used for NWI
+    "hidden_size": 128,  # only used for NWI
     "random_seed": 0,
     "num_epochs": 100,
-    "batch_size": 4,
+    "batch_size": 25,
     "learning_rate": 0.00314227212817401,
     "latent_dim": 3,
     "lr_sched": True,
     "patience": 50,
     "tol": 1e-8,
     "wd": 1e-3,
-    "layer_size": (42, 36, 46),
+    "layer_size": (100, 100, 100),
     "print_frequency": 1,
-    "emily_save": False,
-    "nipun_save": True,
+    "save": True,
+    "show_plots": True,
 }
 
 # Global variables and settings
@@ -54,14 +57,29 @@ divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 # Model
 # ----------------------------------------------------------------------------------------------------------------------
 class AENNdzdt(torch.nn.Module):
-    def __init__(self, n_channels=1, n_bins=100, n_latent=10, layer_size=(10, 10, 10)):
+    def __init__(
+        self,
+        n_bins=100,
+        n_latent=10,
+        layer_size=(10, 10, 10),
+        ae_type="ffnn",
+        hidden_size=128,
+        num_blocks=3,
+    ):
         super(AENNdzdt, self).__init__()
         self.layer_size = layer_size
-        assert n_channels == 1
-        self.encoder = models.FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
-        self.decoder = models.FFNNDecoder(
-            n_bins=n_bins, n_latent=n_latent, distribution=True
-        )
+        self.ae_type = ae_type
+
+        if self.ae_type == "ffnn":
+            self.encoder = models.FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
+            self.decoder = models.FFNNDecoder(
+                n_bins=n_bins, n_latent=n_latent, distribution=True
+            )
+        elif self.ae_type == "nwi":
+            self.encoder = nwi.LinearEncoder(n_bins=n_bins, n_latent=n_latent)
+            self.decoder = nwi.SimpleDecoder(n_bins=n_bins, n_latent=n_latent, hidden_features=hidden_size,
+                                             num_blocks=num_blocks)
+
         self.dzdt = models.NNDerivatives(
             n_latent=n_latent + 1, layer_size=self.layer_size
         )
@@ -114,17 +132,20 @@ def train_and_eval(
             batch_x = batch_x.to(device)
             batch_dx = batch_dx.to(device)
             batch_M = batch_M.to(device)
+            dM = 0.0 * batch_M
 
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
             z = model.encoder(batch_x)
             zz = z.clone().detach().requires_grad_()
-            pred_dz = model.dzdt(z, batch_M)[:, :, :-1]
+            pred_dzM = model.dzdt(z, batch_M)
+            pred_dz = pred_dzM[:, :, :-1]
+            pred_dM = pred_dzM[:, :, -1]
             _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
             _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
 
             # Calculate train loss
-            loss_dz = criterion(pred_dz, dz)
+            loss_dz = criterion(pred_dz, dz) + criterion(pred_dM, dM)
             loss_dx = criterion(pred_dx, batch_dx)
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
@@ -158,17 +179,20 @@ def train_and_eval(
             batch_x = batch_x.to(device)
             batch_dx = batch_dx.to(device)
             batch_M = batch_M.to(device)
+            dM = 0.0 * batch_M
 
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
             z = model.encoder(batch_x)
             zz = z.clone().detach().requires_grad_()
-            pred_dz = model.dzdt(z, batch_M)[:, :, :-1]
+            pred_dzM = model.dzdt(z, batch_M)
+            pred_dz = pred_dzM[:, :, :-1]
+            pred_dM = pred_dzM[:, :, -1]
             _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
             _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
 
             # Calculate test loss
-            loss_dz = criterion(pred_dz, dz)
+            loss_dz = criterion(pred_dz, dz) + criterion(pred_dM, dM)
             loss_dx = criterion(pred_dx, batch_dx)
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
@@ -286,10 +310,12 @@ if __name__ == "__main__":
 
     # Initialize the model
     model = AENNdzdt(
-        n_channels=1,
         n_bins=n_bins,
         n_latent=params["latent_dim"],
         layer_size=params["layer_size"],
+        ae_type=params["ae_type"],
+        hidden_size=params["hidden_size"],
+        num_blocks=params["num_blocks"],
     )
 
     # Optimizer and scheduling
@@ -343,7 +369,7 @@ if __name__ == "__main__":
     best_model.eval()
     best_model = best_model.to("cpu")
     id = str(uuid.uuid4().hex)
-    prefix = params["data_src"] + "_FFNN"
+    prefix = params["ae_type"] + "_" + params["data_src"]
     case_name = prefix + "_latent{}_layers{}_tr{}_lr{}_bs{}_weights{}-{}-{}_{}".format(
         params["latent_dim"],
         params["layer_size"],
@@ -357,33 +383,16 @@ if __name__ == "__main__":
     )
     print(f"Save ID is {case_name}")
 
-    # Emily save dirs
-    tpsp_out_dir = Path("../trained_models/ae_NNdzdt")
-    if not tpsp_out_dir.exists():
-        tpsp_out_dir.mkdir(parents=True, exist_ok=True)
-    if not (tpsp_loss_dir := tpsp_out_dir / "losses").exists():
-        tpsp_loss_dir.mkdir(parents=True, exist_ok=True)
-    if not (tpsp_mod_dir := tpsp_out_dir / "models").exists():
-        tpsp_mod_dir.mkdir(parents=True, exist_ok=True)
-    if not (tpsp_plot_dir := tpsp_out_dir / "plots").exists():
-        tpsp_plot_dir.mkdir(parents=True, exist_ok=True)
-    if params["emily_save"]:
-        print(
-            f"Saving output files to the respective folders at {tpsp_out_dir}/{{losses,models,plots}}/{case_name}*"
-        )
-
-    # Nipun save dirs
-    runsp_out_dir = Path("../ng_scripts/trained_models/ae_NNdzdt") / case_name
-    if not runsp_out_dir.exists():
-        runsp_out_dir.mkdir(parents=True, exist_ok=True)
-    if params["nipun_save"]:
+    # save dirs
+    runsp_out_dir = Path("../trained_models/ae_NNdzdt") / case_name
+    if params["save"]:
+        if not runsp_out_dir.exists():
+            runsp_out_dir.mkdir(parents=True, exist_ok=True)
         print(f"Saving output files to {runsp_out_dir}*")
 
     # Save losses
     pkl_out_files = []
-    if params["emily_save"]:
-        pkl_out_files.append(tpsp_loss_dir / (case_name + ".pkl"))
-    if params["nipun_save"]:
+    if params["save"]:
         pkl_out_files.append(runsp_out_dir / (case_name + ".pkl"))
     for out_file in pkl_out_files:
         with open(out_file, "wb") as pickle_file:
@@ -403,9 +412,7 @@ if __name__ == "__main__":
 
     # Save params
     params_out_files = []
-    if params["emily_save"]:
-        params_out_files.append(tpsp_mod_dir / (case_name + "_params.json"))
-    if params["nipun_save"]:
+    if params["save"]:
         params_out_files.append(runsp_out_dir / (case_name + "_params.json"))
     params_save = copy.deepcopy(params)
     for key, value in params_save.items():
@@ -416,9 +423,7 @@ if __name__ == "__main__":
 
     # Save model
     mdl_out_files = []
-    if params["emily_save"]:
-        mdl_out_files.append(tpsp_mod_dir / (case_name + ".pth"))
-    if params["nipun_save"]:
+    if params["save"]:
         mdl_out_files.append(runsp_out_dir / (case_name + ".pth"))
     for out_file in mdl_out_files:
         torch.save(best_model.state_dict(), out_file)
@@ -435,10 +440,10 @@ if __name__ == "__main__":
         labels=["dx/dt", "dz/dt", "Recon"],
         title=f"Training Loss",
     )
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_losses.png"))
-    if params["nipun_save"]:
+    if params["save"]:
         fig.savefig(runsp_out_dir / (case_name + "_losses.png"))
+    if params["show_plots"]:
+        fig.show()
 
     # Plot distributions: reconstruction
     fig = plotting.plot_reconstructions(
@@ -447,10 +452,10 @@ if __name__ == "__main__":
         x_test,
         r_bins_edges,
     )
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_reconstructions.png"))
-    if params["nipun_save"]:
+    if params["save"]:
         fig.savefig(runsp_out_dir / (case_name + "_reconstructions.png"))
+    if params["show_plots"]:
+        fig.show()
 
     # Predictions: Multi time step
     fig = plotting.plot_predictions_dzdt(
@@ -465,10 +470,10 @@ if __name__ == "__main__":
         m_train,
         r_bins_edges,
     )
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_predictions.png"))
-    if params["nipun_save"]:
+    if params["save"]:
         fig.savefig(runsp_out_dir / (case_name + "_predictions.png"))
+    if params["show_plots"]:
+        fig.show()
 
     # Plot trajectories of the latent variables
     z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_dzdt(
@@ -483,37 +488,37 @@ if __name__ == "__main__":
     fig = plotting.plot_latent_trajectories(
         params["latent_dim"], test_data.t, z_pred, z_data
     )
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_trajectories.png"))
-    if params["nipun_save"]:
+    if params["save"]:
         fig.savefig(runsp_out_dir / (case_name + "_trajectories.png"))
+    if params["show_plots"]:
+        fig.show()
 
     # Plot full test set performance
     fig = plotting.plot_full_testset_performance_recon(
         best_model, x_test, params["tol"]
     )
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_recon.png"))
-    if params["nipun_save"]:
+    if params["save"]:
         fig.savefig(runsp_out_dir / (case_name + "_full_test_recon.png"))
+    if params["show_plots"]:
+        fig.show()
 
-    test_kl, test_wass, test_wun, _ = diagnostics.get_performance_metrics(
+    test_kl, test_wass, test_wun, test_mass_diff = diagnostics.get_performance_metrics(
         x_test, m_test, z_pred, x_pred
     )
-    fig = plotting.plot_full_testset_performance_pred(test_kl, test_wass, test_wun, dsd_time)
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_full_test_pred.png"))
-    if params["nipun_save"]:
+    fig = plotting.plot_full_testset_performance_pred(test_kl, test_wass, test_mass_diff, dsd_time)
+    if params["save"]:
         fig.savefig(runsp_out_dir / (case_name + "_full_test_pred.png"))
+    if params["show_plots"]:
+        fig.show()
 
     # Plot quantiles from test set
     fig = plotting.plot_testset_quantiles_pred(
         x_test, x_pred, test_wass, tplt, dsd_time, r_bins_edges
     )
-    if params["emily_save"]:
-        fig.savefig(tpsp_plot_dir / (case_name + "_quantiles_test_pred.png"))
-    if params["nipun_save"]:
+    if params["save"]:
         fig.savefig(runsp_out_dir / (case_name + "_quantiles_test_pred.png"))
+    if params["show_plots"]:
+        fig.show()
 
     # Plot latent space
     fig = plotting.viz_3d_latent_space(
@@ -521,7 +526,15 @@ if __name__ == "__main__":
         x_test,
         dsd_time,
     )
-    if params["emily_save"]:
-        fig.write_html(tpsp_plot_dir / (case_name + "_latent_space.html"))
-    if params["nipun_save"]:
+    if params["save"]:
         fig.write_html(runsp_out_dir / (case_name + "_latent_space.html"))
+    if params["show_plots"]:
+        fig.show()
+
+    # Plot weights, if NNWI
+    if params["ae_type"] == "nwi":
+        fig = plotting.plot_nnwi_weights(best_model, r_bins_edges)
+        if params["save"]:
+            fig.savefig(runsp_out_dir / (case_name + "_weights.png"))
+        if params["show_plots"]:
+            fig.show()

@@ -134,18 +134,20 @@ def train_and_eval(
             batch_x = batch_x.to(device)
             batch_dx = batch_dx.to(device)
             batch_M = batch_M.to(device)
+            dM = 0.0 * batch_M
 
             # Forward pass
             pred_x_recon = model.decoder(model.encoder(batch_x))
             z = model.encoder(batch_x)
             zz = z.clone().detach().requires_grad_()
-            pred_dz_int = model.dzdt(z, batch_M)
-            pred_dz = pred_dz_int[:, :, :-1]
+            pred_dzM = model.dzdt(z, batch_M)
+            pred_dz = pred_dzM[:, :, :-1]
+            pred_dM = pred_dzM[:, :, -1]
             _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
             _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
 
             # Calculate train loss
-            loss_dz = criterion(pred_dz, dz)
+            loss_dz = criterion(pred_dz, dz) + criterion(pred_dM, dM)
             loss_dx = criterion(pred_dx, batch_dx)
             loss_recon = divergence(
                 torch.log(pred_x_recon + parameters["tol"]),
@@ -534,6 +536,7 @@ if __name__ == "__main__":
 
     # Plot weights, if NNWI
     if params["ae_type"] == "nwi":
+        fig = plotting.plot_nnwi_weights(best_model, r_bins_edges)
         if params["save"]:
             fig.savefig(runsp_out_dir / (case_name + "_weights.png"))
         if params["show_plots"]:
