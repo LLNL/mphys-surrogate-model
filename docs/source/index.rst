@@ -17,6 +17,8 @@ one of three model structures: (1) SINDy (2); (2) a neural-network derivative; (
    :maxdepth: 3
    :caption: Contents:
 
+   training
+   uq
    src
 
 

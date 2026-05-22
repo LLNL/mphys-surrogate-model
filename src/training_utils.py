@@ -233,7 +233,7 @@ def train_and_eval(
         optimizer: Optimizer
         scheduler: Learning rate scheduler (optional)
         loss_fn: Function that computes loss given (model, batch, params, device)
-                 Should return (loss, loss_dict) where loss_dict has named losses
+                 and returns (loss, loss_dict) where loss_dict has named losses
         params: Training parameters dict with num_epochs, print_frequency
         device: Compute device
         early_stopping: EarlyStopping object (optional)
