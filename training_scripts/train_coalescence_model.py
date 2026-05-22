@@ -22,7 +22,7 @@ params = {
     # Model architecture
     "encoder_type": "nwi",  # "ffnn" or "nwi"
     "decoder_type": "nwi_simple",  # "ffnn", "nwi_simple", or "nwi_deep"
-    "dynamics_type": "sindy",  # "sindy", "nn_dzdt", "autoregressive", or "none"
+    "dynamics_type": "autoregressive",  # "sindy", "nn_dzdt", "autoregressive", or "none"
     # NWI-specific (only used if encoder_type="nwi" or decoder_type contains "nwi")
     "num_blocks": 3,
     "hidden_size": 128,
@@ -36,7 +36,7 @@ params = {
     "data_src": "erf",  # "box" or "erf"
     # Training
     "random_seed": 10,
-    "num_epochs": 10,
+    "num_epochs": 1,
     "batch_size": 25,
     "learning_rate": 0.004204813405972317,
     "wd": 1e-3,

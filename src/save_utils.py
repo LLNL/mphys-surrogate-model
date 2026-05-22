@@ -5,6 +5,7 @@ Provides consistent output directory structure and model artifact saving.
 
 import copy
 import json
+import os
 import pickle as pkl
 from datetime import datetime
 from pathlib import Path
@@ -94,6 +95,7 @@ def setup_output_dir(params):
     Returns:
         Tuple of (output_dir Path, case_name string, timestamp string)
     """
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     case_name = generate_case_name(params)
     timestamp = case_name.split("_")[0]  # Extract timestamp from case_name
 
@@ -108,7 +110,7 @@ def setup_output_dir(params):
     else:
         base_dir = f"{encoder_type}_{decoder_type}_{dynamics_type}"
 
-    output_dir = Path("trained_models") / base_dir / case_name
+    output_dir = Path(project_root + "/trained_models") / base_dir / case_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     return output_dir, case_name, timestamp
@@ -325,17 +327,14 @@ def generate_plots(model, metadata, params, output_dir):
 
         # Predictions
         fig = plotting.plot_predictions_AE_AR(
-            test_ids,
-            tplt,
-            params["latent_dim"],
             model,
-            params["n_lag"],
+            test_ids,
             dsd_time,
+            tplt,
             x_test,
             m_test,
-            x_train,
-            m_train,
             r_bins_edges,
+            n_lag=params["n_lag"]
         )
         if save:
             fig.savefig(output_dir / "predictions.png")
@@ -343,14 +342,13 @@ def generate_plots(model, metadata, params, output_dir):
             fig.show()
 
         # Latent trajectories
-        z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_ar(
+        z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_AR(
             params["latent_dim"],
             model,
-            params["n_lag"],
+            dsd_time,
             x_test,
             m_test,
-            x_train,
-            m_train,
+            n_lag=params["n_lag"]
         )
         fig = plotting.plot_latent_trajectories(
             params["latent_dim"], dsd_time, z_pred, z_data

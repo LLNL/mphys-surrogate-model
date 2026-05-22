@@ -166,7 +166,7 @@ def plot_predictions_AE_AR(
                         -1, n_lag, x_pred[t].shape[0]
                     ),
                     torch.Tensor([m0]).reshape(1, 1, 1),
-                )
+                )[0]
                 .detach()
                 .numpy()[0][0]
             )
