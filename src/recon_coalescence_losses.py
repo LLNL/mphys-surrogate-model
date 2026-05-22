@@ -82,26 +82,25 @@ def compute_ar_loss(model, batch, params, device):
     batch_X, batch_y, batch_M = batch
 
     # Reconstruction at t=0
-    batch_x = batch_X[:, 0, :]
-    pred_x_recon = model.decoder(model.encoder(batch_x))
+    pred_x_recon = model.decoder(model.encoder(batch_X))
 
     # Autoregressive prediction
     pred_y, pred_dM = model(batch_X, batch_M)
-    pred_y = pred_y[:, 0, :]
+    #pred_y = pred_y[:, 0, :]
 
     # Get latent representations for latent loss
     data_z1 = model.encoder(batch_y)
     pred_z1 = model.encoder(pred_y)
 
     # Calculate losses
-    loss_dz = criterion(pred_z1, data_z1)
+    loss_dz = criterion(pred_z1, data_z1) + criterion(pred_dM, batch_M[:, :, 0])
     loss_dx = divergence(
         torch.log(pred_y + params["tol"]),
         torch.log(batch_y + params["tol"]),
     )
     loss_recon = divergence(
         torch.log(pred_x_recon + params["tol"]),
-        torch.log(batch_x + params["tol"]),
+        torch.log(batch_X + params["tol"]),
     )
 
     # Weighted total loss

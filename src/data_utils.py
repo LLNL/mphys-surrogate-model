@@ -519,7 +519,10 @@ def sindy_library_tensor(z, latent_dim, poly_order):
         z = z.unsqueeze(0)
     if len(z.shape) == 2:
         z = z.unsqueeze(1)
-    new_library = torch.zeros(z.shape[0], z.shape[1], library_dim)
+    # Create tensor on same device and dtype as input z
+    new_library = torch.zeros(
+        z.shape[0], z.shape[1], library_dim, device=z.device, dtype=z.dtype
+    )
 
     # i = 0: constant
     idx = 0
@@ -528,7 +531,8 @@ def sindy_library_tensor(z, latent_dim, poly_order):
     idx += 1
     # i = 1:nl + 1 -> first order
     if poly_order >= 1:
-        new_library[:, :, idx : idx + latent_dim] = z
+        for i in range(latent_dim):
+            new_library[:, :, idx + i] = z[:, :, i]
 
     idx += latent_dim
     # second order

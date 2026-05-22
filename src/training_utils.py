@@ -14,17 +14,27 @@ from src import data_utils as du
 from src import diagnostics
 
 
-def setup_device(allow_mps=False, batch_size=None):
+def setup_device(params=None, allow_mps=False, batch_size=None):
     """
     Set up the compute device (CUDA, MPS, or CPU).
 
     Args:
+        params: Optional dict with 'device' (override) and 'dynamics_type' keys
         allow_mps: If True, allows MPS device when available (some ops don't work on MPS)
         batch_size: Optional batch size to check MPS suitability
 
     Returns:
         torch.device
     """
+    # Check for explicit device override in params
+    if params is not None and "device" in params:
+        return torch.device(params["device"])
+
+    # SINDy models have MPS issues with as_strided operations
+    # Force CPU for SINDy to avoid PyTorch MPS bugs
+    if params is not None and params.get("dynamics_type") == "sindy":
+        return torch.device("cpu")
+
     if torch.cuda.is_available():
         device = torch.device("cuda")
     elif allow_mps and torch.backends.mps.is_available():
@@ -112,6 +122,66 @@ def setup_dataloaders(data_src, params):
 
     return train_loader, test_loader, metadata
 
+def setup_loss_weights(params, train_data):
+    """
+    Set up loss weights based on dynamics type.
+    Only computes automatic weights if not manually specified.
+
+    Args:
+        params: Parameters dict
+        train_data: Training dataset
+
+    Returns:
+        Updated params dict with loss weights
+    """
+    dynamics_type = params["dynamics_type"]
+
+    if dynamics_type in ["sindy", "nn_dzdt"]:
+        # Check if weights are manually specified
+        has_manual_weights = (
+            "loss_weight_recon" in params
+            and "loss_weight_dx" in params
+            and "loss_weight_dz" in params
+        )
+
+        if has_manual_weights:
+            print(
+                f"Using manual loss weights - recon: {params['loss_weight_recon']}, "
+                f"dx: {params['loss_weight_dx']}, dz: {params['loss_weight_dz']}"
+            )
+        else:
+            # Use Champion et al. recommendations
+            lambda1, lambda2, lambda3 = du.champion_calculate_weights(
+                train_data, lambda1_metaweight=params.get("lambda1_metaweight", 0.5)
+            )
+            params["loss_weight_recon"] = lambda3
+            params["loss_weight_dx"] = lambda1
+            params["loss_weight_dz"] = lambda2
+            print(
+                f"Using Champion et al. loss weights - recon: {lambda3}, "
+                f"dx: {lambda1:.2f}, dz: {lambda2:.2f}"
+            )
+
+    elif dynamics_type == "autoregressive":
+        # Set defaults if not specified
+        if "w_dx" not in params:
+            params["w_dx"] = 1.0
+        if "w_recon" not in params:
+            params["w_recon"] = 1.0
+        if "w_dz" not in params:
+            params["w_dz"] = 0.1
+        print(
+            f"Loss weights - w_dx: {params['w_dx']}, "
+            f"w_recon: {params['w_recon']}, w_dz: {params['w_dz']}"
+        )
+
+    elif dynamics_type == "none":
+        # Set defaults if not specified
+        if "loss_weight_l2" not in params:
+            params["loss_weight_l2"] = 0.01
+        print(f"Loss weights - kl: 1.0, l2: {params['loss_weight_l2']}")
+
+    return params
 
 def setup_optimization(model, params):
     """

@@ -22,7 +22,7 @@ params = {
     # Model architecture
     "encoder_type": "nwi",  # "ffnn" or "nwi"
     "decoder_type": "nwi_simple",  # "ffnn", "nwi_simple", or "nwi_deep"
-    "dynamics_type": "autoregressive",  # "sindy", "nn_dzdt", "autoregressive", or "none"
+    "dynamics_type": "nn_dzdt",  # "sindy", "nn_dzdt", "autoregressive", or "none"
     # NWI-specific (only used if encoder_type="nwi" or decoder_type contains "nwi")
     "num_blocks": 3,
     "hidden_size": 128,
@@ -36,7 +36,7 @@ params = {
     "data_src": "erf",  # "box" or "erf"
     # Training
     "random_seed": 10,
-    "num_epochs": 1,
+    "num_epochs": 4,
     "batch_size": 25,
     "learning_rate": 0.004204813405972317,
     "wd": 1e-3,
@@ -54,71 +54,9 @@ params = {
     # For autoregressive: "w_dx", "w_recon", "w_dz"
     # For none: "loss_weight_l2"
     # Output
-    "save": True,
+    "save": False,
     "show_plots": False,
 }
-
-
-def setup_loss_weights(params, train_data):
-    """
-    Set up loss weights based on dynamics type.
-    Only computes automatic weights if not manually specified.
-
-    Args:
-        params: Parameters dict
-        train_data: Training dataset
-
-    Returns:
-        Updated params dict with loss weights
-    """
-    dynamics_type = params["dynamics_type"]
-
-    if dynamics_type in ["sindy", "nn_dzdt"]:
-        # Check if weights are manually specified
-        has_manual_weights = (
-            "loss_weight_recon" in params
-            and "loss_weight_dx" in params
-            and "loss_weight_dz" in params
-        )
-
-        if has_manual_weights:
-            print(
-                f"Using manual loss weights - recon: {params['loss_weight_recon']}, "
-                f"dx: {params['loss_weight_dx']}, dz: {params['loss_weight_dz']}"
-            )
-        else:
-            # Use Champion et al. recommendations
-            lambda1, lambda2, lambda3 = du.champion_calculate_weights(
-                train_data, lambda1_metaweight=params.get("lambda1_metaweight", 0.5)
-            )
-            params["loss_weight_recon"] = lambda3
-            params["loss_weight_dx"] = lambda1
-            params["loss_weight_dz"] = lambda2
-            print(
-                f"Using Champion et al. loss weights - recon: {lambda3}, "
-                f"dx: {lambda1:.2f}, dz: {lambda2:.2f}"
-            )
-
-    elif dynamics_type == "autoregressive":
-        # Set defaults if not specified
-        if "w_dx" not in params:
-            params["w_dx"] = 1.0
-        if "w_recon" not in params:
-            params["w_recon"] = 1.0
-        if "w_dz" not in params:
-            params["w_dz"] = 0.1
-        print(
-            f"Loss weights - w_dx: {params['w_dx']}, "
-            f"w_recon: {params['w_recon']}, w_dz: {params['w_dz']}"
-        )
-
-    elif dynamics_type == "none":
-        # Set defaults if not specified
-        if "loss_weight_l2" not in params:
-            params["loss_weight_l2"] = 0.01
-        print(f"Loss weights - kl: 1.0, l2: {params['loss_weight_l2']}")
-
-    return params
 
 
 if __name__ == "__main__":
@@ -175,7 +113,7 @@ if __name__ == "__main__":
             metadata["x_train"], metadata["dsd_time"], metadata["m_train"]
         )
 
-    params = setup_loss_weights(params, train_data)
+    params = training_utils.setup_loss_weights(params, train_data)
 
     # Get loss function
     loss_fn = recon_coalescence_losses.get_loss_function(params["dynamics_type"])

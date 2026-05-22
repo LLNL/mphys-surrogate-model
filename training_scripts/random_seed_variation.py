@@ -1,5 +1,5 @@
 """
-Script to test random seed variation for each of the three models
+Script to test random seed variation for coalescence models
 """
 
 import json
@@ -20,25 +20,35 @@ from matplotlib import pyplot as plt
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 sys.path.append(project_root)
 
-import src.data_utils as du
+from src import data_utils as du
+from src import model_factory, training_utils, recon_coalescence_losses
 
-# MODEL_TYPE = "AE-AR"
-# MODEL_TYPE = "NNdzdt"
-MODEL_TYPE = "AE-SINDy"
+# Configuration: Select model type
+# MODEL_TYPE = "autoregressive"
+# MODEL_TYPE = "nn_dzdt"
+MODEL_TYPE = "sindy"
 
-if MODEL_TYPE == "AE-AR":
-    from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
-elif MODEL_TYPE == "NNdzdt":
-    from training_scripts.train_ae_NNdzdt import AENNdzdt, params, train_and_eval
-elif MODEL_TYPE == "AE-SINDy":
-    from training_scripts.train_ae_sindy import AESINDy, params, train_and_eval
-else:
-    raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
+# Base parameters (update as needed)
+params = {
+    "encoder_type": "ffnn",
+    "decoder_type": "ffnn",
+    "dynamics_type": MODEL_TYPE,
+    "latent_dim": 3,
+    "poly_order": 2,  # for SINDy
+    "layer_size": (128, 128, 64),  # for NN dzdt
+    "n_lag": 1,  # for AR
+    "data_src": "erf",
+    "batch_size": 100,
+    "learning_rate": 0.001,
+    "wd": 1e-5,
+    "random_seed": 42,
+    "tol": 1e-10,  # Small value for numerical stability in log
+}
 
 
 def train_model(args):
     # Unpack args
-    random_seed, n_bins, train_loader, test_loader, params = args
+    random_seed, n_bins, train_loader, test_loader, params_copy = args
 
     # Set this once per worker process
     torch.set_num_threads(1)
@@ -48,59 +58,48 @@ def train_model(args):
     np.random.seed(random_seed)
     random.seed(random_seed)
 
-    # Initialize the model
-    if MODEL_TYPE == "AE-AR":
-        model = AEAutoregressor(
-            n_channels=1,
-            n_bins=n_bins,
-            n_latent=params["latent_dim"],
-            n_lag=params["n_lag"],
-            CNN=params["CNN"],
-        )
-    elif MODEL_TYPE == "NNdzdt":
-        model = AENNdzdt(
-            n_channels=1,
-            n_bins=n_bins,
-            n_latent=params["latent_dim"],
-            layer_size=params["layer_size"],
-            CNN=params["CNN"],
-        )
-    elif MODEL_TYPE == "AE-SINDy":
-        model = AESINDy(
-            n_channels=1,
-            n_bins=n_bins,
-            n_latent=params["latent_dim"],
-            poly_order=params["poly_order"],
-            CNN=params["CNN"],
-        )
-    else:
-        raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
+    # Update params with this seed
+    params_copy["random_seed"] = random_seed
 
-    # Optimizer and scheduler
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=params["learning_rate"], weight_decay=params["wd"]
+    # Create model using the factory
+    model = model_factory.create_model(
+        encoder_type=params_copy["encoder_type"],
+        decoder_type=params_copy["decoder_type"],
+        dynamics_type=params_copy["dynamics_type"],
+        params=params_copy,
+        n_bins=n_bins,
     )
-    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
 
-    # Training loop
-    num_epochs = 10
-    train_output = train_and_eval(
-        num_epochs,
-        model,
-        train_loader,
-        test_loader,
-        optimizer,
-        sched,
-        params,
+    # Setup device
+    device = training_utils.setup_device(params_copy)
+    model = model.to(device)
+
+    # Setup optimization
+    optimizer, scheduler, _ = training_utils.setup_optimization(model, params_copy)
+
+    # Get loss function
+    loss_fn = recon_coalescence_losses.get_loss_function(params_copy["dynamics_type"])
+
+    # Training loop (short for seed variation)
+    params_copy["num_epochs"] = 10
+    _, losses = training_utils.train_and_eval(
+        model=model,
+        train_loader=train_loader,
+        test_loader=test_loader,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        loss_fn=loss_fn,
+        params=params_copy,
+        device=device,
         early_stopping=None,
-        print_flag=False,
         optuna_trial=None,
     )
-    losses = train_output[1]
-    best_train_loss = np.min(losses)
+
+    # Extract minimum total loss
+    best_train_loss = np.min(losses["total"])
 
     # Print
-    print(f"Best train loss for seed {random_seed}: {best_train_loss}")
+    print(f"Best train loss for seed {random_seed}: {best_train_loss:.6f}")
 
     return best_train_loss
 
@@ -109,59 +108,37 @@ if __name__ == "__main__":
     total_trials = 200  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
-    # Open dataset
-    if params["data_src"] == "box":
-        (
-            x_train,
-            m_train,
-            x_test,
-            m_test,
-            r_bins_edges,
-            n_bins,
-            dsd_time,
-        ) = du.open_box_dataset()
-    elif params["data_src"] == "erf":
-        (
-            x_train,
-            m_train,
-            x_test,
-            m_test,
-            r_bins_edges,
-            n_bins,
-            dsd_time,
-        ) = du.open_erf_dataset(sample_time=np.arange(0, 61, 5))
-    else:
-        raise NotImplementedError("only erf and box data options exist")
-
-    # Set up datasets and loaders
-    if MODEL_TYPE == "AE-AR":
-        train_data = du.NormedBinDatasetAR(x_train, m_train, lag=params["n_lag"])
-        test_data = du.NormedBinDatasetAR(x_test, m_test, lag=params["n_lag"])
-    elif MODEL_TYPE == "NNdzdt" or MODEL_TYPE == "AE-SINDy":
-        train_data = du.NormedBinDatasetDzDt(x_train, dsd_time, m_train)
-        test_data = du.NormedBinDatasetDzDt(x_test, dsd_time, m_test)
-    else:
-        raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
-    batch_size = 8
-    train_loader = torch.utils.data.DataLoader(
-        train_data, batch_size=batch_size, shuffle=True
+    # Setup dataloaders using unified utility
+    train_loader, test_loader, metadata = training_utils.setup_dataloaders(
+        params["data_src"], params
     )
-    test_loader = torch.utils.data.DataLoader(
-        test_data, batch_size=len(test_data), shuffle=True
-    )
+    n_bins = metadata["n_bins"]
+    dsd_time = metadata["dsd_time"]
+    x_train = metadata["x_train"]
+    m_train = metadata["m_train"]
+    train_data = train_loader.dataset
 
-    # Set weights
-    if MODEL_TYPE == "NNdzdt" or MODEL_TYPE == "AE-SINDy":
-        lambda1, lambda2, lambda3 = du.champion_calculate_weights(train_data)
-        params["loss_weight_recon"] = 1.0
-        params["loss_weight_sindy_x"] = lambda1
-        params["loss_weight_sindy_z"] = lambda2
+    # Set loss weights if needed
+    params = training_utils.setup_loss_weights(params, train_data)
+    # if params["dynamics_type"] in ["sindy", "nn_dzdt"]:
+    #     if (
+    #         "loss_weight_dx" not in params
+    #         or "loss_weight_dz" not in params
+    #         or "loss_weight_recon" not in params
+    #     ):
+    #         lambda1, lambda2, lambda3 = du.champion_calculate_weights(train_data)
+    #         params["loss_weight_recon"] = 1.0
+    #         params["loss_weight_dx"] = lambda1
+    #         params["loss_weight_dz"] = lambda2
 
     # Set up save folder
-    base_output_directory = Path("../ng_scripts/Random_Seed_Variation/")
+    base_output_directory = Path("results/Random Seeds/")
     id = str(uuid.uuid4().hex)
     output_directory = base_output_directory / (
-        f"{MODEL_TYPE}_" + datetime.now().isoformat().split(".")[0] + "_" + id
+        f"{params['encoder_type']}_{params['dynamics_type']}_"
+        + datetime.now().isoformat().split(".")[0]
+        + "_"
+        + id
     )
     if not output_directory.exists():
         output_directory.mkdir(parents=True, exist_ok=True)
@@ -178,8 +155,12 @@ if __name__ == "__main__":
     # Run study
     start_time = time.time()
     if parallel_flag:
+        # Create independent copies of params for each worker
+        import copy
+
         worker_args = [
-            (i, n_bins, train_loader, test_loader, params) for i in range(total_trials)
+            (i, n_bins, train_loader, test_loader, copy.deepcopy(params))
+            for i in range(total_trials)
         ]
         with Pool(processes=n_workers) as pool:
             res = pool.map(train_model, worker_args)
@@ -187,7 +168,9 @@ if __name__ == "__main__":
     else:
         res = np.zeros(total_trials)
         for i in range(total_trials):
-            args = (i, n_bins, train_loader, test_loader, params)
+            import copy
+
+            args = (i, n_bins, train_loader, test_loader, copy.deepcopy(params))
             res[i] = train_model(args)
     stop_time = time.time()
     print(f"Duration: {stop_time - start_time}")
