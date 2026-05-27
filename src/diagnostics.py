@@ -50,7 +50,7 @@ def get_latent_trajectories_AR(
             lagged_input = torch.Tensor(z_pred[j, t - n_lag : t, :]).reshape(
                 n_lag * (n_latent + 1)
             )
-            z_pred[j, t, :] = model.autoregressor(lagged_input).detach().numpy()
+            z_pred[j, t, :] = model.dzdt(lagged_input).detach().numpy()
             z_data[j, t, :-1] = (
                 model.encoder(torch.Tensor(x_test[j, t, :]).reshape(1, -1))
                 .detach()

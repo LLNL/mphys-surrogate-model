@@ -6,7 +6,11 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path("../..").resolve()))
+# Add project root, training_scripts, and UQ to path
+project_root = Path("../..").resolve()
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "training_scripts"))
+sys.path.insert(0, str(project_root / "UQ"))
 
 
 # -- Project information -----------------------------------------------------
@@ -25,10 +29,17 @@ extensions = [
     "sphinx.ext.viewcode",  # Adds source code links
     "sphinx_autodoc_typehints",  # Better type hint rendering
     "sphinx.ext.mathjax",  # Math formatting
+    "myst_parser",  # Markdown support
 ]
 autodoc_preserve_defaults = True
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+
+# Support both .rst and .md files
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "markdown",
+}
 
 
 # -- Options for HTML output -------------------------------------------------

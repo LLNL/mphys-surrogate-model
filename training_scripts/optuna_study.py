@@ -1,7 +1,8 @@
 """
-Script to conduct hyperparameter optimization with Optuna for each of the three models
+Script to conduct hyperparameter optimization with Optuna for coalescence models
 """
 
+import copy
 import csv
 import json
 import os
@@ -21,21 +22,28 @@ import torch
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
 
-import src.data_utils as du
-from src import diagnostics
+from src import data_utils as du
+from src import diagnostics, model_factory, recon_coalescence_losses, training_utils
 
-MODEL_TYPE = "AE-AR"
-# MODEL_TYPE = "NNdzdt"
-# MODEL_TYPE = "AE-SINDy"
+# Configuration: Select model type
+# MODEL_TYPE = "autoregressive"
+MODEL_TYPE = "nn_dzdt"
+# MODEL_TYPE = "sindy"
 
-if MODEL_TYPE == "AE-AR":
-    from training_scripts.train_ae_ar import AEAutoregressor, params, train_and_eval
-elif MODEL_TYPE == "NNdzdt":
-    from training_scripts.train_ae_NNdzdt import AENNdzdt, params, train_and_eval
-elif MODEL_TYPE == "AE-SINDy":
-    from training_scripts.train_ae_sindy import AESINDy, params, train_and_eval
-else:
-    raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
+# Base parameters (update as needed)
+params = {
+    "encoder_type": "ffnn",
+    "decoder_type": "ffnn",
+    "dynamics_type": MODEL_TYPE,
+    "latent_dim": 3,
+    "poly_order": 2,  # for SINDy
+    "n_lag": 1,  # for AR
+    "data_src": "erf",
+    "batch_size": 8,  # Will be overridden by Optuna
+    "wd": 1e-5,
+    "random_seed": 42,
+    "tol": 1e-10,  # Small value for numerical stability in log
+}
 
 
 def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m_train):
@@ -44,75 +52,68 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
     np.random.seed(params["random_seed"])
     random.seed(params["random_seed"])
 
+    # Make a copy of params for this trial
+    trial_params = copy.deepcopy(params)
+
     # Hyperparameter options
     lr = trial.suggest_float("lr", 1e-6, 1e-1, log=True)
     batch_size = trial.suggest_int("batch_size", 4, 256)
-    if MODEL_TYPE == "AE-AR":
+
+    if MODEL_TYPE == "autoregressive":
         layer1_size = trial.suggest_int("layer1_size", 20, 180)
         layer2_size = trial.suggest_int("layer2_size", 20, 180)
         layer3_size = trial.suggest_int("layer3_size", 20, 180)
-        w_dx = trial.suggest_float("w_dx", 0.1, 1.9)
-        w_dz = trial.suggest_float("w_dz", 0.1, 1.9)
-    elif MODEL_TYPE == "NNdzdt":
+        trial_params["layer_size"] = (layer1_size, layer2_size, layer3_size)
+        trial_params["w_recon"] = trial.suggest_float("w_recon", 0.1, 1.9)
+        trial_params["w_dx"] = trial.suggest_float("w_dx", 0.1, 1.9)
+        trial_params["w_dz"] = trial.suggest_float("w_dz", 0.1, 1.9)
+    elif MODEL_TYPE == "nn_dzdt":
         layer1_size = trial.suggest_int("layer1_size", 20, 60)
         layer2_size = trial.suggest_int("layer2_size", 20, 60)
         layer3_size = trial.suggest_int("layer3_size", 20, 60)
+        trial_params["layer_size"] = (layer1_size, layer2_size, layer3_size)
         lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
-    elif MODEL_TYPE == "AE-SINDy":
+        lambda1, lambda2, lambda3 = du.champion_calculate_weights(
+            train_data, lambda1_metaweight=lambda1_metaweight, lambda3=1.0
+        )
+        trial_params["loss_weight_recon"] = lambda3
+        trial_params["loss_weight_dx"] = lambda1
+        trial_params["loss_weight_dz"] = lambda2
+    elif MODEL_TYPE == "sindy":
         # latent_dim = trial.suggest_int("latent_dim", 1, 4)
         # poly_order = trial.suggest_int("poly_order", 2, 3)
         lambda1_metaweight = trial.suggest_float("lambda1_metaweight", 0.50, 1.5)
-    else:
-        raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
-
-    # Fixed parameters
-    num_epochs = 30  # Reduced for faster trials
-
-    # Initialize the model
-    if MODEL_TYPE == "AE-AR":
-        params["w_dx"] = w_dx
-        params["w_dz"] = w_dz
-        model = AEAutoregressor(
-            n_channels=1,
-            n_bins=n_bins,
-            n_latent=params["latent_dim"],
-            layer_size=(layer1_size, layer2_size, layer3_size),
-            n_lag=params["n_lag"],
-        )
-    elif MODEL_TYPE == "NNdzdt":
         lambda1, lambda2, lambda3 = du.champion_calculate_weights(
             train_data, lambda1_metaweight=lambda1_metaweight, lambda3=1.0
         )
-        params["loss_weight_recon"] = lambda3
-        params["loss_weight_sindy_x"] = lambda1
-        params["loss_weight_sindy_z"] = lambda2
-        model = AENNdzdt(
-            n_channels=1,
-            n_bins=n_bins,
-            n_latent=params["latent_dim"],
-            layer_size=(layer1_size, layer2_size, layer3_size),
-        )
-    elif MODEL_TYPE == "AE-SINDy":
-        # params["latent_dim"] = latent_dim
-        # params["poly_order"] = poly_order
-        lambda1, lambda2, lambda3 = du.champion_calculate_weights(
-            train_data, lambda1_metaweight=lambda1_metaweight, lambda3=1.0
-        )
-        params["loss_weight_recon"] = lambda3
-        params["loss_weight_sindy_x"] = lambda1
-        params["loss_weight_sindy_z"] = lambda2
-        model = AESINDy(
-            n_channels=1,
-            n_bins=n_bins,
-            n_latent=params["latent_dim"],
-            poly_order=params["poly_order"],
-        )
+        trial_params["loss_weight_recon"] = lambda3
+        trial_params["loss_weight_dx"] = lambda1
+        trial_params["loss_weight_dz"] = lambda2
     else:
         raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
 
-    # Optimizer and scheduler
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=params["wd"])
-    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min")
+    # Update learning rate and epochs
+    trial_params["learning_rate"] = lr
+    trial_params["num_epochs"] = 10  # Reduced for faster trials
+
+    # Create model using the factory
+    model = model_factory.create_model(
+        encoder_type=trial_params["encoder_type"],
+        decoder_type=trial_params["decoder_type"],
+        dynamics_type=trial_params["dynamics_type"],
+        params=trial_params,
+        n_bins=n_bins,
+    )
+
+    # Setup device
+    device = training_utils.setup_device(trial_params)
+    model = model.to(device)
+
+    # Setup optimization
+    optimizer, scheduler, _ = training_utils.setup_optimization(model, trial_params)
+
+    # Get loss function
+    loss_fn = recon_coalescence_losses.get_loss_function(trial_params["dynamics_type"])
 
     # Create data loaders
     train_loader = torch.utils.data.DataLoader(
@@ -123,47 +124,34 @@ def objective(trial, params, n_bins, train_data, test_data, dsd_time, x_train, m
     )
 
     # Training loop
-    train_output = train_and_eval(
-        num_epochs,
-        model,
-        train_loader,
-        test_loader,
-        optimizer,
-        sched,
-        params,
+    best_model, _ = training_utils.train_and_eval(
+        model=model,
+        train_loader=train_loader,
+        test_loader=test_loader,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        loss_fn=loss_fn,
+        params=trial_params,
+        device=device,
         early_stopping=None,
-        print_flag=False,
         optuna_trial=trial,
     )
-    best_model = train_output[0]
 
     # Calculate error (wass distance) over full dataset
-    if MODEL_TYPE == "AE-AR":
+    if MODEL_TYPE == "autoregressive":
         z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_AR(
-            params["latent_dim"], best_model, dsd_time, x_train, m_train
+            trial_params["latent_dim"], best_model, dsd_time, x_train, m_train
         )
-    elif MODEL_TYPE == "NNdzdt":
+    else:  # sindy or nn_dzdt
         z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_dzdt(
-            params["latent_dim"],
+            trial_params["latent_dim"],
             best_model,
-            test_data.t,
+            dsd_time,
             x_train,
             m_train,
             x_train,
             m_train,
         )
-    elif MODEL_TYPE == "AE-SINDy":
-        z_pred, z_data, x_pred = diagnostics.get_latent_trajectories_dzdt(
-            params["latent_dim"],
-            best_model,
-            test_data.t,
-            x_train,
-            m_train,
-            x_train,
-            m_train,
-        )
-    else:
-        raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
     _, train_wass, _, _ = diagnostics.get_performance_metrics(
         x_train, m_train, z_pred, x_pred
     )
@@ -189,52 +177,26 @@ if __name__ == "__main__":
     total_trials = 1024  # On mac with 8 perf. cores, choose multiple of 8 total_trials
     parallel_flag = True
 
-    # Open dataset
-    if params["data_src"] == "box":
-        (
-            x_train,
-            m_train,
-            x_test,
-            m_test,
-            r_bins_edges,
-            n_bins,
-            dsd_time,
-        ) = du.open_box_dataset()
-    elif params["data_src"] == "erf":
-        (
-            x_train,
-            m_train,
-            x_test,
-            m_test,
-            r_bins_edges,
-            n_bins,
-            dsd_time,
-        ) = du.open_erf_dataset(sample_time=np.arange(0, 61, 5))
-    else:
-        raise NotImplementedError("only erf and box data options exist")
+    # Setup dataloaders using unified utility
+    train_loader, test_loader, metadata = training_utils.setup_dataloaders(
+        params["data_src"], params
+    )
+    n_bins = metadata["n_bins"]
+    dsd_time = metadata["dsd_time"]
+    x_train = metadata["x_train"]
+    m_train = metadata["m_train"]
+    train_data = train_loader.dataset
+    test_data = test_loader.dataset
 
-    # Set up datasets and loaders
-    if MODEL_TYPE == "AE-AR":
-        train_data = du.NormedBinDatasetAR(x_train, m_train, lag=params["n_lag"])
-        test_data = du.NormedBinDatasetAR(x_test, m_test, lag=params["n_lag"])
-    elif MODEL_TYPE == "NNdzdt" or MODEL_TYPE == "AE-SINDy":
-        train_data = du.NormedBinDatasetDzDt(x_train, dsd_time, m_train)
-        test_data = du.NormedBinDatasetDzDt(x_test, dsd_time, m_test)
-    else:
-        raise NotImplementedError(f"Model type {MODEL_TYPE} is not implemented")
-
-    # Set weights
-    if MODEL_TYPE == "NNdzdt" or MODEL_TYPE == "AE-SINDy":
-        lambda1, lambda2, lambda3 = du.champion_calculate_weights(train_data)
-        params["loss_weight_recon"] = 1.0
-        params["loss_weight_sindy_x"] = lambda1
-        params["loss_weight_sindy_z"] = lambda2
-
+    # Set loss weights if needed (will be overridden by Optuna trials if tuning them)
+    params = training_utils.set_loss_weights(params, train_data)
+    
     # Set up save folder
-    base_output_directory = Path("../results/Optuna/")
+    base_output_directory = Path("results/Optuna_coalescence_studies/")
     id = str(uuid.uuid4().hex)
     output_directory = base_output_directory / (
-        f"{MODEL_TYPE}_" + datetime.now().isoformat().split(".")[0]  # + "_" + id
+        f"{params['encoder_type']}_{params['dynamics_type']}_"
+        + datetime.now().isoformat().split(".")[0]  # + "_" + id
     )
     if not output_directory.exists():
         output_directory.mkdir(parents=True, exist_ok=True)

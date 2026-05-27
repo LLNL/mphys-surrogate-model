@@ -1,5 +1,5 @@
 """
-Evaluate the three trained models for various data and test sizes all at once
+Evaluate trained coalescence models for various data and test sizes
 """
 
 import json
@@ -13,16 +13,12 @@ sys.path.append(project_root)
 import numpy as np
 import torch
 from src import data_utils as du
-from src import diagnostics, plotting
-
-from train_ae_ar import AEAutoregressor
-from train_ae_NNdzdt import AENNdzdt
-from train_ae_sindy import AESINDy
+from src import diagnostics, model_factory, plotting
 
 MODEL_DIRS = {
-    "AR": "../results/Optuna/ERF Dataset/AE-AR_2025-09-18T10:18:57_PostARBugfix/erf_FFNN_latent3_order(141, 154, 40)_tr1000_lr0.0030348411572892766_bs8_weights0.12789450188986579-1.1729901013704414_a0f49326688d4e69bcc0e9a78da3c870",
-    "SINDy": "../results/Optuna/ERF Dataset/AE-SINDy_LimParams/erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc",
-    "NNdzdt": "../results/Optuna/ERF Dataset/NNdzdt_2025-07-20T23:31:20_3a400c596947422389559813cd41dfe6/erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3",
+    "AR": "../results/Optuna_coalescence_studies/ERF Dataset/AE-AR_2025-09-18T10:18:57_PostARBugfix/erf_FFNN_latent3_order(141, 154, 40)_tr1000_lr0.0030348411572892766_bs8_weights0.12789450188986579-1.1729901013704414_a0f49326688d4e69bcc0e9a78da3c870",
+    "SINDy": "../results/Optuna_coalescence_studies/ERF Dataset/AE-SINDy_LimParams/erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc",
+    "NNdzdt": "../results/Optuna_coalescence_studies/ERF Dataset/NNdzdt_2025-07-20T23:31:20_3a400c596947422389559813cd41dfe6/erf_FFNN_latent3_layers(42, 36, 46)_tr1000_lr0.00314227212817401_bs4_weights1.0-599.504638671875-59950.4609375_ecb1da0eabf9423ab03bed5ad82f43a3",
 }
 DATA_DIRS = {
     "val": "../data/congestus_coal_200m_test.nc",
@@ -41,6 +37,7 @@ TEST_SIZES = {
 
 
 def load_best_params(model_type):
+    """Load best hyperparameters from Optuna study"""
     load_dir = MODEL_DIRS[model_type]
     with open(os.path.join(load_dir, "../best_params.json")) as f:
         best_params = json.load(f)
@@ -49,39 +46,67 @@ def load_best_params(model_type):
 
 
 def get_model(model_type, n_bins=64):
-    params = load_best_params(model_type)
-    if model_type == "AR":
-        model = AEAutoregressor(
-            n_channels=1,
-            n_bins=n_bins,
-            n_latent=3,
-            n_lag=1,
-            layer_size=(
-                params["layer1_size"],
-                params["layer2_size"],
-                params["layer3_size"],
-            ),
-        )
-    elif model_type == "SINDy":
-        model = AESINDy(
-            n_channels=1,
-            n_bins=n_bins,
-            n_latent=3,
-            poly_order=2,
-        )
-    elif model_type == "NNdzdt":
-        model = AENNdzdt(
-            n_channels=1,
-            n_bins=n_bins,
-            n_latent=3,
-            layer_size=(
-                params["layer1_size"],
-                params["layer2_size"],
-                params["layer3_size"],
-            ),
-        )
-    else:
+    """Create model using the unified factory based on model type"""
+    optuna_params = load_best_params(model_type)
+
+    # Map model_type to unified framework naming
+    type_mapping = {
+        "AR": {"encoder": "ffnn", "decoder": "ffnn", "dynamics": "autoregressive"},
+        "SINDy": {"encoder": "ffnn", "decoder": "ffnn", "dynamics": "sindy"},
+        "NNdzdt": {"encoder": "ffnn", "decoder": "ffnn", "dynamics": "nn_dzdt"},
+    }
+
+    if model_type not in type_mapping:
         raise ValueError(f"Unknown model type: {model_type}")
+
+    mapping = type_mapping[model_type]
+
+    # Build params dict for model factory
+    params = {
+        "encoder_type": mapping["encoder"],
+        "decoder_type": mapping["decoder"],
+        "dynamics_type": mapping["dynamics"],
+        "latent_dim": 3,
+        "poly_order": 2,  # for SINDy
+        "n_lag": 1,  # for AR
+    }
+
+    # Add architecture params from Optuna
+    if model_type in ["AR", "NNdzdt"]:
+        params["layer_size"] = (
+            optuna_params["layer1_size"],
+            optuna_params["layer2_size"],
+            optuna_params["layer3_size"],
+        )
+
+    # Create model using factory
+    model = model_factory.create_model(
+        encoder_type=params["encoder_type"],
+        decoder_type=params["decoder_type"],
+        dynamics_type=params["dynamics_type"],
+        params=params,
+        n_bins=n_bins,
+    )
+
+    return model
+
+
+def load_model_weights(model, model_path, model_type):
+    """Load model weights with backward compatibility for old AR models"""
+    state_dict = torch.load(model_path, weights_only=True)
+
+    # Fix for old AR models: rename 'autoregressor' to 'dzdt'
+    if model_type == "AR" and any(k.startswith("autoregressor.") for k in state_dict.keys()):
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith("autoregressor."):
+                new_key = k.replace("autoregressor.", "dzdt.")
+                new_state_dict[new_key] = v
+            else:
+                new_state_dict[k] = v
+        state_dict = new_state_dict
+
+    model.load_state_dict(state_dict)
     return model
 
 
@@ -99,7 +124,7 @@ if __name__ == "__main__":
                 raise FileNotFoundError(
                     f"No model files found in {MODEL_DIRS[model_type]}"
                 )
-            model.load_state_dict(torch.load(model_files[0], weights_only=True))
+            model = load_model_weights(model, model_files[0], model_type)
             model.eval()
 
             # load data
