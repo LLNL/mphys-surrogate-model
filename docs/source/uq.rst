@@ -133,6 +133,12 @@ Results are saved to ``UQ/conformal/results/`` and ``UQ/logs/`` as pickle files 
 Related Work
 ------------
 
+The uncertainty quantification methods implemented here are described in:
+
+* Katona, B., de Jong, E. M., & Gunawardena, T. (2025). "Uncertainty Quantification for
+  Reduced-Order Surrogate Models Applied to Cloud Microphysics." arXiv:2511.04534.
+  Accepted to NeurIPS 2025 Workshop on Machine Learning and the Physical Sciences (ML4PS).
+
 This implementation is based on:
 
 * Vovk, V., Gammerman, A., & Shafer, G. (2005). *Algorithmic Learning in a Random World*
