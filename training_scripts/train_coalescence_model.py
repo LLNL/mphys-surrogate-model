@@ -14,7 +14,6 @@ sys.path.append(project_root)
 import numpy as np
 import torch
 
-from src import data_utils as du
 from src import model_factory, recon_coalescence_losses, save_utils, training_utils
 
 # Parameters - configure these for your desired model
@@ -23,6 +22,7 @@ params = {
     "encoder_type": "nwi",  # "ffnn" or "nwi"
     "decoder_type": "nwi_simple",  # "ffnn", "nwi_simple", or "nwi_deep"
     "dynamics_type": "nn_dzdt",  # "sindy", "nn_dzdt", "autoregressive", or "none"
+
     # NWI-specific (only used if encoder_type="nwi" or decoder_type contains "nwi")
     "num_blocks": 3,
     "hidden_size": 128,
@@ -32,8 +32,10 @@ params = {
     "layer_size": (100, 100, 100),
     # AR-specific (only used if dynamics_type="autoregressive")
     "n_lag": 1,
+
     # Data
     "data_src": "erf",  # "box" or "erf"
+
     # Training
     "random_seed": 10,
     "num_epochs": 4,
@@ -43,10 +45,13 @@ params = {
     "lr_sched": True,
     "patience": 50,
     "print_frequency": 1,
+
     # Model parameters
     "latent_dim": 3,
+    
     # Loss parameters
     "tol": 1e-8,
+
     # Loss weight computation (for dzdt models - only used if weights not specified)
     "lambda1_metaweight": 0.5,
     # Optional: Manually specify loss weights (overrides Champion et al. computation)
@@ -54,6 +59,7 @@ params = {
     # For autoregressive: "w_dx", "w_recon", "w_dz"
     # For none: "loss_weight_l2"
     # Output
+
     "save": False,
     "show_plots": False,
 }

@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from torch.nn import ELU, Identity, Linear, ReLU, Sigmoid, SiLU, Softmax
+from torch.nn import Softmax
 
 from src import data_utils as du
 

@@ -6,6 +6,7 @@ Provides consistent output directory structure and model artifact saving.
 import copy
 import json
 import os
+import warnings
 import pickle as pkl
 from datetime import datetime
 from pathlib import Path
@@ -76,6 +77,7 @@ def generate_case_name(params):
         )
     else:
         # Generic fallback
+        warnings.warn("Unknown dynamics type '{}', using generic case name format.".format(dynamics_type))
         case_name = base_name + "_ep{}_lr{:.0e}_bs{}".format(
             params["num_epochs"],
             params["learning_rate"],
@@ -197,6 +199,10 @@ def plot_training_losses(losses, params, output_dir):
             params.get("loss_weight_l2", 1.0) * np.array(losses.get("l2", [])),
         ]
         labels = ["KL", "L2"]
+    else:
+        # Generic fallback - just plot total loss if available
+        if "total" not in losses:
+            warnings.warn("No 'total' loss found in losses dict for unknown dynamics type '{}'. Sub-losses will be empty.".format(dynamics_type))
 
     # Plot
     fig = plotting.plot_losses(
