@@ -22,6 +22,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 import src.data_utils as du
+from src.models import ACTIVATION_MAP
 
 # MODEL_TYPE = "AE-AR"  # Don't uncomment for now
 MODEL_TYPE = "NNdzdt"  # Don't uncomment for now
@@ -88,6 +89,9 @@ def objective(trial, params, n_bins, train_data, test_data, max_epochs=MAX_EPOCH
         lambda_z = trial.suggest_float("lambda_z", 1e-6, 1e1, log=True)
         lambda_S = trial.suggest_float("lambda_S", 1e-6, 1e1, log=True)
         lambda_r = 1.0
+        activation_name = trial.suggest_categorical(
+            "activation", list(ACTIVATION_MAP.keys())
+        )
     elif MODEL_TYPE == "AE-SINDy":
         # # Latent dim and poly order
         # latent_dim = trial.suggest_int("latent_dim", 1, 4)
@@ -131,6 +135,7 @@ def objective(trial, params, n_bins, train_data, test_data, max_epochs=MAX_EPOCH
             n_bins=n_bins,
             n_latent=params["latent_dim"],
             layer_sizes=layers,
+            activation=activation_name,
         )
     elif MODEL_TYPE == "AE-SINDy":
         lambda_x, lambda_z, lambda_r = du.champion_calculate_weights(

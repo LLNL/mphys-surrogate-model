@@ -66,13 +66,16 @@ class AENNdzdtThermo(torch.nn.Module):
         n_latent=3,
         n_thermo=3,
         layer_sizes=(42, 36, 46),
+        activation="relu",
     ):
         super(AENNdzdtThermo, self).__init__()
         self.n_thermo = n_thermo
         assert n_channels == 1
-        self.encoder = models.FFNNEncoder(n_bins=n_bins, n_latent=n_latent)
+        self.encoder = models.FFNNEncoder(
+            n_bins=n_bins, n_latent=n_latent, activation=activation
+        )
         self.decoder = models.FFNNDecoder(
-            n_bins=n_bins, n_latent=n_latent, distribution=True
+            n_bins=n_bins, n_latent=n_latent, distribution=True, activation=activation
         )
         self.dzdt = models.NNDerivatives(
             n_latent=n_latent + n_thermo, layer_sizes=layer_sizes

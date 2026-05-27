@@ -4,9 +4,18 @@ from torch.nn import ELU, Identity, Linear, ReLU, Sigmoid, SiLU, Softmax
 
 from src import data_utils as du
 
+ACTIVATION_MAP = {
+    "relu": nn.ReLU,
+    "leaky_relu": nn.LeakyReLU,
+    "elu": nn.ELU,
+    "tanh": nn.Tanh,
+    "silu": nn.SiLU,  # aka Swish
+    "gelu": nn.GELU,
+}
 
-class FFNNEncoder(torch.nn.Module):
-    def __init__(self, n_bins=64, n_latent=3):
+
+class FFNNEncoder(nn.Module):
+    def __init__(self, n_bins=64, n_latent=3, activation="relu"):
         """
         Pytorch model for the feed-forward neural network encoder part of an
         autoencoder. Used in multiple other models.
@@ -14,62 +23,35 @@ class FFNNEncoder(torch.nn.Module):
         :param n_bins: Number of bins for the droplet size distributions
         :param n_latent: Number of latent variables
         """
-        super(FFNNEncoder, self).__init__()
+        super().__init__()
         self.n_bins = n_bins
-        self.layer1 = Linear(n_bins, int(n_bins / 2))
-        self.activation1 = ReLU()
-        self.layer2 = Linear(int(n_bins / 2), int(n_bins / 4))
-        self.activation2 = ReLU()
-        self.layer3 = Linear(int(n_bins / 4), int(n_bins / 8))
-        self.activation3 = ReLU()
-        self.layer4 = Linear(int(n_bins / 8), n_latent)
-        self.activation4 = Identity()
 
-        self.apply(self.init_weights)
+        act_cls = ACTIVATION_MAP[activation]
+        dims = [n_bins, n_bins // 2, n_bins // 4, n_bins // 8, n_latent]
 
-        self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
-        self.act = [
-            self.activation1,
-            self.activation2,
-            self.activation3,
-            self.activation4,
-        ]
+        layers = []
+        for i in range(len(dims) - 1):
+            layers.append(nn.Linear(dims[i], dims[i + 1]))
+            if i < len(dims) - 2:
+                layers.append(act_cls())
+            else:
+                layers.append(nn.Identity())  # final layer, no activation
+
+        self.net = nn.Sequential(*layers)
+        self.apply(self._init_weights)
 
     def forward(self, x):
-        x = self.layer1(x)
-        x = self.activation1(x)
-        x = self.layer2(x)
-        x = self.activation2(x)
-        x = self.layer3(x)
-        x = self.activation3(x)
-        x = self.layer4(x)
-        x = self.activation4(x)
+        return self.net(x)
 
-        return x
-
-    def init_weights(self, m):
+    def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            torch.nn.init.kaiming_uniform_(m.weight, mode="fan_in", nonlinearity="relu")
+            nn.init.kaiming_uniform_(m.weight, mode="fan_in", nonlinearity="relu")
             if m.bias is not None:
-                torch.nn.init.zeros_(m.bias)
-
-    def get_weights(self):
-        weights = []
-        biases = []
-        for i, layer in enumerate(self.layers):
-            weights.append(layer.weight)
-            biases.append(layer.bias)
-
-        return (weights, biases)
-
-    def set_weights(self, weights, biases):
-        for i, layer in enumerate(self.layers):
-            layer.weight.data = weights[i]
-            layer.bias.data = biases[i]
+                nn.init.zeros_(m.bias)
 
 
-class FFNNDecoder(torch.nn.Module):
-    def __init__(self, n_bins=64, n_latent=3, distribution=True):
+class FFNNDecoder(nn.Module):
+    def __init__(self, n_bins=64, n_latent=3, activation="relu", distribution=True):
         """
         Pytorch model for the feed-forward neural network decoder part of an
         autoencoder. Used in multiple other models.
@@ -80,62 +62,32 @@ class FFNNDecoder(torch.nn.Module):
                              distribution (area under curve is 1) or
                              not normalized.
         """
-        super(FFNNDecoder, self).__init__()
-
+        super().__init__()
         self.n_bins = n_bins
-        self.layer1 = Linear(n_latent, int(n_bins / 8))
-        self.layer2 = Linear(int(n_bins / 8), int(n_bins / 4))
-        self.layer3 = Linear(int(n_bins / 4), int(n_bins / 2))
-        self.layer4 = Linear(int(n_bins / 2), n_bins)
-        self.activation1 = ReLU()
-        self.activation2 = ReLU()
-        self.activation3 = ReLU()
-        if distribution:
-            self.activation4 = Softmax(dim=-1)
-        else:
-            self.activation4 = Sigmoid()
 
-        self.apply(self.init_weights)
+        act_cls = ACTIVATION_MAP[activation]
+        dims = [n_latent, n_bins // 8, n_bins // 4, n_bins // 2, n_bins]
+        final_act = nn.Softmax(dim=-1) if distribution else nn.Sigmoid()
 
-        self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
-        self.act = [
-            self.activation1,
-            self.activation2,
-            self.activation3,
-            self.activation4,
-        ]
+        layers = []
+        for i in range(len(dims) - 1):
+            layers.append(nn.Linear(dims[i], dims[i + 1]))
+            if i < len(dims) - 2:
+                layers.append(act_cls())
+            else:
+                layers.append(final_act)
+
+        self.net = nn.Sequential(*layers)
+        self.apply(self._init_weights)
 
     def forward(self, x):
-        x = self.layer1(x)
-        x = self.activation1(x)
-        x = self.layer2(x)
-        x = self.activation2(x)
-        x = self.layer3(x)
-        x = self.activation3(x)
-        x = self.layer4(x)
-        x = self.activation4(x)
+        return self.net(x)
 
-        return x
-
-    def init_weights(self, m):
+    def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            torch.nn.init.kaiming_uniform_(m.weight, mode="fan_in", nonlinearity="relu")
+            nn.init.kaiming_uniform_(m.weight, mode="fan_in", nonlinearity="relu")
             if m.bias is not None:
-                torch.nn.init.zeros_(m.bias)
-
-    def get_weights(self):
-        weights = []
-        biases = []
-        for i, layer in enumerate(self.layers):
-            weights.append(layer.weight)
-            biases.append(layer.bias)
-
-        return (weights, biases)
-
-    def set_weights(self, weights, biases):
-        for i, layer in enumerate(self.layers):
-            layer.weight.data = weights[i]
-            layer.bias.data = biases[i]
+                nn.init.zeros_(m.bias)
 
 
 class FFNNAutoEncoder(torch.nn.Module):
