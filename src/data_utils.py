@@ -74,6 +74,54 @@ def open_erf_dataset(path=None, sample_time=None):
 
     return (x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time)
 
+def open_sed_datasets(path=None):
+    """
+    Open ERF dataset. Paths are hardcoded but relative.
+
+    :param path: Optional path to read from different location
+    :param sample_time: Optional specific sample time to read
+    :return: X train, mass train, X test, mass test, radius bin edges, number of bins, DSD time
+    """
+    if path is None:
+        path = Path(__file__).parent.parent / "data/erf_data/sed_congestus"
+        ds_all = xr.open_dataset(path / "train_data.nc")
+        ds_test = xr.open_dataset(path / "test_data.nc")
+    else:
+        ds_all = xr.open_dataset(path + "_train.nc")
+        ds_test = xr.open_dataset(path + "_test.nc")
+
+    # Training datasets: mass, normalized DSD, and sedimentation flux
+    m_train = ds_all["dmdlnr"].sum(dim="bin")
+    x_train = (ds_all["dmdlnr"] / m_train).transpose("loc", "bin").to_numpy()
+    flux_train = ds_all["vt_mass_flux"].transpose("loc", "bin").to_numpy()
+    # Scale based on training data 
+    m_scale = m_train.max()
+    flux_scale = flux_train.max()
+    m_train = (m_train / m_scale).to_numpy()
+    flux_train = (flux_train / flux_scale)
+    # Load and scale the test data using the same scales as the training data
+    m_test = ds_test["dmdlnr"].sum(dim="bin")
+    x_test = (ds_test["dmdlnr"] / m_test).transpose("loc", "bin").to_numpy()
+    m_test = (m_test / m_scale).to_numpy()
+    flux_test = ds_test["vt_mass_flux"].transpose("loc", "bin").to_numpy()
+    flux_test = (flux_test / flux_scale)
+
+    # gather outputs
+    outputs = {
+        "x_train": x_train,
+        "m_train": m_train,
+        "flux_train": flux_train,
+        "x_test": x_test,
+        "m_test": m_test,
+        "flux_test": flux_test,
+        "r_bins_edges": ds_all["rbin_l"].to_numpy(),
+        "r_bins_edges_r": ds_all["rbin_r"].to_numpy(),
+        "n_bins": x_train.shape[-1],
+        "m_scale": m_scale,
+        "flux_scale": flux_scale,
+    }
+    return outputs
+
 
 def split_by_index(ds: xr.Dataset, dim: str, test_size: float, random_state: int = 0):
     """
@@ -503,6 +551,30 @@ class NormedBinDatasetAR(Dataset):
 
     def __getitem__(self, idx):
         return self.bin0[idx, :], self.bin1[idx, :], self.M[idx]
+
+
+class NormedBinDatasetSed(Dataset):
+    def __init__(self, dmdlnr_normed, flux, M):
+        """
+        Normed binned dataset pytorch class for sedimentation flux prediction
+
+        Note: Unlike DzDt dataset, sedimentation data has no time dimension -
+        each sample is a single snapshot with its corresponding flux.
+
+        :param dmdlnr_normed: Normalized dmdlnr data (shape: [n_samples, n_bins])
+        :param flux: Sedimentation flux data (shape: [n_samples, n_bins])
+        :param M: Mass (shape: [n_samples])
+        """
+        self.nbin = dmdlnr_normed.shape[1]
+        self.x = dmdlnr_normed.reshape(-1, 1, self.nbin).astype(np.float32)
+        self.flux = flux.reshape(-1, 1, self.nbin).astype(np.float32)
+        self.M = M.reshape(-1, 1, 1).astype(np.float32)
+
+    def __len__(self):
+        return int(self.x.shape[0])
+
+    def __getitem__(self, idx):
+        return self.x[idx, :], self.flux[idx, :], self.M[idx]
 
 
 def sindy_library_tensor(z, latent_dim, poly_order):
