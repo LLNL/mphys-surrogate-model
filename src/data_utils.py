@@ -90,21 +90,26 @@ def open_sed_datasets(path=None):
         ds_all = xr.open_dataset(path + "_train.nc")
         ds_test = xr.open_dataset(path + "_test.nc")
 
-    # Training datasets: mass, normalized DSD, and sedimentation flux
-    m_train = ds_all["dmdlnr"].sum(dim="bin")
+    # Training datasets: mass, UNnormalized DSD, and sedimentation flux
+    m_train = ds_all["dmdlnr"].sum(dim="bin").to_numpy()
     x_train = (ds_all["dmdlnr"] / m_train).transpose("loc", "bin").to_numpy()
     flux_train = ds_all["vt_mass_flux"].transpose("loc", "bin").to_numpy()
+    m_test = ds_test["dmdlnr"].sum(dim="bin").to_numpy()
+    x_test = (ds_test["dmdlnr"] / m_test).transpose("loc", "bin").to_numpy()
+    flux_test = ds_test["vt_mass_flux"].transpose("loc", "bin").to_numpy()
+
     # Scale based on training data 
     m_scale = m_train.max()
-    flux_scale = flux_train.max()
-    m_train = (m_train / m_scale).to_numpy()
-    flux_train = (flux_train / flux_scale)
-    # Load and scale the test data using the same scales as the training data
-    m_test = ds_test["dmdlnr"].sum(dim="bin")
-    x_test = (ds_test["dmdlnr"] / m_test).transpose("loc", "bin").to_numpy()
-    m_test = (m_test / m_scale).to_numpy()
-    flux_test = ds_test["vt_mass_flux"].transpose("loc", "bin").to_numpy()
-    flux_test = (flux_test / flux_scale)
+    vt_train = flux_train / (x_train + 1e-8) 
+    vt_scale = vt_train.max()  # Scale terminal velocity to help with training stability
+    flux_scale = vt_scale * m_scale
+
+    m_train = m_train / m_scale
+    x_train = x_train / m_scale
+    flux_train = flux_train / flux_scale
+    m_test = m_test / m_scale
+    x_test = x_test / m_scale
+    flux_test = flux_test / flux_scale
 
     # gather outputs
     outputs = {
@@ -553,8 +558,8 @@ class NormedBinDatasetAR(Dataset):
         return self.bin0[idx, :], self.bin1[idx, :], self.M[idx]
 
 
-class NormedBinDatasetSed(Dataset):
-    def __init__(self, dmdlnr_normed, flux, M):
+class BinDatasetSed(Dataset):
+    def __init__(self, dmdlnr, flux, M):
         """
         Normed binned dataset pytorch class for sedimentation flux prediction
 
@@ -565,8 +570,8 @@ class NormedBinDatasetSed(Dataset):
         :param flux: Sedimentation flux data (shape: [n_samples, n_bins])
         :param M: Mass (shape: [n_samples])
         """
-        self.nbin = dmdlnr_normed.shape[1]
-        self.x = dmdlnr_normed.reshape(-1, 1, self.nbin).astype(np.float32)
+        self.nbin = dmdlnr.shape[1]
+        self.x = dmdlnr.reshape(-1, 1, self.nbin).astype(np.float32)
         self.flux = flux.reshape(-1, 1, self.nbin).astype(np.float32)
         self.M = M.reshape(-1, 1, 1).astype(np.float32)
 

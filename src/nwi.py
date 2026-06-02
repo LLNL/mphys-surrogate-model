@@ -109,7 +109,7 @@ class LinearEncoder(nn.Module):
     def forward(self, x):
         return x @ self.wf_mat()
 
-# Note: Operates on dimensionless latent variables to produce a dimensionless DSD
+# Note: Operates on dimensioned latent variables to produce a dimensioned DSD
 class SimpleDecoder(nn.Module):
     def __init__(self, n_bins=64, n_latent=3, hidden_features=256, num_blocks=5):
         super(SimpleDecoder, self).__init__()
@@ -122,7 +122,7 @@ class SimpleDecoder(nn.Module):
     def forward(self, h):
         hhat, mass = h_to_hhat_M(h)  # Convert to dimensionless latent variables and mass
         xhat = self.network(hhat)
-        return self.sm(xhat) # convert back to a normalized PSD
+        return self.sm(xhat) * mass # convert back to a normalized PSD, scale by mass
 
 # based on Huang 2025
 class DeepDecoder(nn.Module):
@@ -136,11 +136,12 @@ class DeepDecoder(nn.Module):
 
     def forward(self, h):
         B = h.shape[0]
-        logh = torch.log(h + self.eps)
+        hhat, mass = h_to_hhat_M(h) 
+        logh = torch.log(hhat + self.eps)
         logh = logh.reshape(-1, self.n_latent)
         xhat = self.stack(logh)
         xhat = xhat.reshape(B, -1, self.n_bins)
-        return self.sm(xhat) # convert back to normalized PSD
+        return self.sm(xhat) * mass # convert back to normalized PSD
 
 
 class NNWIAutoencoder(nn.Module):
