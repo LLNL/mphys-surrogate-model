@@ -88,38 +88,28 @@ class NNWF(nn.Module):
 # W has size [N, L]
 # x has size [B, T, N]
 # output has size [B, T, L]
-class SimpleNWIEncoder(nn.Module):
-    # in this case, W is specified as having no dependence on the bin masses
-    def __init__(self, n_bins=64, n_latent=3):
-        super(SimpleNWIEncoder, self).__init__()
-
-        self.n_bins = n_bins
-        self.n_latent = n_latent
-
-        self.Wlog = nn.Parameter(torch.rand(n_bins, n_latent))
-
-    def wf_mat(self):
-        return torch.softmax(self.Wlog, dim=0)
-
-    def forward(self, x):
-        return x @ self.wf_mat()
-
-# From Huang2025
 class LinearEncoder(nn.Module):
-    # in this version, ln(W) = NNWF(ln(m))
-    def __init__(self, n_bins=64, n_latent=3):
+    # in this version, ln(W) = NNWF(in_features=n_bins)
+    def __init__(self, n_bins=64, n_latent=3, type="fnM"):
         super().__init__()
-        self.wfs = nn.ModuleList([NNWF(in_features=n_bins) for i in range(n_latent)])
+        if type == "fnM":
+            self.wfs = nn.ModuleList([NNWF(in_features=n_bins) for i in range(n_latent)])
+        elif type == "simple":
+            self.wfs = nn.Parameter(torch.rand(n_bins, n_latent))
+        else:
+            raise ValueError(f"Unknown NWI encoder type: {type}")
         self.out_features = sum([wf.out_features for wf in self.wfs])
 
     def wf_mat(self):
-        lnW = torch.cat([wf() for wf in self.wfs], dim=1)
-        return torch.softmax(lnW, dim=0)
+        lnW = torch.cat([wf() for wf in self.wfs], dim=1) # learn WFs
+        Wf = torch.softmax(lnW, dim=0)
+        Wf = torch.cat([Wf, torch.ones(1, self.out_features)], dim=0)  # Add row of ones for mass
+        return Wf
 
     def forward(self, x):
         return x @ self.wf_mat()
 
-
+# Note: Operates on dimensionless latent variables to produce a dimensionless DSD
 class SimpleDecoder(nn.Module):
     def __init__(self, n_bins=64, n_latent=3, hidden_features=256, num_blocks=5):
         super(SimpleDecoder, self).__init__()
@@ -130,7 +120,8 @@ class SimpleDecoder(nn.Module):
         self.sm = Softmax(dim=-1)
 
     def forward(self, h):
-        xhat = self.network(h)
+        hhat, mass = h_to_hhat_M(h)  # Convert to dimensionless latent variables and mass
+        xhat = self.network(hhat)
         return self.sm(xhat) # convert back to a normalized PSD
 
 # based on Huang 2025
@@ -160,3 +151,14 @@ class NNWIAutoencoder(nn.Module):
 
     def forward(self, x):
         return self.decoder(self.encoder(x))
+    
+def hhat_M_to_h(h_hat, M):
+    # Converts dimensionless latent variables plus mass M to latent variables with mass dimensions
+    h = torch.concat([h_hat*M, M], dim=-1)  # concatenate h_hat*M and M along the feature dimension
+    return h
+
+def h_to_hhat_M(h):
+    # Converts dimensioned latent variables back to dimensionless h_hat and dimensioned M
+    M = h[:, :, -1]  # Extract M (last feature)
+    h_hat = h[:, :, :-1] / M  # Example: take mean across latent dimension for h_hat
+    return h_hat, M
