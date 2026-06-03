@@ -92,15 +92,15 @@ def open_sed_datasets(path=None):
 
     # Training datasets: mass, UNnormalized DSD, and sedimentation flux
     m_train = ds_all["dmdlnr"].sum(dim="bin").to_numpy()
-    x_train = (ds_all["dmdlnr"] / m_train).transpose("loc", "bin").to_numpy()
+    x_train = ds_all["dmdlnr"].transpose("loc", "bin").to_numpy()
     flux_train = ds_all["vt_mass_flux"].transpose("loc", "bin").to_numpy()
     m_test = ds_test["dmdlnr"].sum(dim="bin").to_numpy()
-    x_test = (ds_test["dmdlnr"] / m_test).transpose("loc", "bin").to_numpy()
+    x_test = ds_test["dmdlnr"].transpose("loc", "bin").to_numpy()
     flux_test = ds_test["vt_mass_flux"].transpose("loc", "bin").to_numpy()
 
     # Scale based on training data 
     m_scale = m_train.max()
-    vt_train = flux_train / (x_train + 1e-8) 
+    vt_train = flux_train / (x_train + 1e-12)
     vt_scale = vt_train.max()  # Scale terminal velocity to help with training stability
     flux_scale = vt_scale * m_scale
 
