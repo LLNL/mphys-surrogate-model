@@ -161,6 +161,7 @@ def hhat_M_to_h(h_hat, M):
 
 def h_to_hhat_M(h):
     # Converts dimensioned latent variables back to dimensionless h_hat and dimensioned M
-    M = h[:, :, -1]  # Extract M (last feature)
-    h_hat = h[:, :, :-1] / M.unsqueeze(-1)  # Example: take mean across latent dimension for h_hat
+    # Works with any number of leading dimensions: [..., latent+1]
+    M = h[..., -1]  # Extract M (last feature)
+    h_hat = h[..., :-1] / M.unsqueeze(-1)  # Normalize by M
     return h_hat, M

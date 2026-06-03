@@ -12,10 +12,11 @@ class FFNNEncoder(torch.nn.Module):
         autoencoder. Used in multiple other models.
 
         :param n_bins: Number of bins for the droplet size distributions
-        :param n_latent: Number of latent variables
+        :param n_latent: Number of latent variables (mass will be appended as n_latent+1)
         """
         super(FFNNEncoder, self).__init__()
         self.n_bins = n_bins
+        self.n_latent = n_latent
         self.layer1 = Linear(n_bins, int(n_bins / 2))
         self.activation1 = ReLU()
         self.layer2 = Linear(int(n_bins / 2), int(n_bins / 4))
@@ -36,16 +37,25 @@ class FFNNEncoder(torch.nn.Module):
         ]
 
     def forward(self, x):
-        x = self.layer1(x)
-        x = self.activation1(x)
-        x = self.layer2(x)
-        x = self.activation2(x)
-        x = self.layer3(x)
-        x = self.activation3(x)
-        x = self.layer4(x)
-        x = self.activation4(x)
+        # Input x is dimensioned DSD; normalize it before encoding
+        # Works with any number of leading dimensions: [..., bins]
+        mass = x.sum(dim=-1, keepdim=True)
+        x_norm = x / (mass + 1e-12)
 
-        return x
+        # Encode normalized DSD
+        z = self.layer1(x_norm)
+        z = self.activation1(z)
+        z = self.layer2(z)
+        z = self.activation2(z)
+        z = self.layer3(z)
+        z = self.activation3(z)
+        z = self.layer4(z)
+        z = self.activation4(z)
+
+        # Append mass to latent representation for consistency with NWI encoder
+        z_with_mass = torch.cat([z, mass], dim=-1)
+
+        return z_with_mass
 
     def init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -75,7 +85,7 @@ class FFNNDecoder(torch.nn.Module):
         autoencoder. Used in multiple other models.
 
         :param n_bins: Number of bins for the droplet size distributions
-        :param n_latent: Number of latent variables
+        :param n_latent: Number of latent variables (excluding mass)
         :param distribution: Flag to indicate whether output is a true
                              distribution (area under curve is 1) or
                              not normalized.
@@ -83,6 +93,7 @@ class FFNNDecoder(torch.nn.Module):
         super(FFNNDecoder, self).__init__()
 
         self.n_bins = n_bins
+        self.n_latent = n_latent
         self.layer1 = Linear(n_latent, int(n_bins / 8))
         self.layer2 = Linear(int(n_bins / 8), int(n_bins / 4))
         self.layer3 = Linear(int(n_bins / 4), int(n_bins / 2))
@@ -105,15 +116,24 @@ class FFNNDecoder(torch.nn.Module):
             self.activation4,
         ]
 
-    def forward(self, x):
-        x = self.layer1(x)
-        x = self.activation1(x)
-        x = self.layer2(x)
-        x = self.activation2(x)
-        x = self.layer3(x)
-        x = self.activation3(x)
-        x = self.layer4(x)
-        x = self.activation4(x)
+    def forward(self, z_with_mass):
+        # Extract latent variables and mass
+        # Works with any number of leading dimensions: [..., latent+1]
+        z = z_with_mass[..., :-1]
+        mass = z_with_mass[..., -1:]
+
+        # Decode to normalized DSD
+        x_norm = self.layer1(z)
+        x_norm = self.activation1(x_norm)
+        x_norm = self.layer2(x_norm)
+        x_norm = self.activation2(x_norm)
+        x_norm = self.layer3(x_norm)
+        x_norm = self.activation3(x_norm)
+        x_norm = self.layer4(x_norm)
+        x_norm = self.activation4(x_norm)
+
+        # Scale by mass to get dimensioned DSD
+        x = x_norm * mass
 
         return x
 
@@ -183,16 +203,13 @@ class SINDyDeriv(torch.nn.Module):
 
         self.apply(self.init_weights)
 
-    def forward(self, z, M=None):
-        if M is not None:
-            latent = torch.cat([z, M], dim=-1)
-        else:
-            latent = z
-        library = du.sindy_library_tensor(latent, self.n_latent, self.poly_order)
+    def forward(self, Z):
+        # Z is the full latent state [z1, z2, ..., zn, M]
+        library = du.sindy_library_tensor(Z, self.n_latent, self.poly_order)
         if self.use_thresholds:
             self.sindy_coeffs.weight.data = self.sindy_coeffs.weight.data * self.mask
-        dldt = self.sindy_coeffs(library)
-        return dldt
+        dZdt = self.sindy_coeffs(library)
+        return dZdt
 
     def init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -244,12 +261,9 @@ class NNDerivatives(torch.nn.Module):
 
         self.initialize_network()
 
-    def forward(self, z, M=None):
-        if M is not None:
-            x = torch.cat([z, M], dim=-1)
-        else:
-            x = z
-        x = self.layer1(x)
+    def forward(self, Z):
+        # Z is the full latent state [z1, z2, ..., zn, M]
+        x = self.layer1(Z)
         x = self.activation1(x)
         x = self.layer2(x)
         x = self.activation2(x)

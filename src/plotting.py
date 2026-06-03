@@ -6,12 +6,13 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.io as pio
 import torch
-import nwi
 import matplotlib as mpl
 from matplotlib.ticker import FormatStrFormatter
 from scipy.stats import wasserstein_distance
 
 from src import data_utils as du
+from src import diagnostics
+from src import nwi
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
@@ -407,26 +408,13 @@ def plot_predictions_dzdt(
         sharey=True,
     )
 
-    # Compute limits
-    z_enc_train = model.encoder(torch.Tensor(x_train)).detach().numpy()
-    zlim = np.zeros((n_latent + 1, 2))
-    for il in range(n_latent):
-        zlim[il][0] = z_enc_train[:, :, il].min()
-        zlim[il][1] = z_enc_train[:, :, il].max()
-    zlim[-1][0] = m_train.min()
-    zlim[-1][1] = m_train.max()
+    # Use diagnostics function to compute predictions
+    _, _, x_pred_full = diagnostics.get_latent_trajectories_dzdt(
+        n_latent, model, dsd_time, x_test, m_test, x_train, m_train
+    )
 
-    # Compute all else
-    z_encoded = model.encoder(torch.Tensor(x_test)).detach().numpy()
-
-    if type(model.encoder).__name__ == 'LinearEncoder':
-        z0 = z_encoded[test_ids, 0, :]
-        latents_pred = du.simulate(z0, dsd_time[tplt], model.dzdt, zlim)
-        x_pred = model.decoder(torch.Tensor(latents_pred)).detach().numpy()
-    else:
-        z0 = np.concatenate((z_encoded[test_ids, 0, :], np.array([m_test[test_ids, 0]])), axis=-1)
-        latents_pred = du.simulate(z0, dsd_time[tplt], model.dzdt, zlim)
-        x_pred = model.decoder(torch.Tensor(latents_pred[:, :, :-1])).detach().numpy()
+    # Extract predictions for selected test IDs and time indices
+    x_pred = x_pred_full[test_ids][:, tplt, :]
 
     for i, id in enumerate(test_ids):
         for j, t in enumerate(tplt):

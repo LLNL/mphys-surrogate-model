@@ -16,7 +16,10 @@ def compute_autoencoder_loss(model, batch, params, device):
 
     Args:
         model: ComposedModel with encoder and decoder only
-        batch: Tuple of (batch_x, batch_dx, batch_M) - only batch_x is used
+        batch: Tuple of (batch_x, batch_flux, batch_m)
+               - batch_x: dimensioned DSD
+               - batch_flux: sedimentation flux
+               - batch_m: total mass (redundant, encoder extracts it)
         params: Parameters dict with loss weights
         device: Compute device
 
@@ -26,15 +29,17 @@ def compute_autoencoder_loss(model, batch, params, device):
     batch_x, batch_flux, batch_m = batch
 
     # Forward pass for reconstruction
-    pred_x_recon = model.decoder(model.encoder(batch_x)) # batch_x & batch_flux have dimensions this time
+    # Encoder outputs Z = [z, M], decoder takes Z and outputs dimensioned DSD
+    pred_x_recon = model.decoder(model.encoder(batch_x))
     vt = batch_flux / (batch_x + params["tol"])  # Compute terminal velocity from flux and DSD
 
-    # Calculate losses
+    # Calculate losses in normalized space for KL divergence
     loss_kl = divergence(
-        torch.log(pred_x_recon / batch_m + params["tol"]),
-        torch.log(batch_x / batch_m + params["tol"]),
+        torch.log(pred_x_recon / (pred_x_recon.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
+        torch.log(batch_x / (batch_x.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
     )
-    loss_l2 = criterion(pred_x_recon * vt, batch_flux)  # Vt-weighted reconstruction loss to emphasize bins with higher sedimentation flux
+    # Vt-weighted reconstruction loss to emphasize bins with higher sedimentation flux
+    loss_l2 = criterion(pred_x_recon * vt, batch_flux)
 
     # Weighted total loss
     loss = loss_kl + params["loss_weight_recon_vt"] * loss_l2
@@ -52,53 +57,45 @@ def compute_sedimentation_loss(model, batch, params, device):
     Loss for sedimentation flux prediction using derivative-based dynamics (SINDy or NN dzdt).
 
     The model architecture:
-    - encoder: x (dimensioned DSD) -> h (dimensioned latent variables)
-    - dynamics: [h_hat, M] -> [h] -> flux_pred (predicted flux)
-    - decoder: [h] -> [h_hat, M] -> x_recon (reconstructed normalized DSD)
+    - encoder: x (dimensioned DSD) -> Z = [z, M] (dimensioned latent variables)
+    - dynamics: Z -> flux_pred (predicted flux in latent space)
+    - decoder: Z -> x_recon (reconstructed dimensioned DSD)
 
     Args:
         model: ComposedModel with encoder, decoder, and dynamics
         batch: Tuple of (batch_x, batch_flux, batch_M)
-               - batch_x: normalized DSD [batch, 1, n_bins]
+               - batch_x: dimensioned DSD [batch, 1, n_bins]
                - batch_flux: target sedimentation flux [batch, 1, n_bins]
-               - batch_M: total mass [batch, 1, 1]
+               - batch_M: total mass [batch, 1, 1] (redundant, encoder extracts it)
         params: Parameters dict with loss weights and tolerance
         device: Compute device
 
     Returns:
         total_loss, loss_dict
-
-    Notes:
-        The latent variables h have dimensions of mass (they are linear projections
-        of the normalized DSD). The dynamics module receives h and should
-        predict flux in each bin.
-
-        TODO: Fill in the flux prediction equation/loss calculation
     """
     batch_x, batch_flux, batch_m = batch
-    batch_vt = batch_flux / (batch_x + params["tol"])  # Compute terminal velocity from flux and DSD
 
-    # 1. Reconstruction loss (in dimensionless DSD space)
-    pred_x_recon = model.decoder(model.encoder(batch_x)) # batch_x & batch_flux have dimensions this time
+    # 1. Reconstruction loss (in normalized DSD space)
+    pred_x_recon = model.decoder(model.encoder(batch_x))
     loss_kl = divergence(
-        torch.log(pred_x_recon / batch_m + params["tol"]),
-        torch.log(batch_x / batch_m + params["tol"]),
+        torch.log(pred_x_recon / (pred_x_recon.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
+        torch.log(batch_x / (batch_x.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
     )
 
     # 2. Vt-weighted reconstruction loss (to emphasize bins with higher sedimentation flux)
     vt = batch_flux / (batch_x + params["tol"])  # Compute terminal velocity from flux and DSD
-    loss_vt = criterion(pred_x_recon * vt, batch_flux)  # Vt-weighted reconstruction loss to emphasize bins with higher sedimentation flux
+    loss_vt = criterion(pred_x_recon * vt, batch_flux)
 
-    # 3. Latent tendency in h space
-    h = model.encoder(batch_x)
-    pred_dh = model.dzdt(h)  # Predict flux from latent variables
-    batch_dh = model.encoder(batch_flux)
-    loss_flux_dh = criterion(pred_dh, batch_dh)  # Loss on latent flux prediction
+    # 3. Latent flux prediction in Z space
+    Z = model.encoder(batch_x)
+    pred_dZ = model.dzdt(Z)  # Predict flux in latent space
+    batch_dZ = model.encoder(batch_flux)
+    loss_flux_dh = criterion(pred_dZ, batch_dZ)
 
-    # 4. Latent tendency in x space
-    hh = h.copy().detach().requires_grad_(True)
-    _, pred_dx = torch.func.jvp(model.decoder, (hh,), (pred_dh,))
-    loss_flux_dx = criterion(pred_dx, batch_flux)
+    # 4. Flux prediction in x space using JVP
+    Z_detached = Z.clone().detach().requires_grad_(True)
+    _, pred_flux = torch.func.jvp(model.decoder, (Z_detached,), (pred_dZ,))
+    loss_flux_dx = criterion(pred_flux, batch_flux)
 
     # Weighted total loss
     loss = (

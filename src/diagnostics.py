@@ -36,6 +36,7 @@ def get_latent_trajectories_AR(
     for j in range(x_test.shape[0]):
         x0 = x_test[j, :n_lag, :]
         mj = m_test[j, :]
+        # Encoder now outputs [n_latent+1] including mass
         z0 = np.array(
             [
                 model.encoder(torch.Tensor(x0[t]).reshape(1, -1)).detach().numpy()[0]
@@ -43,20 +44,19 @@ def get_latent_trajectories_AR(
             ]
         )
         z_data[j, :, -1] = mj
-        z_data[j, :n_lag, :-1] = z0
-        z_pred[j, :n_lag, :-1] = z0
-        z_pred[j, :n_lag, -1] = mj[0]
+        z_data[j, :n_lag, :] = z0  # z0 already includes mass
+        z_pred[j, :n_lag, :] = z0
         for t in range(n_lag, x_test.shape[1]):
             lagged_input = torch.Tensor(z_pred[j, t - n_lag : t, :]).reshape(
                 n_lag * (n_latent + 1)
             )
             z_pred[j, t, :] = model.dzdt(lagged_input).detach().numpy()
-            z_data[j, t, :-1] = (
+            z_data[j, t, :] = (
                 model.encoder(torch.Tensor(x_test[j, t, :]).reshape(1, -1))
                 .detach()
                 .numpy()[0]
             )
-    x_pred = model.decoder(torch.Tensor(z_pred[:, :, :-1]))
+    x_pred = model.decoder(torch.Tensor(z_pred)).detach().numpy()
 
     return z_pred, z_data, x_pred
 
@@ -83,29 +83,25 @@ def get_latent_trajectories_dzdt(
     :returns: Tuple containing predicted latent trajectories, true latent trajectories, and predicted DSD.
     """
 
-    # Compute limits
-    z_enc_train = model.encoder(torch.Tensor(x_train)).detach().numpy()
+    # Compute limits for all latent dimensions including mass
+    Z_enc_train = model.encoder(torch.Tensor(x_train)).detach().numpy()
     zlim = np.zeros((n_latent + 1, 2))
-    for il in range(n_latent):
-        zlim[il][0] = z_enc_train[:, :, il].min()
-        zlim[il][1] = z_enc_train[:, :, il].max()
-    zlim[-1][0] = m_train.min()
-    zlim[-1][1] = m_train.max()
+    for il in range(n_latent + 1):
+        zlim[il][0] = Z_enc_train[:, :, il].min()
+        zlim[il][1] = Z_enc_train[:, :, il].max()
 
     z_pred = np.zeros((x_test.shape[0], len(dsd_time), n_latent + 1))
     z_data = np.zeros_like(z_pred)
 
-    z_data[:, :, :-1] = model.encoder(torch.Tensor(x_test)).detach().numpy()
-    z_data[:, :, -1] = m_test
+    # Encoder now outputs Z = [z, M] directly from dimensioned DSD
+    z_data = model.encoder(torch.Tensor(x_test)).detach().numpy()
 
-    if type(model.encoder).__name__ == 'LinearEncoder':
-        z0 = z_data[:, 0, :]
-        latents_pred = du.simulate(z0, dsd_time, model.dzdt, zlim)
-        x_pred = model.decoder(torch.Tensor(latents_pred)).detach().numpy()
-    else:
-        z0 = np.concatenate((z_data[:, 0, :], np.array([m_test[:, 0]])), axis=-1)
-        latents_pred = du.simulate(z0, dsd_time, model.dzdt, zlim)
-        x_pred = model.decoder(torch.Tensor(latents_pred[:, :, :-1])).detach().numpy()
+    # Simulate latent dynamics
+    Z0 = z_data[:, 0, :]
+    latents_pred = du.simulate(Z0, dsd_time, model.dzdt, zlim)
+
+    # Decoder takes full Z = [z, M] and outputs dimensioned DSD
+    x_pred = model.decoder(torch.Tensor(latents_pred)).detach().numpy()
 
     return z_pred, z_data, x_pred
 
