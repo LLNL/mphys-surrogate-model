@@ -92,6 +92,7 @@ class LinearEncoder(nn.Module):
     # in this version, ln(W) = NNWF(in_features=n_bins)
     def __init__(self, n_bins=64, n_latent=3, type="fnM"):
         super().__init__()
+        self.n_bins = n_bins
         if type == "fnM":
             self.wfs = nn.ModuleList([NNWF(in_features=n_bins) for i in range(n_latent)])
         elif type == "simple":
@@ -103,7 +104,7 @@ class LinearEncoder(nn.Module):
     def wf_mat(self):
         lnW = torch.cat([wf() for wf in self.wfs], dim=1) # learn WFs
         Wf = torch.softmax(lnW, dim=0)
-        Wf = torch.cat([Wf, torch.ones(1, self.out_features)], dim=0)  # Add row of ones for mass
+        Wf = torch.cat([Wf, torch.ones(self.n_bins, 1)], dim=-1)  # Add row of ones for mass
         return Wf
 
     def forward(self, x):
@@ -122,7 +123,7 @@ class SimpleDecoder(nn.Module):
     def forward(self, h):
         hhat, mass = h_to_hhat_M(h)  # Convert to dimensionless latent variables and mass
         xhat = self.network(hhat)
-        return self.sm(xhat) * mass # convert back to a normalized PSD, scale by mass
+        return self.sm(xhat) * mass.unsqueeze(-1) # convert back to a normalized PSD, scale by mass
 
 # based on Huang 2025
 class DeepDecoder(nn.Module):
@@ -155,11 +156,11 @@ class NNWIAutoencoder(nn.Module):
     
 def hhat_M_to_h(h_hat, M):
     # Converts dimensionless latent variables plus mass M to latent variables with mass dimensions
-    h = torch.concat([h_hat*M, M], dim=-1)  # concatenate h_hat*M and M along the feature dimension
+    h = torch.concat([h_hat*M.unsqueeze(-1), M.unsqueeze(-1)], dim=-1)  # concatenate h_hat*M and M along the feature dimension
     return h
 
 def h_to_hhat_M(h):
     # Converts dimensioned latent variables back to dimensionless h_hat and dimensioned M
     M = h[:, :, -1]  # Extract M (last feature)
-    h_hat = h[:, :, :-1] / M  # Example: take mean across latent dimension for h_hat
+    h_hat = h[:, :, :-1] / M.unsqueeze(-1)  # Example: take mean across latent dimension for h_hat
     return h_hat, M

@@ -84,27 +84,29 @@ if __name__ == "__main__":
         params["data_src"], params
     )
 
-    for batch in test_loader:
-        print('hi')
+    # Create model using factory
+    model = model_factory.create_model(
+        params["encoder_type"],
+        params["decoder_type"],
+        params["dynamics_type"],
+        params,
+        metadata["n_bins"],
+    )
 
-    # # Create model using factory
-    # model = model_factory.create_model(
-    #     params["encoder_type"],
-    #     params["decoder_type"],
-    #     params["dynamics_type"],
-    #     params,
-    #     metadata["n_bins"],
-    # )
-    #
-    # total_params = sum(p.numel() for p in model.parameters())
-    # if model.dzdt is not None:
-    #     dynamics_params = sum(p.numel() for p in model.dzdt.parameters())
-    #     print(
-    #         f"Total parameters: {total_params}, {dynamics_params} in dynamics module"
-    #     )
-    # else:
-    #     print(f"Total parameters: {total_params} (pure autoencoder, no dynamics)")
-    #
+    total_params = sum(p.numel() for p in model.parameters())
+    if model.dzdt is not None:
+        dynamics_params = sum(p.numel() for p in model.dzdt.parameters())
+        print(
+            f"Total parameters: {total_params}, {dynamics_params} in dynamics module"
+        )
+    else:
+        print(f"Total parameters: {total_params} (pure autoencoder, no dynamics)")
+
+    for batch in train_loader:
+        batch_x, batch_flux, batch_m = batch
+        W = model.encoder.wf_mat()
+        h = model.encoder(batch_x)
+        x_recon = model.decoder(h)
     # # Setup loss weights
     # if params["dynamics_type"] in ["sindy", "nn_dzdt"]:
     #     from src.data_utils import NormedBinDatasetDzDt

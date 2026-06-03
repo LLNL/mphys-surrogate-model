@@ -123,7 +123,6 @@ def compute_ar_loss(model, batch, params, device):
 def compute_autoencoder_loss(model, batch, params, device):
     """
     Loss for pure autoencoder (no dynamics).
-    Used for NNWI models.
 
     Args:
         model: ComposedModel with encoder and decoder only
