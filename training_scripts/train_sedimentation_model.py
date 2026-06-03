@@ -56,7 +56,7 @@ params = {
 
     # Loss weight computation (for dzdt models - only used if weights not specified)
     "lambda1_metaweight": 0.5,
-    "w_recon_vt": 0.0,
+    "loss_weight_recon_vt": 0.0,
     # Optional: Manually specify loss weights (overrides Champion et al. computation)
     # For sindy/nn_dzdt: "loss_weight_recon", "loss_weight_dx", "loss_weight_dz", "loss_weight_vt_recon"
     # For none: "loss_weight_l2"

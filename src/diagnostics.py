@@ -98,11 +98,14 @@ def get_latent_trajectories_dzdt(
     z_data[:, :, :-1] = model.encoder(torch.Tensor(x_test)).detach().numpy()
     z_data[:, :, -1] = m_test
 
-    for j in range(x_test.shape[0]):
-        z0 = z_data[j, 0, :]
-        latents_pred = du.simulate(z0, dsd_time, model.dzdt, zlim).squeeze()
-        z_pred[j, :, :] = latents_pred
-    x_pred = model.decoder(torch.Tensor(z_pred[:, :, :-1]))
+    if type(model.encoder).__name__ == 'LinearEncoder':
+        z0 = z_data[:, 0, :]
+        latents_pred = du.simulate(z0, dsd_time, model.dzdt, zlim)
+        x_pred = model.decoder(torch.Tensor(latents_pred)).detach().numpy()
+    else:
+        z0 = np.concatenate((z_data[:, 0, :], np.array([m_test[:, 0]])), axis=-1)
+        latents_pred = du.simulate(z0, dsd_time, model.dzdt, zlim)
+        x_pred = model.decoder(torch.Tensor(latents_pred[:, :, :-1])).detach().numpy()
 
     return z_pred, z_data, x_pred
 

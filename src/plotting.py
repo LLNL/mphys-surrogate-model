@@ -6,6 +6,7 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.io as pio
 import torch
+import nwi
 import matplotlib as mpl
 from matplotlib.ticker import FormatStrFormatter
 from scipy.stats import wasserstein_distance
@@ -417,14 +418,20 @@ def plot_predictions_dzdt(
 
     # Compute all else
     z_encoded = model.encoder(torch.Tensor(x_test)).detach().numpy()
-    for i, id in enumerate(test_ids):
-        z0 = np.concatenate((z_encoded[id, 0, :], np.array([m_test[id, 0]])), axis=-1)
-        latents_pred = du.simulate(z0, dsd_time[tplt], model.dzdt, zlim)
-        x_pred = model.decoder(torch.Tensor(latents_pred[:, :-1])).detach().numpy()
 
+    if type(model.encoder).__name__ == 'LinearEncoder':
+        z0 = z_encoded[test_ids, 0, :]
+        latents_pred = du.simulate(z0, dsd_time[tplt], model.dzdt, zlim)
+        x_pred = model.decoder(torch.Tensor(latents_pred)).detach().numpy()
+    else:
+        z0 = np.concatenate((z_encoded[test_ids, 0, :], np.array([m_test[test_ids, 0]])), axis=-1)
+        latents_pred = du.simulate(z0, dsd_time[tplt], model.dzdt, zlim)
+        x_pred = model.decoder(torch.Tensor(latents_pred[:, :, :-1])).detach().numpy()
+
+    for i, id in enumerate(test_ids):
         for j, t in enumerate(tplt):
             ax[j][i].step(r_bins_edges, x_test[id, t, :])
-            ax[j][i].step(r_bins_edges, x_pred[j, :])
+            ax[j][i].step(r_bins_edges, x_pred[i, j, :])
 
             ax[j][i].set_xscale("log")
             ax[j][i].set_xscale("log")

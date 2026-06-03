@@ -664,8 +664,10 @@ def simulate(z0, T, dz_network, z_lim):
                 dz[il] = 0.0
         return dz
 
-    sol = solve_ivp(f, [T[0], T[-1]], z0, method="RK45", t_eval=T)
-    Z = sol.y.T
+    Z = np.zeros((z0.shape[0], T.shape[0], z0.shape[1]))
+    for i in range(z0.shape[0]):
+        sol = solve_ivp(f, [T[0], T[-1]], z0[i], method="RK45", t_eval=T)
+        Z[i,:,:] = sol.y.T
     return Z
 
 

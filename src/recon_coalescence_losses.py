@@ -39,10 +39,14 @@ def compute_dzdt_loss(model, batch, params, device):
 
     # Compute JVP for encoder and decoder
     _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
-    _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
+    if params["encoder_type"] == "nwi":
+        _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dzM,))
+        loss_dz = criterion(pred_dzM, dz)
+    else:
+        _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
+        loss_dz = criterion(pred_dz, dz) + criterion(pred_dM, dM)
 
     # Calculate losses
-    loss_dz = criterion(pred_dz, dz) + criterion(pred_dM, dM)
     loss_dx = criterion(pred_dx, batch_dx)
     loss_recon = divergence(
         torch.log(pred_x_recon + params["tol"]),
