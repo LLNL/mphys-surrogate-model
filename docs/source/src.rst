@@ -14,6 +14,7 @@ Submodules
    src.nwi
    src.plotting
    src.recon_coalescence_losses
+   src.recon_sedimentation_losses
    src.save_utils
    src.training_utils
 

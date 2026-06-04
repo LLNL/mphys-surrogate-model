@@ -90,18 +90,15 @@ def get_latent_trajectories_dzdt(
         zlim[il][0] = Z_enc_train[:, :, il].min()
         zlim[il][1] = Z_enc_train[:, :, il].max()
 
-    z_pred = np.zeros((x_test.shape[0], len(dsd_time), n_latent + 1))
-    z_data = np.zeros_like(z_pred)
-
     # Encoder now outputs Z = [z, M] directly from dimensioned DSD
     z_data = model.encoder(torch.Tensor(x_test)).detach().numpy()
 
     # Simulate latent dynamics
     Z0 = z_data[:, 0, :]
-    latents_pred = du.simulate(Z0, dsd_time, model.dzdt, zlim)
+    z_pred = du.simulate(Z0, dsd_time, model.dzdt, zlim)
 
     # Decoder takes full Z = [z, M] and outputs dimensioned DSD
-    x_pred = model.decoder(torch.Tensor(latents_pred)).detach().numpy()
+    x_pred = model.decoder(torch.Tensor(z_pred)).detach().numpy()
 
     return z_pred, z_data, x_pred
 
@@ -122,6 +119,10 @@ def get_performance_metrics(x_test, m_test, z_pred, x_pred, tol=1e-8):
     n_test = x_test.shape[0]
     n_timesteps = x_test.shape[1]
     divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
+
+    # Convert x_pred to tensor if it's a numpy array
+    if isinstance(x_pred, np.ndarray):
+        x_pred = torch.Tensor(x_pred)
 
     test_kl = np.zeros(x_test.shape[0:2])
     test_wass = np.zeros(x_test.shape[0:2])

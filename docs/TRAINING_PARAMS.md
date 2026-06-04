@@ -1,6 +1,6 @@
 # Training Parameters Guide
 
-This document describes all available parameters for training coalescence surrogate models using `train_coalescence_model.py`.
+This document describes all available parameters for training coalescence surrogate models using `training_scripts/coalescence/train_coalescence_model.py`.
 
 ## Model Architecture Parameters
 
@@ -189,21 +189,47 @@ params = {
 
 Models are saved to:
 ```
-trained_models/ae_{encoder_type}_{dynamics_type}/{case_name}/
+trained_models/{encoder_type}_{decoder_type}_{dynamics_type}/{case_name}/
 ```
 
 Where `case_name` includes:
-- Encoder, decoder, and dynamics types
+- Timestamp
+- Data source
+- Latent dimension
 - Key hyperparameters
-- Timestamp for uniqueness
+- Loss weights
 
 Example:
 ```
-trained_models/ae_nwi_sindy/nwi_nwi_simple_sindy_erf_latent3_order2_tr100_lr0.004_bs25_weights1.0-561.06-56106.47_20260521_143022/
+trained_models/ffnn_ffnn_sindy/20260604_130740_erf_latent3_order2_ep1_lr4e-03_bs25_w1.0-405.8-40583/
 ```
 
 Each directory contains:
-- `{case_name}.pth` - Model weights
-- `{case_name}_params.json` - Full parameters used
-- `{case_name}.pkl` - Training/test losses
-- Various plots (`_losses.png`, `_reconstructions.png`, `_predictions.png`, etc.)
+- `model.pth` - Model weights
+- `params.json` - Full parameters used
+- `losses.pkl` - Training/test losses
+- Various plots (`losses.png`, `reconstructions.png`, `predictions.png`, `trajectories.png`, etc.)
+
+## Running Training Scripts
+
+All training scripts should be run from the repository root:
+
+```bash
+# Coalescence model
+conda run -n learning python training_scripts/coalescence/train_coalescence_model.py
+
+# Sedimentation model
+conda run -n learning python training_scripts/sedimentation/train_sedimentation_model.py
+```
+
+## Testing
+
+Verify your installation and model interfaces work correctly:
+
+```bash
+# Quick interface tests (10 configurations, ~30 seconds)
+python tests/test_unified_interface.py
+
+# Full end-to-end training tests (8 configurations, ~5 minutes)
+python tests/test_all_training_configs.py
+```

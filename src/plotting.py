@@ -268,7 +268,7 @@ def plot_latent_trajectories(
     ax[0][0].set_ylabel("Data")
     ax[1][0].set_ylabel("Model")
     fig.suptitle(f"Test set predicted Z(t)")
-    plt.tight_layout()
+    fig.tight_layout()
 
     # Optional save
     if saveas is not None:
@@ -621,12 +621,14 @@ def plot_full_testset_performance_pred(
     tick_indices = range(0, len(dsd_time), 2)
     # ---
     ax = axes[0]
-    klm = ax.matshow(np.log10(test_kl[order].T), vmin=-5, vmax=-2)
+    # Clip small values to avoid log10(0) or log10(negative)
+    test_kl_clipped = np.clip(test_kl, 1e-10, None)
+    klm = ax.matshow(np.log10(test_kl_clipped[order].T), vmin=-5, vmax=-2)
     fig.colorbar(
         klm,
         ax=ax,
         location="top",
-        label=f"log10(KL Divergence) (Mean={np.mean(np.log10(test_kl)):.2f})",
+        label=f"log10(KL Divergence) (Mean={np.mean(np.log10(test_kl_clipped)):.2f})",
         extend="both",
     )
     print(f"KL Divergence (Mean={np.mean(test_kl):.2e})")
@@ -716,7 +718,11 @@ def plot_testset_quantiles_pred(
     for i, id in enumerate(qtile_mems):
         for j, t in enumerate(tplt):
             ax[j][i].step(r_bins_edges, x_test[id, t, :])
-            ax[j][i].step(r_bins_edges, test_preds[id, t, :].detach().numpy())
+            # Handle both tensor and numpy array inputs
+            pred_vals = test_preds[id, t, :]
+            if isinstance(pred_vals, torch.Tensor):
+                pred_vals = pred_vals.detach().numpy()
+            ax[j][i].step(r_bins_edges, pred_vals)
 
             ax[j][i].set_xscale("log")
             ax[j][i].set_xscale("log")

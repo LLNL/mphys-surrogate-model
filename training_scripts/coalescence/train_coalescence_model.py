@@ -8,7 +8,7 @@ See docs/TRAINING_PARAMS.md for full documentation of all parameters.
 import os
 import sys
 
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 import numpy as np
@@ -19,9 +19,9 @@ from src import model_factory, recon_coalescence_losses, save_utils, training_ut
 # Parameters - configure these for your desired model
 params = {
     # Model architecture
-    "encoder_type": "nwi",  # "ffnn" or "nwi"
-    "decoder_type": "nwi_simple",  # "ffnn", "nwi_simple", or "nwi_deep"
-    "dynamics_type": "nn_dzdt",  # "sindy", "nn_dzdt", "autoregressive", or "none"
+    "encoder_type": "ffnn",  # "ffnn" or "nwi"
+    "decoder_type": "ffnn",  # "ffnn", "nwi_simple", or "nwi_deep"
+    "dynamics_type": "sindy",  # "sindy", "nn_dzdt", "autoregressive", or "none"
 
     # NWI-specific (only used if encoder_type="nwi" or decoder_type contains "nwi")
     "num_blocks": 3,
@@ -38,7 +38,7 @@ params = {
 
     # Training
     "random_seed": 10,
-    "num_epochs": 4,
+    "num_epochs": 1,
     "batch_size": 25,
     "learning_rate": 0.004204813405972317,
     "wd": 1e-3,
@@ -60,8 +60,8 @@ params = {
     # For none: "loss_weight_l2"
     # Output
 
-    "save": False,
-    "show_plots": False,
+    "save": True,
+    "show_plots": True,
 }
 
 
