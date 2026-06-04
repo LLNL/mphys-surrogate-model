@@ -122,6 +122,52 @@ def plot_reconstructions(
     # Return fig for further manipulation
     return fig
 
+def plot_flux_projections(
+    model, test_ids, x_test, flux_test, r_bins_edges
+):
+    """
+    Plot projections of DSD sedimentation flux for selected test members and time steps.
+
+    This function compares the actual binned flux to the latent-space flux projected into DSD space
+    for specified test member indices.
+
+    :param model: Trained model.
+    :param test_ids: List of indices for test set members to plot.
+    :param x_test: Test set DSD data array.
+    :param flux_test: Test set flux array.
+    :param r_bins_edges: Bin edges for DSD radius.
+    :return: The matplotlib figure object for further manipulation.
+    """
+    # Set up figure
+    (fig, ax) = plt.subplots(
+        ncols=len(test_ids),
+        figsize=(3 * len(test_ids), 3),
+        layout="constrained",
+    )
+    model.eval()
+
+    # Plot reconstruction for each test ID for multiple times
+    for i, id in enumerate(test_ids):
+        ax[i].step(r_bins_edges, flux_test[id])
+        h = model.encoder(torch.Tensor(x_test[id]))
+        pred_dh = model.dzdt(h)
+        _, pred_flux = torch.func.jvp(model.decoder, (h,), (pred_dh,))
+        ax[i].step(
+            r_bins_edges,
+            pred_flux.detach().numpy(),
+        )
+        ax[i].set_xscale("log")
+        ax[i].set_ylabel("PSD Flux")
+        ax[i].set_xlabel("r (m)")
+        ax[i].set_title(f"Run #{id}")
+
+    # Accoutrements
+    ax[0].legend(["Data", "Prediction"])
+    fig.suptitle("Flux Demo: Out of Sample")
+
+    # Return fig for further manipulation
+    return fig
+
 
 def plot_predictions_AE_AR(
     model, test_ids, dsd_time, tplt, x_test, m_test, r_bins_edges, n_lag=1, saveas=None

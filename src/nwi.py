@@ -159,9 +159,9 @@ def hhat_M_to_h(h_hat, M):
     h = torch.concat([h_hat*M.unsqueeze(-1), M.unsqueeze(-1)], dim=-1)  # concatenate h_hat*M and M along the feature dimension
     return h
 
-def h_to_hhat_M(h):
+def h_to_hhat_M(h, eps=1e-8):
     # Converts dimensioned latent variables back to dimensionless h_hat and dimensioned M
     # Works with any number of leading dimensions: [..., latent+1]
     M = h[..., -1]  # Extract M (last feature)
-    h_hat = h[..., :-1] / M.unsqueeze(-1)  # Normalize by M
+    h_hat = h[..., :-1] / (M.unsqueeze(-1) + eps)  # Normalize by M (add eps to prevent division by zero)
     return h_hat, M

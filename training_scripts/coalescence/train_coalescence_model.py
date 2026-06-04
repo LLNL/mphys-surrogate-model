@@ -18,6 +18,9 @@ from src import model_factory, recon_coalescence_losses, save_utils, training_ut
 
 # Parameters - configure these for your desired model
 params = {
+    # Process type
+    "process": "coalescence", #"sedimentation" or "coalescence"
+
     # Model architecture
     "encoder_type": "ffnn",  # "ffnn" or "nwi"
     "decoder_type": "ffnn",  # "ffnn", "nwi_simple", or "nwi_deep"

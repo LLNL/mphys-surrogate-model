@@ -369,7 +369,7 @@ def train_and_eval(
             # Print component losses if they exist
             loss_components = [k for k in losses.keys() if k != 'total']
             if loss_components:
-                comp_str = " | ".join([f"{k}: {losses[k][epoch]:.4f}" for k in loss_components])
+                comp_str = " | ".join([f"{k}: {losses[k][epoch]:.2e}" for k in loss_components])
                 print(f"  {comp_str}")
 
         # Optuna reporting

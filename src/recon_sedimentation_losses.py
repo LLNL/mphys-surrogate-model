@@ -4,7 +4,7 @@ Provides loss computation for predicting sedimentation flux.
 """
 
 import torch
-from nwi import hhat_M_to_h
+from src.nwi import hhat_M_to_h
 
 # Global loss functions
 criterion = torch.nn.MSELoss()
@@ -47,7 +47,7 @@ def compute_autoencoder_loss(model, batch, params, device):
     loss_dict = {
         "total": loss,
         "kl": loss_kl,
-        "l2_vt": loss_l2,
+        "l2_vt": params["loss_weight_l2"] * loss_l2,
     }
 
     return loss, loss_dict
@@ -107,10 +107,10 @@ def compute_sedimentation_loss(model, batch, params, device):
 
     loss_dict = {
         "total": loss,
-        "recon": loss_kl,
-        "recon_vt": loss_vt,
-        "flux_dh": loss_flux_dh,
-        "flux_dx": loss_flux_dx,
+        "recon": params["loss_weight_recon"] * loss_kl,
+        "recon_vt":  params["loss_weight_recon_vt"] * loss_vt,
+        "flux_dh": params["loss_weight_dz"] * loss_flux_dh,
+        "flux_dx": params["loss_weight_dx"] * loss_flux_dx,
     }
 
     return loss, loss_dict

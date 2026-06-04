@@ -61,9 +61,9 @@ def compute_dzdt_loss(model, batch, params, device):
 
     loss_dict = {
         "total": loss,
-        "recon": loss_recon,
-        "dx": loss_dx,
-        "dz": loss_dz,
+        "recon": params["loss_weight_recon"] * loss_recon,
+        "dx": params["loss_weight_dx"] * loss_dx,
+        "dz": params["loss_weight_dz"] * loss_dz,
     }
 
     return loss, loss_dict
@@ -118,9 +118,9 @@ def compute_ar_loss(model, batch, params, device):
 
     loss_dict = {
         "total": loss,
-        "recon": loss_recon,
-        "dx": loss_dx,
-        "dz": loss_dz,
+        "recon": params["w_recon"] * loss_recon,
+        "dx": params["w_dx"] * loss_dx,
+        "dz": params["w_dz"] * loss_dz,
     }
 
     return loss, loss_dict
@@ -159,7 +159,7 @@ def compute_autoencoder_loss(model, batch, params, device):
     loss_dict = {
         "total": loss,
         "kl": loss_kl,
-        "l2": loss_l2,
+        "l2": params["loss_weight_l2"] * loss_l2,
     }
 
     return loss, loss_dict

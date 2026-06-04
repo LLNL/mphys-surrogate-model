@@ -11,15 +11,16 @@ import sys
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
-import data_utils
-
 import numpy as np
 import torch
 
-from src import model_factory, recon_coalescence_losses, save_utils, training_utils
+from src import data_utils, model_factory, recon_sedimentation_losses, save_utils, training_utils, plotting
 
 # Parameters - configure these for your desired model
 params = {
+    # Process type
+    "process": "sedimentation", #"sedimentation" or "coalescence"
+
     # Model architecture
     "encoder_type": "nwi",  # "ffnn" or "nwi"
     "decoder_type": "nwi_simple",  # "ffnn", "nwi_simple", or "nwi_deep"
@@ -40,8 +41,8 @@ params = {
 
     # Training
     "random_seed": 10,
-    "num_epochs": 4,
-    "batch_size": 25,
+    "num_epochs": 3,
+    "batch_size": 1000,
     "learning_rate": 1e-3,
     "wd": 1e-3,
     "lr_sched": True,
@@ -54,16 +55,19 @@ params = {
     # Loss parameters
     "tol": 1e-8,
 
-    # Loss weight computation (for dzdt models - only used if weights not specified)
-    "lambda1_metaweight": 0.5,
-    "loss_weight_recon_vt": 0.0,
+    # Loss weight computation #TODO: Automate for sedimentation case?
+    "loss_weight_recon": 1.0,
+    "loss_weight_recon_vt": 1e4,
+    "loss_weight_dx": 1e5,
+    "loss_weight_dz": 1e3,
     # Optional: Manually specify loss weights (overrides Champion et al. computation)
     # For sindy/nn_dzdt: "loss_weight_recon", "loss_weight_dx", "loss_weight_dz", "loss_weight_vt_recon"
     # For none: "loss_weight_l2"
     # Output
 
     "save": False,
-    "show_plots": False,
+    "plot": True,
+    "show_plots": True,
 }
 
 if __name__ == "__main__":
@@ -102,67 +106,53 @@ if __name__ == "__main__":
     else:
         print(f"Total parameters: {total_params} (pure autoencoder, no dynamics)")
 
-    for batch in train_loader:
-        batch_x, batch_flux, batch_m = batch
-        W = model.encoder.wf_mat()
-        h = model.encoder(batch_x)
-        x_recon = model.decoder(h)
-    # # Setup loss weights
-    # if params["dynamics_type"] in ["sindy", "nn_dzdt"]:
-    #     from src.data_utils import NormedBinDatasetDzDt
-    #
-    #     train_data = NormedBinDatasetDzDt(
-    #         metadata["x_train"], metadata["dsd_time"], metadata["m_train"]
-    #     )
-    # elif params["dynamics_type"] == "autoregressive":
-    #     from src.data_utils import NormedBinDatasetAR
-    #
-    #     train_data = NormedBinDatasetAR(
-    #         metadata["x_train"], metadata["m_train"], lag=params["n_lag"]
-    #     )
-    # else:
-    #     from src.data_utils import NormedBinDatasetDzDt
-    #
-    #     train_data = NormedBinDatasetDzDt(
-    #         metadata["x_train"], metadata["dsd_time"], metadata["m_train"]
-    #     )
-    #
-    # params = training_utils.setup_loss_weights(params, train_data)
-    #
-    # # Get loss function
-    # loss_fn = recon_coalescence_losses.get_loss_function(params["dynamics_type"])
-    #
-    # # Setup optimization
-    # optimizer, scheduler, early_stopping = training_utils.setup_optimization(
-    #     model, params
-    # )
-    #
-    # # Train
-    # best_model, losses = training_utils.train_and_eval(
-    #     model,
-    #     train_loader,
-    #     test_loader,
-    #     optimizer,
-    #     scheduler,
-    #     loss_fn,
-    #     params,
-    #     device,
-    #     early_stopping=early_stopping,
-    # )
-    #
-    # # Save and plot
-    # output_dir, case_name, timestamp = save_utils.setup_output_dir(params)
-    # print(f"Output directory: {output_dir}")
-    #
-    # if params["save"]:
-    #     save_utils.save_model_artifacts(
-    #         best_model, losses, params, output_dir, timestamp
-    #     )
-    #
-    #     # Plot losses
-    #     save_utils.plot_training_losses(losses, params, output_dir)
-    #
-    #     # Generate all other plots
-    #     save_utils.generate_plots(best_model, metadata, params, output_dir)
-    #
-    # print("Training complete!")
+
+    # Get loss function
+    loss_fn = recon_sedimentation_losses.get_loss_function(params["dynamics_type"])
+
+    # Setup optimization
+    optimizer, scheduler, early_stopping = training_utils.setup_optimization(
+        model, params
+    )
+
+    # Train
+    best_model, losses = training_utils.train_and_eval(
+        model,
+        train_loader,
+        test_loader,
+        optimizer,
+        scheduler,
+        loss_fn,
+        params,
+        device,
+        early_stopping=early_stopping,
+    )
+
+    print("Training complete! Saving and plotting...")
+
+    # Save and plot
+    output_dir, case_name, timestamp = save_utils.setup_output_dir(params)
+    print(f"Output directory: {output_dir}")
+
+    if params["save"]:
+        save_utils.save_model_artifacts(
+            best_model, losses, params, output_dir, timestamp
+        )
+
+    if params["plot"]:
+
+        # Plot losses
+        save_utils.plot_training_losses(losses, params, output_dir)
+
+        # Plot reconstructions
+        test_ids = np.random.randint(0, data["x_test"].shape[0], 5)
+        fig = plotting.plot_reconstructions(best_model, test_ids, data["x_test"][:,np.newaxis,:], data["r_bins_edges"])
+        fig.savefig(output_dir + "/reconstructions.png") if params["save"] else None
+        fig.show() if params["show_plots"] else None
+
+        # Plot flux reconstructions
+        fig = plotting.plot_flux_projections(best_model, test_ids, data["x_test"], data["flux_test"], data["r_bins_edges"])
+        fig.savefig(output_dir + "/projections.png") if params["save"] else None
+        fig.show() if params["show_plots"] else None
+
+        # TODO: plot latent time derivatives parity, latent_3d, nwi weights
