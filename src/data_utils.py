@@ -91,8 +91,8 @@ def open_sed_datasets(path=None):
         ds_all = xr.open_dataset(path / "train_data.nc")
         ds_test = xr.open_dataset(path / "test_data.nc")
     else:
-        ds_all = xr.open_dataset(path + "_train.nc")
-        ds_test = xr.open_dataset(path + "_test.nc")
+        ds_all = xr.open_dataset(path / "train_data.nc")
+        ds_test = xr.open_dataset(path / "test_data.nc")
 
     # Training datasets: mass, UNnormalized DSD, and sedimentation flux
     m_train = ds_all["dmdlnr"].sum(dim="bin").to_numpy()

@@ -5,6 +5,7 @@ Provides generic training loop, device setup, data loading, and optimization set
 
 import copy
 import time
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -136,6 +137,9 @@ def setup_dataloaders_sed(data_src, params):
     # Open dataset
     if data_src == "erf":
         data = du.open_sed_datasets()
+    elif data_src == "erf_mini":
+        path = Path(__file__).parent.parent / "data/erf_data/sed_congestus/mini"
+        data = du.open_sed_datasets(path)
     else:
         raise NotImplementedError("only erf option exists")
 
