@@ -256,14 +256,14 @@ class NNDerivatives(torch.nn.Module):
         self.activation1 = SiLU()
         self.activation2 = SiLU()
         self.activation3 = SiLU()
-        self.sp = ReLU()
+        self.sp = Softplus()
 
-        self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
-        self.act = [
+        self.layers = nn.ModuleList([self.layer1, self.layer2, self.layer3, self.layer4])
+        self.act = nn.ModuleList([
             self.activation1,
             self.activation2,
             self.activation3,
-        ]
+        ])
 
         self.initialize_network()
 
@@ -282,20 +282,6 @@ class NNDerivatives(torch.nn.Module):
 
         return x
 
-    def get_weights(self):
-        weights = []
-        biases = []
-        for i, layer in enumerate(self.layers):
-            weights.append(layer.weight)
-            biases.append(layer.bias)
-
-        return (weights, biases)
-
-    def set_weights(self, weights, biases):
-        for i, layer in enumerate(self.layers):
-            layer.weight.data = weights[i]
-            layer.bias.data = biases[i]
-
     def initialize_network(self):
         for i, module in enumerate(self.layers):
             if isinstance(module, nn.Linear):
@@ -304,14 +290,16 @@ class NNDerivatives(torch.nn.Module):
                         module.weight, mode="fan_in", nonlinearity="relu"
                     )
                     nn.init.constant_(module.bias, 0.0)
-                else:  # Output layer (no activation)
-                    if self.nonneg:
-                        nn.init.kaiming_normal_(
-                            module.weight, mode="fan_in", nonlinearity="relu"
-                        )
-                    else:
-                        nn.init.normal_(module.weight, mean=0.0, std=0.01)
-                    nn.init.constant_(module.bias, 0.0)
+                else:  # Output layer
+                    nn.init.normal_(module.weight, mean=0.0, std=0.01)
+                    if self.nonneg: # Softplus activation
+                        # nn.init.kaiming_normal_(
+                        #     module.weight, mode="fan_in", nonlinearity="relu"
+                        # )
+                        nn.init.constant_(module.bias, -7.0)
+                    else: # (no activation)
+                        # nn.init.normal_(module.weight, mean=0.0, std=0.01)
+                        nn.init.constant_(module.bias, 0.0)
 
 
 class Autoregressive(torch.nn.Module):

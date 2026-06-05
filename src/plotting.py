@@ -104,6 +104,7 @@ def plot_reconstructions(
                 )
                 .detach()
                 .numpy()[0, 0],
+                ls='--'
             )
 
             ax[j][i].set_xscale("log")
@@ -155,6 +156,7 @@ def plot_flux_projections(
         ax[i].step(
             r_bins_edges,
             pred_flux.detach().numpy(),
+            ls='--'
         )
         ax[i].set_xscale("log")
         ax[i].set_ylabel("PSD Flux")
@@ -182,11 +184,14 @@ def plot_latent_fluxes(
 
     for ih in range(nh):
         ax[ih].scatter(dh[..., ih], dh_pred[..., ih], alpha=0.2, s=1)
-        xmin = min(np.percentile(dh[..., ih], 1e-1), np.percentile(dh_pred[..., ih], 1e-1))
-        xmax = max(np.percentile(dh[..., ih], 100-1e-1), np.percentile(dh_pred[..., ih], 100-1e-1))
+        xmin = min(np.percentile(dh[..., ih], 1), np.percentile(dh_pred[..., ih], 1))
+        xmax = max(np.percentile(dh[..., ih], 99), np.percentile(dh_pred[..., ih], 99))
         ax[ih].set_xlim(xmin, xmax)
         ax[ih].set_ylim(xmin, xmax)
         ax[ih].plot([xmin, xmax], [xmin, xmax], ls='--', color='k', lw=2)
+        if min(xmin, xmax) > 0.0:
+            ax[ih].set_xscale('log')
+            ax[ih].set_yscale('log')
         ax[ih].set_xlabel('dh data')
         ax[ih].set_ylabel('dh prediction')
         ax[ih].set_title(f"Latent Variable {ih}")
