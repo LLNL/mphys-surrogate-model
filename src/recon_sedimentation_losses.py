@@ -76,7 +76,8 @@ def compute_sedimentation_loss(model, batch, params, device):
     batch_x, batch_flux, batch_m = batch
 
     # 1. Reconstruction loss (in normalized DSD space)
-    pred_x_recon = model.decoder(model.encoder(batch_x))
+    Z = model.encoder(batch_x)
+    pred_x_recon = model.decoder(Z)
     loss_kl = divergence(
         torch.log(pred_x_recon / (pred_x_recon.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
         torch.log(batch_x / (batch_x.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
@@ -86,11 +87,10 @@ def compute_sedimentation_loss(model, batch, params, device):
     vt = batch_flux / (batch_x + params["tol"])  # Compute terminal velocity from flux and DSD
     loss_vt = criterion(pred_x_recon * vt, batch_flux)
 
-    # 3. Latent flux prediction in Z space
-    Z = model.encoder(batch_x)
+    # 3. Latent flux prediction in Z space: log-space MSE
     pred_dZ = model.dzdt(Z)  # Predict flux in latent space
     batch_dZ = model.encoder(batch_flux)
-    loss_flux_dh = criterion(pred_dZ, batch_dZ)
+    loss_flux_dh = criterion(torch.log(pred_dZ + params['tol']), torch.log(batch_dZ + params['tol']))
 
     # 4. Flux prediction in x space using JVP
     Z_detached = Z.clone().detach().requires_grad_(True)

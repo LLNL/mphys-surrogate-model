@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import Softmax
+import torch.nn.functional as F
 
 from src import data_utils as du
 
@@ -63,6 +64,16 @@ def SNN(in_features, out_features, hidden_features=256, num_blocks=5):
         nn.Linear(hidden_features, out_features)
     )
 
+class MonotoneLinear(nn.Module):
+    def __init__(self, in_features, out_features):
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty(out_features, in_features))
+        self.bias = nn.Parameter(torch.zeros(out_features))
+        nn.init.xavier_uniform_(self.weight)
+
+    def forward(self, x):
+        return F.linear(x, F.softplus(self.weight), self.bias)
+
 # From Huang 2025
 class NNWF(nn.Module):
     def __init__(self, in_features=64, nodes=16):
@@ -103,7 +114,7 @@ class LinearEncoder(nn.Module):
 
     def wf_mat(self):
         lnW = torch.cat([wf() for wf in self.wfs], dim=1) # learn WFs
-        Wf = torch.softmax(lnW, dim=0)
+        Wf = torch.softmax(lnW, dim=0) * self.n_bins
         Wf = torch.cat([Wf, torch.ones(self.n_bins, 1)], dim=-1)  # Add row of ones for mass
         return Wf
 

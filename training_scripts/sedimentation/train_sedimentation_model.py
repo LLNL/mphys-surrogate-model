@@ -41,7 +41,7 @@ params = {
 
     # Training
     "random_seed": 1,
-    "num_epochs": 10,
+    "num_epochs": 1000,
     "batch_size": 1000,
     "learning_rate": 1e-3,
     "wd": 1e-3,
@@ -57,9 +57,9 @@ params = {
 
     # Loss weight computation #TODO: Automate for sedimentation case?
     "loss_weight_recon": 1.0,
-    "loss_weight_recon_vt": 1e4,
+    "loss_weight_recon_vt": 0.0,
     "loss_weight_dx": 1e5,
-    "loss_weight_dz": 1e3,
+    "loss_weight_dz": 1e-1,
     # Optional: Manually specify loss weights (overrides Champion et al. computation)
     # For sindy/nn_dzdt: "loss_weight_recon", "loss_weight_dx", "loss_weight_dz", "loss_weight_vt_recon"
     # For none: "loss_weight_l2"
