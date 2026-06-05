@@ -168,6 +168,31 @@ def plot_flux_projections(
     # Return fig for further manipulation
     return fig
 
+def plot_latent_fluxes(
+    model, x_test, flux_test
+):
+    dh = model.encoder(torch.Tensor(flux_test)).detach().numpy()
+    dh_pred = model.dzdt(model.encoder(torch.Tensor(x_test))).detach().numpy()
+    nh = dh.shape[-1]
+    fig, ax = plt.subplots(
+        ncols=nh,
+        figsize=(3 * nh, 3),
+        layout="constrained",
+    )
+
+    for ih in range(nh):
+        ax[ih].scatter(dh[..., ih], dh_pred[..., ih], alpha=0.2, s=1)
+        xmin = min(np.percentile(dh[..., ih], 1e-1), np.percentile(dh_pred[..., ih], 1e-1))
+        xmax = max(np.percentile(dh[..., ih], 100-1e-1), np.percentile(dh_pred[..., ih], 100-1e-1))
+        ax[ih].set_xlim(xmin, xmax)
+        ax[ih].set_ylim(xmin, xmax)
+        ax[ih].plot([xmin, xmax], [xmin, xmax], ls='--', color='k', lw=2)
+        ax[ih].set_xlabel('dh data')
+        ax[ih].set_ylabel('dh prediction')
+        ax[ih].set_title(f"Latent Variable {ih}")
+
+    return fig
+
 
 def plot_predictions_AE_AR(
     model, test_ids, dsd_time, tplt, x_test, m_test, r_bins_edges, n_lag=1, saveas=None

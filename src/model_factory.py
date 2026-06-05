@@ -170,10 +170,15 @@ def create_dynamics(dynamics_type, n_latent, params):
             n_latent=n_latent + 1,  # +1 for mass coordinate
             poly_order=poly_order,
             use_thresholds=False,
+            nonneg=params['process'] == 'sedimentation'
         )
     elif dynamics_type == "nn_dzdt":
         layer_size = params.get("layer_size", (100, 100, 100))
-        return dynamics_cls(n_latent=n_latent + 1, layer_size=layer_size)
+        return dynamics_cls(
+            n_latent=n_latent + 1,
+            layer_size=layer_size,
+            nonneg=params['process'] == 'sedimentation'
+        )
     elif dynamics_type == "autoregressive":
         n_lag = params.get("n_lag", 1)
         layer_size = params.get("layer_size", (100, 100, 100))

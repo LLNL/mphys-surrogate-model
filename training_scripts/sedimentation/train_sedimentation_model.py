@@ -37,11 +37,11 @@ params = {
     "n_lag": 1,
 
     # Data
-    "data_src": "erf",  # "box" or "erf"
+    "data_src": "erf",  # "erf_mini" or "erf"
 
     # Training
-    "random_seed": 10,
-    "num_epochs": 3,
+    "random_seed": 1,
+    "num_epochs": 10,
     "batch_size": 1000,
     "learning_rate": 1e-3,
     "wd": 1e-3,
@@ -155,4 +155,13 @@ if __name__ == "__main__":
         fig.savefig(output_dir + "/projections.png") if params["save"] else None
         fig.show() if params["show_plots"] else None
 
-        # TODO: plot latent time derivatives parity, latent_3d, nwi weights
+        # Plot latent fluxes
+        fig = plotting.plot_latent_fluxes(model, data["x_test"], data["flux_test"])
+        fig.savefig(output_dir + "/latent_fluxes.png") if params["save"] else None
+        fig.show() if params["show_plots"] else None
+
+        # Plot NWI weights if applicable
+        if params['encoder_type'] == "nwi":
+            fig = plotting.plot_nnwi_weights(model, data['r_bins_edges'])
+            fig.savefig(output_dir / "weights.png") if params['save'] else None
+            fig.show() if params['show_plots'] else None

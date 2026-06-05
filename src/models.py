@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from torch.nn import ELU, Identity, Linear, ReLU, Sigmoid, SiLU, Softmax
+from torch.nn import ELU, Identity, Linear, ReLU, Sigmoid, SiLU, Softmax, Softplus
 
 from src import data_utils as du
 
@@ -179,7 +179,7 @@ class FFNNAutoEncoder(torch.nn.Module):
 
 
 class SINDyDeriv(torch.nn.Module):
-    def __init__(self, n_latent=10, poly_order=2, use_thresholds=False):
+    def __init__(self, n_latent=10, poly_order=2, use_thresholds=False, nonneg=False):
         """
         Pytorch SINDy model that is to be paired with autoencoder. Works directly
         from latent variables.
@@ -193,6 +193,8 @@ class SINDyDeriv(torch.nn.Module):
         self.library_size = du.library_size(n_latent, poly_order)
         self.n_latent = n_latent
         self.poly_order = poly_order
+        self.nonneg = nonneg
+        self.sp = ReLU()
 
         self.sindy_coeffs = torch.nn.Linear(
             self.library_size, self.n_latent, bias=False
@@ -209,6 +211,8 @@ class SINDyDeriv(torch.nn.Module):
         if self.use_thresholds:
             self.sindy_coeffs.weight.data = self.sindy_coeffs.weight.data * self.mask
         dZdt = self.sindy_coeffs(library)
+        if self.nonneg:
+            dZdt = self.sp(dZdt)
         return dZdt
 
     def init_weights(self, m):
@@ -226,7 +230,7 @@ class SINDyDeriv(torch.nn.Module):
 
 
 class NNDerivatives(torch.nn.Module):
-    def __init__(self, n_latent=3, layer_size=None):
+    def __init__(self, n_latent=3, layer_size=None, nonneg=False):
         """
         Pytorch black box model to predict time derivatives directly  of droplet
         size distributions directly (while SINDy predicts a simplified equation form
@@ -239,6 +243,7 @@ class NNDerivatives(torch.nn.Module):
         """
         super(NNDerivatives, self).__init__()
         self.n_latent = n_latent
+        self.nonneg = nonneg
         if layer_size is None:
             layer_size = (n_latent, n_latent, n_latent)
         else:
@@ -251,6 +256,7 @@ class NNDerivatives(torch.nn.Module):
         self.activation1 = SiLU()
         self.activation2 = SiLU()
         self.activation3 = SiLU()
+        self.sp = ReLU()
 
         self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
         self.act = [
@@ -270,6 +276,9 @@ class NNDerivatives(torch.nn.Module):
         x = self.layer3(x)
         x = self.activation3(x)
         x = self.layer4(x)
+
+        if self.nonneg:
+            x = self.sp(x)
 
         return x
 
@@ -296,7 +305,12 @@ class NNDerivatives(torch.nn.Module):
                     )
                     nn.init.constant_(module.bias, 0.0)
                 else:  # Output layer (no activation)
-                    nn.init.normal_(module.weight, mean=0.0, std=0.01)
+                    if self.nonneg:
+                        nn.init.kaiming_normal_(
+                            module.weight, mode="fan_in", nonlinearity="relu"
+                        )
+                    else:
+                        nn.init.normal_(module.weight, mean=0.0, std=0.01)
                     nn.init.constant_(module.bias, 0.0)
 
 
