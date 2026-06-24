@@ -4,10 +4,11 @@ Provides loss computation for predicting sedimentation flux.
 """
 
 import torch
-from src.nwi import hhat_M_to_h
+import torch.nn.functional as F
 
 # Global loss functions
-criterion = torch.nn.MSELoss()
+mse = torch.nn.MSELoss()
+mae = torch.nn.L1Loss()
 divergence = torch.nn.KLDivLoss(reduction="batchmean", log_target=True)
 
 def compute_autoencoder_loss(model, batch, params, device):
@@ -39,7 +40,7 @@ def compute_autoencoder_loss(model, batch, params, device):
         torch.log(batch_x / (batch_x.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
     )
     # Vt-weighted reconstruction loss to emphasize bins with higher sedimentation flux
-    loss_l2 = criterion(pred_x_recon * vt, batch_flux)
+    loss_l2 = mse(pred_x_recon * vt, batch_flux)
 
     # Weighted total loss
     loss = loss_kl + params["loss_weight_recon_vt"] * loss_l2
@@ -47,7 +48,7 @@ def compute_autoencoder_loss(model, batch, params, device):
     loss_dict = {
         "total": loss,
         "kl": loss_kl,
-        "l2_vt": params["loss_weight_l2"] * loss_l2,
+        "l2_vt": params["loss_weight_recon_vt"] * loss_l2,
     }
 
     return loss, loss_dict
@@ -85,17 +86,20 @@ def compute_sedimentation_loss(model, batch, params, device):
 
     # 2. Vt-weighted reconstruction loss (to emphasize bins with higher sedimentation flux)
     vt = batch_flux / (batch_x + params["tol"])  # Compute terminal velocity from flux and DSD
-    loss_vt = criterion(pred_x_recon * vt, batch_flux)
+    loss_vt = mse(pred_x_recon * vt, batch_flux)
 
     # 3. Latent flux prediction in Z space: log-space MSE
     pred_dZ = model.dzdt(Z)  # Predict flux in latent space
     batch_dZ = model.encoder(batch_flux)
-    loss_flux_dh = criterion(torch.log(pred_dZ + params['tol']), torch.log(batch_dZ + params['tol']))
+    loss_flux_dh = mse(torch.log(pred_dZ + params['tol']), torch.log(batch_dZ + params['tol']))
 
     # 4. Flux prediction in x space using JVP
     Z_detached = Z.clone().detach().requires_grad_(True)
     _, pred_flux = torch.func.jvp(model.decoder, (Z_detached,), (pred_dZ,))
-    loss_flux_dx = criterion(pred_flux, batch_flux)
+    loss_flux_dx = mse(pred_flux, batch_flux)
+
+    # 5. Penalty for a negative flux prediction in x space
+    loss_negFlux = mae(F.relu(-pred_flux), F.relu(-batch_flux))
 
     # Weighted total loss
     loss = (
@@ -103,6 +107,7 @@ def compute_sedimentation_loss(model, batch, params, device):
         + params["loss_weight_recon_vt"] * loss_vt
         + params["loss_weight_dx"] * loss_flux_dx
         + params["loss_weight_dz"] * loss_flux_dh
+        + params["loss_weight_negFlux"] * loss_negFlux
     )
 
     loss_dict = {
@@ -111,6 +116,7 @@ def compute_sedimentation_loss(model, batch, params, device):
         "recon_vt":  params["loss_weight_recon_vt"] * loss_vt,
         "flux_dh": params["loss_weight_dz"] * loss_flux_dh,
         "flux_dx": params["loss_weight_dx"] * loss_flux_dx,
+        "negFlux": params["loss_weight_negFlux"] * loss_negFlux,
     }
 
     return loss, loss_dict

@@ -24,7 +24,7 @@ params = {
     # Model architecture
     "encoder_type": "nwi",  # "ffnn" or "nwi"
     "decoder_type": "nwi_simple",  # "ffnn", "nwi_simple", or "nwi_deep"
-    "dynamics_type": "nn_dzdt",  # "sindy", "nn_dzdt", "autoregressive", or "none"
+    "dynamics_type": "none",  # "sindy", "nn_dzdt", "autoregressive", or "none"
 
     # NWI-specific (only used if encoder_type="nwi" or decoder_type contains "nwi")
     "num_blocks": 3,
@@ -41,7 +41,7 @@ params = {
 
     # Training
     "random_seed": 1,
-    "num_epochs": 1000,
+    "num_epochs": 250,
     "batch_size": 1000,
     "learning_rate": 1e-3,
     "wd": 1e-3,
@@ -59,13 +59,14 @@ params = {
     "loss_weight_recon": 1.0,
     "loss_weight_recon_vt": 0.0,
     "loss_weight_dx": 1e5,
-    "loss_weight_dz": 1e-1,
+    "loss_weight_dz": 1e1,
+    "loss_weight_negFlux": 1e4,
     # Optional: Manually specify loss weights (overrides Champion et al. computation)
     # For sindy/nn_dzdt: "loss_weight_recon", "loss_weight_dx", "loss_weight_dz", "loss_weight_vt_recon"
     # For none: "loss_weight_l2"
     # Output
 
-    "save": False,
+    "save": True,
     "plot": True,
     "show_plots": True,
 }
@@ -147,21 +148,22 @@ if __name__ == "__main__":
         # Plot reconstructions
         test_ids = np.random.randint(0, data["x_test"].shape[0], 5)
         fig = plotting.plot_reconstructions(best_model, test_ids, data["x_test"][:,np.newaxis,:], data["r_bins_edges"])
-        fig.savefig(output_dir + "/reconstructions.png") if params["save"] else None
-        fig.show() if params["show_plots"] else None
-
-        # Plot flux reconstructions
-        fig = plotting.plot_flux_projections(best_model, test_ids, data["x_test"], data["flux_test"], data["r_bins_edges"])
-        fig.savefig(output_dir + "/projections.png") if params["save"] else None
-        fig.show() if params["show_plots"] else None
-
-        # Plot latent fluxes
-        fig = plotting.plot_latent_fluxes(model, data["x_test"], data["flux_test"])
-        fig.savefig(output_dir + "/latent_fluxes.png") if params["save"] else None
+        fig.savefig(output_dir / "reconstructions.png") if params["save"] else None
         fig.show() if params["show_plots"] else None
 
         # Plot NWI weights if applicable
         if params['encoder_type'] == "nwi":
-            fig = plotting.plot_nnwi_weights(model, data['r_bins_edges'])
+            fig = plotting.plot_nnwi_weights(best_model, data['r_bins_edges'])
             fig.savefig(output_dir / "weights.png") if params['save'] else None
             fig.show() if params['show_plots'] else None
+
+        # Plot flux reconstructions
+        if params["dynamics_type"] != "none":
+            fig = plotting.plot_flux_projections(best_model, test_ids, data["x_test"], data["flux_test"], data["r_bins_edges"])
+            fig.savefig(output_dir / "projections.png") if params["save"] else None
+            fig.show() if params["show_plots"] else None
+
+            # Plot latent fluxes
+            fig = plotting.plot_latent_fluxes(best_model, data["x_test"], data["flux_test"])
+            fig.savefig(output_dir / "latent_fluxes.png") if params["save"] else None
+            fig.show() if params["show_plots"] else None
