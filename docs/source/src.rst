@@ -7,6 +7,7 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
+   src.constants
    src.data_utils
    src.diagnostics
    src.model_factory
