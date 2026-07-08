@@ -24,7 +24,7 @@ params = {
     # Model architecture
     "encoder_type": "nwi",  # "ffnn" or "nwi"
     "decoder_type": "nwi_simple",  # "ffnn", "nwi_simple", or "nwi_deep"
-    "dynamics_type": "none",  # "sindy", "nn_dzdt", "autoregressive", or "none"
+    "dynamics_type": "none",  # "sindy", "nn_dzdt", or "none"
 
     # NWI-specific (only used if encoder_type="nwi" or decoder_type contains "nwi")
     "num_blocks": 3,
@@ -56,16 +56,16 @@ params = {
     "tol": 1e-8,
 
     # Loss weight computation #TODO: Automate for sedimentation case?
+    # Optional: Manually specify loss weights (overrides Champion et al. computation)
+    # For sindy/nn_dzdt: "loss_weight_recon", "loss_weight_dx", "loss_weight_dz", "loss_weight_vt_recon"
+    # For none: "loss_weight_l2"
     "loss_weight_recon": 1.0,
     "loss_weight_recon_vt": 0.0,
     "loss_weight_dx": 1e5,
     "loss_weight_dz": 1e1,
     "loss_weight_negFlux": 1e4,
-    # Optional: Manually specify loss weights (overrides Champion et al. computation)
-    # For sindy/nn_dzdt: "loss_weight_recon", "loss_weight_dx", "loss_weight_dz", "loss_weight_vt_recon"
-    # For none: "loss_weight_l2"
-    # Output
 
+    # Output
     "save": True,
     "plot": True,
     "show_plots": True,
