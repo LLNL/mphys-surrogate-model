@@ -18,6 +18,9 @@ def compute_dzdt_loss(model, batch, params, device):
     Args:
         model: ComposedModel with encoder, decoder, and dynamics
         batch: Tuple of (batch_x, batch_dx, batch_M)
+               - batch_x: dimensioned DSD
+               - batch_dx: time derivative of dimensioned DSD
+               - batch_M: total mass (redundant but kept for compatibility)
         params: Parameters dict with loss weights
         device: Compute device
 
@@ -25,28 +28,28 @@ def compute_dzdt_loss(model, batch, params, device):
         total_loss, loss_dict
     """
     batch_x, batch_dx, batch_M = batch
-    dM = 0.0 * batch_M  # Mass should be conserved (dM/dt = 0)
 
     # Forward pass for reconstruction
+    # Encoder outputs Z = [z, M], decoder takes Z and outputs dimensioned DSD
     pred_x_recon = model.decoder(model.encoder(batch_x))
 
     # Forward pass for dynamics
-    z = model.encoder(batch_x)
-    zz = z.clone().detach().requires_grad_()
-    pred_dzM = model.dzdt(z, batch_M)
-    pred_dz = pred_dzM[:, :, :-1]  # Latent dynamics
-    pred_dM = pred_dzM[:, :, -1:]  # Mass derivative (keep dim for shape match)
+    Z = model.encoder(batch_x)
+    Z_detached = Z.clone().detach().requires_grad_()
+    pred_dZdt = model.dzdt(Z)
 
     # Compute JVP for encoder and decoder
-    _, dz = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
-    _, pred_dx = torch.func.jvp(model.decoder, (zz,), (pred_dz,))
+    _, dZdt = torch.func.jvp(model.encoder, (batch_x,), (batch_dx,))
+    _, pred_dx = torch.func.jvp(model.decoder, (Z_detached,), (pred_dZdt,))
 
     # Calculate losses
-    loss_dz = criterion(pred_dz, dz) + criterion(pred_dM, dM)
     loss_dx = criterion(pred_dx, batch_dx)
+    loss_dz = criterion(pred_dZdt, dZdt)
+
+    # Reconstruction loss in normalized space
     loss_recon = divergence(
-        torch.log(pred_x_recon + params["tol"]),
-        torch.log(batch_x + params["tol"]),
+        torch.log(pred_x_recon / (pred_x_recon.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
+        torch.log(batch_x / (batch_x.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
     )
 
     # Weighted total loss
@@ -58,9 +61,9 @@ def compute_dzdt_loss(model, batch, params, device):
 
     loss_dict = {
         "total": loss,
-        "recon": loss_recon,
-        "dx": loss_dx,
-        "dz": loss_dz,
+        "recon": params["loss_weight_recon"] * loss_recon,
+        "dx": params["loss_weight_dx"] * loss_dx,
+        "dz": params["loss_weight_dz"] * loss_dz,
     }
 
     return loss, loss_dict
@@ -73,6 +76,9 @@ def compute_ar_loss(model, batch, params, device):
     Args:
         model: ComposedModel with encoder, decoder, and AR dynamics
         batch: Tuple of (batch_X, batch_y, batch_M)
+               - batch_X: dimensioned DSD at previous timestep(s)
+               - batch_y: dimensioned DSD at next timestep
+               - batch_M: total mass
         params: Parameters dict with loss weights
         device: Compute device
 
@@ -85,22 +91,22 @@ def compute_ar_loss(model, batch, params, device):
     pred_x_recon = model.decoder(model.encoder(batch_X))
 
     # Autoregressive prediction
-    pred_y, pred_dM = model(batch_X, batch_M)
-    #pred_y = pred_y[:, 0, :]
+    pred_y, pred_M = model(batch_X, batch_M)
 
     # Get latent representations for latent loss
-    data_z1 = model.encoder(batch_y)
-    pred_z1 = model.encoder(pred_y)
+    data_Z1 = model.encoder(batch_y)
+    pred_Z1 = model.encoder(pred_y)
 
     # Calculate losses
-    loss_dz = criterion(pred_z1, data_z1) + criterion(pred_dM, batch_M[:, :, 0])
+    loss_dz = criterion(pred_Z1, data_Z1)
+    # Loss in normalized space
     loss_dx = divergence(
-        torch.log(pred_y + params["tol"]),
-        torch.log(batch_y + params["tol"]),
+        torch.log(pred_y / (pred_y.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
+        torch.log(batch_y / (batch_y.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
     )
     loss_recon = divergence(
-        torch.log(pred_x_recon + params["tol"]),
-        torch.log(batch_X + params["tol"]),
+        torch.log(pred_x_recon / (pred_x_recon.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
+        torch.log(batch_X / (batch_X.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
     )
 
     # Weighted total loss
@@ -112,9 +118,9 @@ def compute_ar_loss(model, batch, params, device):
 
     loss_dict = {
         "total": loss,
-        "recon": loss_recon,
-        "dx": loss_dx,
-        "dz": loss_dz,
+        "recon": params["w_recon"] * loss_recon,
+        "dx": params["w_dx"] * loss_dx,
+        "dz": params["w_dz"] * loss_dz,
     }
 
     return loss, loss_dict
@@ -123,11 +129,11 @@ def compute_ar_loss(model, batch, params, device):
 def compute_autoencoder_loss(model, batch, params, device):
     """
     Loss for pure autoencoder (no dynamics).
-    Used for NNWI models.
 
     Args:
         model: ComposedModel with encoder and decoder only
-        batch: Tuple of (batch_x, batch_dx, batch_M) - only batch_x is used
+        batch: Tuple of (batch_x, batch_dx, batch_M)
+               - batch_x: dimensioned DSD
         params: Parameters dict with loss weights
         device: Compute device
 
@@ -139,11 +145,12 @@ def compute_autoencoder_loss(model, batch, params, device):
     # Forward pass for reconstruction
     pred_x_recon = model.decoder(model.encoder(batch_x))
 
-    # Calculate losses
+    # Calculate losses in normalized space for KL divergence
     loss_kl = divergence(
-        torch.log(pred_x_recon + params["tol"]),
-        torch.log(batch_x + params["tol"]),
+        torch.log(pred_x_recon / (pred_x_recon.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
+        torch.log(batch_x / (batch_x.sum(dim=-1, keepdim=True) + params["tol"]) + params["tol"]),
     )
+    # L2 loss in dimensioned space
     loss_l2 = criterion(pred_x_recon, batch_x)
 
     # Weighted total loss
@@ -152,7 +159,7 @@ def compute_autoencoder_loss(model, batch, params, device):
     loss_dict = {
         "total": loss,
         "kl": loss_kl,
-        "l2": loss_l2,
+        "l2": params["loss_weight_l2"] * loss_l2,
     }
 
     return loss, loss_dict

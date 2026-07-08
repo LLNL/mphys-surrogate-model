@@ -15,6 +15,7 @@ import numpy as np
 import torch
 
 from src import diagnostics, plotting
+from src.constants import LOG_TOLERANCE
 
 
 def generate_case_name(params):
@@ -98,6 +99,7 @@ def setup_output_dir(params):
         Tuple of (output_dir Path, case_name string, timestamp string)
     """
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    process_root = params["process"] if "process" in params else ""
     case_name = generate_case_name(params)
     timestamp = case_name.split("_")[0]  # Extract timestamp from case_name
 
@@ -112,7 +114,7 @@ def setup_output_dir(params):
     else:
         base_dir = f"{encoder_type}_{decoder_type}_{dynamics_type}"
 
-    output_dir = Path(project_root + "/trained_models") / base_dir / case_name
+    output_dir = Path(project_root + "/trained_models") / process_root / base_dir / case_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     return output_dir, case_name, timestamp
@@ -172,37 +174,10 @@ def plot_training_losses(losses, params, output_dir):
     sub_losses = []
     labels = []
 
-    if dynamics_type == "sindy":
-        sub_losses = [
-            params.get("loss_weight_dx", 1.0) * np.array(losses.get("dx", [])),
-            params.get("loss_weight_dz", 1.0) * np.array(losses.get("dz", [])),
-            params.get("loss_weight_recon", 1.0) * np.array(losses.get("recon", [])),
-        ]
-        labels = ["dx/dt", "dz/dt", "Recon"]
-    elif dynamics_type == "nn_dzdt":
-        sub_losses = [
-            params.get("loss_weight_dx", 1.0) * np.array(losses.get("dx", [])),
-            params.get("loss_weight_dz", 1.0) * np.array(losses.get("dz", [])),
-            params.get("loss_weight_recon", 1.0) * np.array(losses.get("recon", [])),
-        ]
-        labels = ["dx/dt", "dz/dt", "Recon"]
-    elif dynamics_type == "autoregressive":
-        sub_losses = [
-            params.get("w_dx", 1.0) * np.array(losses.get("dx", [])),
-            params.get("w_recon", 1.0) * np.array(losses.get("recon", [])),
-            params.get("w_dz", 1.0) * np.array(losses.get("dz", [])),
-        ]
-        labels = ["dx", "Recon", "dz"]
-    elif dynamics_type == "none":
-        sub_losses = [
-            np.array(losses.get("kl", [])),
-            params.get("loss_weight_l2", 1.0) * np.array(losses.get("l2", [])),
-        ]
-        labels = ["KL", "L2"]
-    else:
-        # Generic fallback - just plot total loss if available
-        if "total" not in losses:
-            warnings.warn("No 'total' loss found in losses dict for unknown dynamics type '{}'. Sub-losses will be empty.".format(dynamics_type))
+    for key, value in losses.items():
+        if key[0:5] != "total" and key[0:4] != "test":
+            labels.append(key)
+            sub_losses.append(value)
 
     # Plot
     fig = plotting.plot_losses(
@@ -301,7 +276,7 @@ def generate_plots(model, metadata, params, output_dir):
 
         # Full test set performance
         fig = plotting.plot_full_testset_performance_recon(
-            model, x_test, params.get("tol", 1e-8)
+            model, x_test, params.get("tol", LOG_TOLERANCE)
         )
         if save:
             fig.savefig(output_dir / "full_test_recon.png")
@@ -366,7 +341,7 @@ def generate_plots(model, metadata, params, output_dir):
 
         # Full test set performance
         fig = plotting.plot_full_testset_performance_recon(
-            model, x_test, params.get("tol", 1e-8)
+            model, x_test, params.get("tol", LOG_TOLERANCE)
         )
         if save:
             fig.savefig(output_dir / "full_test_recon.png")

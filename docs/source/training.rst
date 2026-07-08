@@ -1,22 +1,35 @@
 Training Scripts
 ================
 
-The ``training_scripts/`` directory contains scripts for training and evaluating coalescence surrogate models.
+The ``training_scripts/`` directory contains scripts for training and evaluating coalescence and sedimentation surrogate models.
 
-Main Training Script
+Main Training Scripts
 --------------------
 
-.. automodule:: training_scripts.train_coalescence_model
+.. automodule:: training_scripts.coalescnece.train_coalescence_model
    :members:
    :undoc-members:
    :show-inheritance:
 
-The unified training script supports multiple model architectures:
+The unified coalescence training script supports multiple model architectures with a focus on different time evolution representations:
 
 * **AE-SINDy**: Autoencoder with SINDy dynamics
 * **AE-NNdzdt**: Autoencoder with neural network dynamics (dz/dt)
 * **AE-AR**: Autoencoder with autoregressive dynamics
 * **Pure Autoencoder**: NNWI-style models without explicit dynamics
+
+.. automodule:: training_scripts.coalescnece.train_coalescence_model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+The unified sedimentation training script likewise supports multiple model architectures with a focus on encoding structure:
+
+* **NWI-SINDy**: Linear autoencoder with neural network dynamics (dz/dt)
+* **NWI-SINDy**: Linear autoencoder with SINDy dynamics
+* **AE-SINDy**: Autoencoder with SINDy dynamics
+* **AE-NNdzdt**: Autoencoder with neural network dynamics (dz/dt)
+* **Pure Autoencoders**: NNWI-style models without explicit dynamics
 
 Parameter Configuration
 -----------------------
@@ -32,6 +45,7 @@ Key parameter groups:
 
 Quick Start
 -----------
+Using the coalescence script for this example: 
 
 1. Edit the ``params`` dict in ``train_coalescence_model.py``
 2. Run the script:

@@ -50,10 +50,15 @@ cd mphys-surrogate-model
 
 3. Train a model:
 ```bash
-python training_scripts/train_coalescence_model.py
+python training_scripts/coalescence/train_coalescence_model.py
 ```
 
-4. View the documentation (see [Building Documentation](#building-documentation) below)
+4. Run tests to verify installation:
+```bash
+python tests/test_unified_interface.py
+```
+
+5. View the documentation (see [Building Documentation](#building-documentation) below)
 
 ## Repository Structure
 
@@ -71,15 +76,26 @@ Core library modules for building and training microphysics reduced-order models
 - **`plotting.py`** - Visualization tools for predictions and accuracy analysis
 
 ### `training_scripts/`
-End-to-end training and evaluation scripts:
+End-to-end training and evaluation scripts organized by model type:
 
+#### `training_scripts/coalescence/`
+Scripts for coalescence microphysics models:
 - **`train_coalescence_model.py`** - Unified training script supporting multiple architectures (AE-SINDy, AE-NNdzdt, AE-AR)
 - **`optuna_study.py`** - Hyperparameter optimization using Optuna
 - **`eval_models_testdata.py`** - Evaluate trained models on test datasets
 - **`random_seed_variation.py`** - Test model stability across random initializations
 - **`export_to_ftorch.py`** - Export trained models to FTorch format for Fortran integration
 
+#### `training_scripts/sedimentation/`
+Scripts for sedimentation microphysics models:
+- **`train_sedimentation_model.py`** - Training script for sedimentation flux prediction models
+
 See [docs/TRAINING_PARAMS.md](docs/TRAINING_PARAMS.md) for complete parameter documentation.
+
+### `tests/`
+Test suite for validating model interfaces and training pipelines:
+- **`test_unified_interface.py`** - Unit tests for encoder/decoder interface with all combinations
+- **`test_all_training_configs.py`** - End-to-end training pipeline tests
 
 ### `uq/`
 Uncertainty quantification scripts using conformal prediction, including SLURM submission scripts for HPC environments.

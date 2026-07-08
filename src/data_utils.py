@@ -9,12 +9,14 @@ from scipy.special import binom
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 
+from src.constants import DIV_TOLERANCE
+
 
 def open_box_dataset():
     """
     Open box dataset. Paths are hardcoded but relative.
 
-    :return: X train, mass train, X test, mass test, radius bin edges, number of bins, DSD time
+    :return: X train (dimensioned), mass train, X test (dimensioned), mass test, radius bin edges, number of bins, DSD time
     """
     # Set path
     dpath = Path(__file__).parent.parent / "data" / "pysdm"
@@ -23,21 +25,23 @@ def open_box_dataset():
     ds_all = xr.open_dataset(dpath / "box64_train.nc", decode_timedelta=True)
     r_bins_edges = ds_all["mass_bin"]
     m_train = ds_all["dvdlnr"].sum(dim="mass_bin_idx")
+    m_scale = m_train.max().item()
+    # x_train is now unnormalized DSD (but scaled by m_scale)
     x_train = (
-        (ds_all["dvdlnr"] / m_train).transpose("run", "time", "mass_bin_idx").to_numpy()
+        ds_all["dvdlnr"].transpose("run", "time", "mass_bin_idx").to_numpy() / m_scale
     )
-    m_scale = m_train.max()
-    m_train = (m_train / m_scale).to_numpy()
+    m_train = m_train.to_numpy() / m_scale
     n_bins = x_train.shape[2]
     dsd_time = (ds_all["time"] / np.timedelta64(1, "s")).to_numpy()
 
     # Test dataset
     ds_test = xr.open_dataset(dpath / "box64_test.nc", decode_timedelta=True)
     m_test = ds_test["dvdlnr"].sum(dim="mass_bin_idx")
+    # x_test is now unnormalized DSD (but scaled by m_scale)
     x_test = (
-        (ds_test["dvdlnr"] / m_test).transpose("run", "time", "mass_bin_idx").to_numpy()
+        ds_test["dvdlnr"].transpose("run", "time", "mass_bin_idx").to_numpy() / m_scale
     )
-    m_test = (m_test / m_scale).to_numpy()
+    m_test = m_test.to_numpy() / m_scale
 
     return (x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time)
 
@@ -48,7 +52,7 @@ def open_erf_dataset(path=None, sample_time=None):
 
     :param path: Optional path to read from different location
     :param sample_time: Optional specific sample time to read
-    :return: X train, mass train, X test, mass test, radius bin edges, number of bins, DSD time
+    :return: X train (dimensioned), mass train, X test (dimensioned), mass test, radius bin edges, number of bins, DSD time
     """
     if path is None:
         path = Path(__file__).parent.parent / "data"
@@ -62,17 +66,72 @@ def open_erf_dataset(path=None, sample_time=None):
         ds_test = ds_test.isel(t=sample_time)
     r_bins_edges = ds_all["rbin_l"]
     m_train = ds_all["dmdlnr"].sum(dim="bin").transpose("loc", "t")
-    x_train = (ds_all["dmdlnr"] / m_train).transpose("loc", "t", "bin").to_numpy()
-    m_scale = m_train.max()
-    m_train = (m_train / m_scale).to_numpy()
+    m_scale = m_train.max().item()
+    # x_train is now unnormalized DSD (scaled by m_scale)
+    x_train = ds_all["dmdlnr"].transpose("loc", "t", "bin").to_numpy() / m_scale
+    m_train = m_train.to_numpy() / m_scale
     n_bins = x_train.shape[2]
     dsd_time = ds_all["t"].to_numpy()
     dsd_time = dsd_time - dsd_time[0]
     m_test = ds_test["dmdlnr"].sum(dim="bin").transpose("loc", "t")
-    x_test = (ds_test["dmdlnr"] / m_test).transpose("loc", "t", "bin").to_numpy()
-    m_test = (m_test / m_scale).to_numpy()
+    # x_test is now unnormalized DSD (scaled by m_scale)
+    x_test = ds_test["dmdlnr"].transpose("loc", "t", "bin").to_numpy() / m_scale
+    m_test = m_test.to_numpy() / m_scale
 
     return (x_train, m_train, x_test, m_test, r_bins_edges, n_bins, dsd_time)
+
+def open_sed_datasets(path=None):
+    """
+    Open ERF dataset. Paths are hardcoded but relative.
+
+    :param path: Optional path to read from different location
+    :param sample_time: Optional specific sample time to read
+    :return: X train, mass train, X test, mass test, radius bin edges, number of bins, DSD time
+    """
+    if path is None:
+        path = Path(__file__).parent.parent / "data/erf_data/sed_congestus"
+        ds_all = xr.open_dataset(path / "train_data.nc")
+        ds_test = xr.open_dataset(path / "test_data.nc")
+    else:
+        ds_all = xr.open_dataset(path / "train_data.nc")
+        ds_test = xr.open_dataset(path / "test_data.nc")
+
+    # Training datasets: mass, UNnormalized DSD, and sedimentation flux
+    m_train = ds_all["dmdlnr"].sum(dim="bin").to_numpy()
+    x_train = ds_all["dmdlnr"].transpose("loc", "bin").to_numpy()
+    flux_train = ds_all["vt_mass_flux"].transpose("loc", "bin").to_numpy()
+    m_test = ds_test["dmdlnr"].sum(dim="bin").to_numpy()
+    x_test = ds_test["dmdlnr"].transpose("loc", "bin").to_numpy()
+    flux_test = ds_test["vt_mass_flux"].transpose("loc", "bin").to_numpy()
+
+    # Scale based on training data
+    m_scale = m_train.max()
+    vt_train = flux_train / (x_train + DIV_TOLERANCE) # tolerance to avoid overflow in case DSD is very small
+    vt_scale = vt_train.max()  # Scale terminal velocity to help with training stability
+    flux_scale = vt_scale * m_scale
+
+    m_train = m_train / m_scale
+    x_train = x_train / m_scale
+    flux_train = flux_train / flux_scale
+    m_test = m_test / m_scale
+    x_test = x_test / m_scale
+    flux_test = flux_test / flux_scale
+
+    # gather outputs
+    outputs = {
+        "x_train": x_train,
+        "m_train": m_train,
+        "flux_train": flux_train,
+        "x_test": x_test,
+        "m_test": m_test,
+        "flux_test": flux_test,
+        "r_bins_edges": ds_all["rbin_l"].to_numpy(),
+        "r_bins_edges_r": ds_all["rbin_r"].to_numpy(),
+        "n_bins": x_train.shape[-1],
+        "m_scale": m_scale,
+        "flux_scale": flux_scale,
+    }
+    return outputs
 
 
 def split_by_index(ds: xr.Dataset, dim: str, test_size: float, random_state: int = 0):
@@ -95,19 +154,19 @@ def split_by_index(ds: xr.Dataset, dim: str, test_size: float, random_state: int
 def prepare(ds_sub: xr.Dataset, m_scale: float):
     """
     From a dataset returns (x, m) arrays:
-    x[loc, t, bin] = normalized DSD across bins
+    x[loc, t, bin] = unnormalized DSD (scaled by m_scale)
     m[loc, t]      = mass fraction / m_scale
 
     :param ds_sub: Dataset to prepare
     :param m_scale: Scaling factor for mass
-    :return: Normalized DSD and mass fraction
+    :return: unnormalized DSD and mass fraction
     """
     dmdlnr = ds_sub["dmdlnr"]
     # sum over bin → shape (t, loc); then transpose → (loc, t)
     m = dmdlnr.sum(dim="bin").transpose("loc", "t")
-    # x has shape (loc, t, bin)
-    x = (dmdlnr / m).transpose("loc", "t", "bin")
-    return x.to_numpy(), (m / m_scale).to_numpy()
+    # x has shape (loc, t, bin) - unnormalized DSD scaled by m_scale
+    x = dmdlnr.transpose("loc", "t", "bin").to_numpy() / m_scale
+    return x, m.to_numpy() / m_scale
 
 
 def open_mass_dataset(
@@ -505,6 +564,30 @@ class NormedBinDatasetAR(Dataset):
         return self.bin0[idx, :], self.bin1[idx, :], self.M[idx]
 
 
+class BinDatasetSed(Dataset):
+    def __init__(self, dmdlnr, flux, M):
+        """
+        Normed binned dataset pytorch class for sedimentation flux prediction
+
+        Note: Unlike DzDt dataset, sedimentation data has no time dimension -
+        each sample is a single snapshot with its corresponding flux.
+
+        :param dmdlnr_normed: Normalized dmdlnr data (shape: [n_samples, n_bins])
+        :param flux: Sedimentation flux data (shape: [n_samples, n_bins])
+        :param M: Mass (shape: [n_samples])
+        """
+        self.nbin = dmdlnr.shape[1]
+        self.x = dmdlnr.reshape(-1, 1, self.nbin).astype(np.float32)
+        self.flux = flux.reshape(-1, 1, self.nbin).astype(np.float32)
+        self.M = M.reshape(-1, 1, 1).astype(np.float32)
+
+    def __len__(self):
+        return int(self.x.shape[0])
+
+    def __getitem__(self, idx):
+        return self.x[idx, :], self.flux[idx, :], self.M[idx]
+
+
 def sindy_library_tensor(z, latent_dim, poly_order):
     """
     Create SINDy "library" tensor
@@ -587,8 +670,10 @@ def simulate(z0, T, dz_network, z_lim):
                 dz[il] = 0.0
         return dz
 
-    sol = solve_ivp(f, [T[0], T[-1]], z0, method="RK45", t_eval=T)
-    Z = sol.y.T
+    Z = np.zeros((z0.shape[0], T.shape[0], z0.shape[1]))
+    for i in range(z0.shape[0]):
+        sol = solve_ivp(f, [T[0], T[-1]], z0[i], method="RK45", t_eval=T)
+        Z[i,:,:] = sol.y.T
     return Z
 
 

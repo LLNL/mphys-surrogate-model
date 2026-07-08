@@ -5,6 +5,7 @@ Provides generic training loop, device setup, data loading, and optimization set
 
 import copy
 import time
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -118,6 +119,56 @@ def setup_dataloaders(data_src, params):
         "m_train": m_train,
         "x_test": x_test,
         "m_test": m_test,
+    }
+
+    return train_loader, test_loader, metadata
+
+def setup_dataloaders_sed(data_src, params):
+    """
+    Open dataset and create data loaders based on parameters.
+
+    Args:
+        data_src: "erf"
+        params: Dict with batch_size and model-specific parameters
+
+    Returns:
+        train_loader, test_loader, metadata dict with (r_bins_edges, n_bins, dsd_time, x_test, flux_test, x_train, flux_train)
+    """
+    # Open dataset
+    if data_src == "erf":
+        data = du.open_sed_datasets()
+    elif data_src == "erf_mini":
+        path = Path(__file__).parent.parent / "data/erf_data/sed_congestus/mini"
+        data = du.open_sed_datasets(path)
+    else:
+        raise NotImplementedError("only erf option exists")
+
+    # Create datasets based on dynamics type
+    dynamics_type = params.get("dynamics_type", "nn_dzdt")
+    if dynamics_type in ["sindy", "nn_dzdt", "none"]:
+        # Derivative-based dynamics use DzDt dataset
+        train_data = du.BinDatasetSed(data["x_train"], data["flux_train"], data["m_train"])
+        test_data = du.BinDatasetSed(data["x_test"], data["flux_test"], data["m_test"])
+    else:
+        raise NotImplementedError(f"Unknown dynamics_type: {dynamics_type}")
+
+    # Create data loaders
+    train_loader = DataLoader(
+        train_data, batch_size=params["batch_size"], shuffle=True
+    )
+    test_loader = DataLoader(
+        test_data, batch_size=len(test_data), shuffle=False
+    )
+
+    metadata = {
+        "r_bins_edges": data["r_bins_edges"],
+        "n_bins": data["n_bins"],
+        "x_train": data["x_train"],
+        "flux_train": data["flux_train"],
+        "x_test": data["x_test"],
+        "flux_test": data["flux_test"],
+        "m_scale": data["m_scale"],
+        "flux_scale": data["flux_scale"],
     }
 
     return train_loader, test_loader, metadata
@@ -322,7 +373,7 @@ def train_and_eval(
             # Print component losses if they exist
             loss_components = [k for k in losses.keys() if k != 'total']
             if loss_components:
-                comp_str = " | ".join([f"{k}: {losses[k][epoch]:.4f}" for k in loss_components])
+                comp_str = " | ".join([f"{k}: {losses[k][epoch]:.2e}" for k in loss_components])
                 print(f"  {comp_str}")
 
         # Optuna reporting

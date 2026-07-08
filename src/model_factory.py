@@ -24,39 +24,40 @@ class ComposedModel(nn.Module):
 
     def forward(self, x, *args):
         """
-        Forward pass depends on dynamics type:
-        - autoregressive: forward(x, M) -> reconstructed x at t+1
-        - sindy/nn_dzdt: forward(x, M) -> (dz/dt, dM/dt)
+        Forward pass depends on dynamics type.
+        Encoder outputs Z = [z, M], decoder takes Z and outputs dimensioned DSD.
+
+        - autoregressive: forward(x, M) -> (reconstructed x at t+1, predicted M)
+        - sindy/nn_dzdt: forward(x, M) -> dZ/dt where Z = [z, M]
         - none: forward(x) -> reconstructed x
         """
         if self.dynamics_type == "autoregressive":
-            # x is lagged inputs, args[0] is M
-            M = args[0]
-            latent0 = []
+            # x is lagged dimensioned DSDs, args[0] is M (redundant but kept for compatibility)
             n_lag = getattr(self.dzdt, "n_lag", 1)
+            # Encode each lag step
+            Z_lags = []
             for t in range(n_lag):
-                latent0.append(self.encoder(x[:, t, :]).unsqueeze(1))
-            latent0 = torch.cat(latent0, dim=2)
-            latent0_M = torch.cat([latent0, M], dim=2)
-            latent1_M = self.dzdt(latent0_M)
-            latent1 = latent1_M[:, :, :-1]
-            dM = latent1_M[:, :, -1]  # Extract dM prediction
-            bin1 = self.decoder(latent1)
-            return bin1, dM
+                Z_lags.append(self.encoder(x[:, t, :]).unsqueeze(1))
+            Z0 = torch.cat(Z_lags, dim=2)  # Concatenate lags: [batch, 1, n_lag*(n_latent+1)]
+
+            # Predict next latent state
+            Z1 = self.dzdt(Z0)
+
+            # Decode to get next DSD
+            x1 = self.decoder(Z1)
+            M1 = Z1[:, :, -1]  # Extract predicted mass
+            return x1, M1
 
         elif self.dynamics_type in ["sindy", "nn_dzdt"]:
-            # x is current state, args[0] is M
-            M = args[0]
-            z0 = self.encoder(x)
-            dzMdt = self.dzdt(z0, M)
-            dzdt = dzMdt[:, :, :-1]  # Latent dynamics
-            dMdt = dzMdt[:, :, -1]    # Mass derivative (should be ~0 for coalescence)
-            return dzdt, dMdt
+            # x is current dimensioned DSD
+            Z = self.encoder(x)
+            dZdt = self.dzdt(Z)
+            return dZdt
 
         elif self.dynamics_type == "none":
             # Pure autoencoder
-            z = self.encoder(x)
-            x_recon = self.decoder(z)
+            Z = self.encoder(x)
+            x_recon = self.decoder(Z)
             return x_recon
 
         else:
@@ -169,10 +170,15 @@ def create_dynamics(dynamics_type, n_latent, params):
             n_latent=n_latent + 1,  # +1 for mass coordinate
             poly_order=poly_order,
             use_thresholds=False,
+            nonneg=params['process'] == 'sedimentation'
         )
     elif dynamics_type == "nn_dzdt":
         layer_size = params.get("layer_size", (100, 100, 100))
-        return dynamics_cls(n_latent=n_latent + 1, layer_size=layer_size)
+        return dynamics_cls(
+            n_latent=n_latent + 1,
+            layer_size=layer_size,
+            nonneg=params['process'] == 'sedimentation'
+        )
     elif dynamics_type == "autoregressive":
         n_lag = params.get("n_lag", 1)
         layer_size = params.get("layer_size", (100, 100, 100))

@@ -11,6 +11,9 @@ from matplotlib.ticker import FormatStrFormatter
 from scipy.stats import wasserstein_distance
 
 from src import data_utils as du
+from src import diagnostics
+from src import nwi
+from src.constants import LOG_CLIP_TOLERANCE
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
@@ -102,6 +105,7 @@ def plot_reconstructions(
                 )
                 .detach()
                 .numpy()[0, 0],
+                ls='--'
             )
 
             ax[j][i].set_xscale("log")
@@ -118,6 +122,96 @@ def plot_reconstructions(
         fig.savefig(saveas)
 
     # Return fig for further manipulation
+    return fig
+
+def plot_flux_projections(
+    model, test_ids, x_test, flux_test, r_bins_edges
+):
+    """
+    Plot projections of DSD sedimentation flux for selected test members and time steps.
+
+    This function compares the actual binned flux to the latent-space flux projected into DSD space
+    for specified test member indices.
+
+    :param model: Trained model.
+    :param test_ids: List of indices for test set members to plot.
+    :param x_test: Test set DSD data array.
+    :param flux_test: Test set flux array.
+    :param r_bins_edges: Bin edges for DSD radius.
+    :return: The matplotlib figure object for further manipulation.
+    """
+    # Set up figure
+    (fig, ax) = plt.subplots(
+        ncols=len(test_ids),
+        figsize=(3 * len(test_ids), 3),
+        layout="constrained",
+    )
+    model.eval()
+
+    # Plot reconstruction for each test ID for multiple times
+    for i, id in enumerate(test_ids):
+        ax[i].step(r_bins_edges, flux_test[id])
+        h = model.encoder(torch.Tensor(x_test[id]))
+        pred_dh = model.dzdt(h)
+        _, pred_flux = torch.func.jvp(model.decoder, (h,), (pred_dh,))
+        ax[i].step(
+            r_bins_edges,
+            pred_flux.detach().numpy(),
+            ls='--'
+        )
+        ax[i].set_xscale("log")
+        ax[i].set_ylabel("PSD Flux")
+        ax[i].set_xlabel("r (m)")
+        ax[i].set_title(f"Run #{id}")
+
+    # Accoutrements
+    ax[0].legend(["Data", "Prediction"])
+    fig.suptitle("Flux Demo: Out of Sample")
+
+    # Return fig for further manipulation
+    return fig
+
+def plot_latent_fluxes(
+    model, x_test, flux_test
+):
+    """Plot latent space fluxes comparing data to model predictions.
+
+    Creates scatter plots for each latent dimension comparing the true latent
+    fluxes (from flux_test) against predicted latent fluxes (computed from x_test).
+    The diagonal line indicates perfect agreement.
+
+    :param model: Trained model with encoder and dzdt methods
+    :type model: nn.Module
+    :param x_test: Test set DSD data for predicting latent fluxes
+    :type x_test: array-like
+    :param flux_test: Test set flux data for computing true latent fluxes
+    :type flux_test: array-like
+    :return: Figure object containing the scatter plots for each latent dimension
+    :rtype: matplotlib.figure.Figure
+    """
+    dh = model.encoder(torch.Tensor(flux_test)).detach().numpy()
+    dh_pred = model.dzdt(model.encoder(torch.Tensor(x_test))).detach().numpy()
+    nh = dh.shape[-1]
+    fig, ax = plt.subplots(
+        ncols=nh,
+        figsize=(3 * nh, 3),
+        layout="constrained",
+    )
+
+    for ih in range(nh):
+        ax[ih].scatter(dh[..., ih], dh_pred[..., ih], alpha=0.2, s=1)
+        xmin = min(np.percentile(dh[..., ih], 1), np.percentile(dh_pred[..., ih], 1))
+        xmax = max(np.percentile(dh[..., ih], 99), np.percentile(dh_pred[..., ih], 99))
+        ax[ih].set_xlim(xmin, xmax)
+        ax[ih].set_ylim(xmin, xmax)
+        ax[ih].plot([xmin, xmax], [xmin, xmax], ls='--', color='k', lw=2)
+        if min(xmin, xmax) > 0.0:
+            ax[ih].set_xscale('log')
+            ax[ih].set_yscale('log')
+        ax[ih].set_xlabel('dh data')
+        ax[ih].set_ylabel('dh prediction')
+        ax[ih].set_title(f"Latent Variable {ih}")
+
     return fig
 
 
@@ -266,7 +360,7 @@ def plot_latent_trajectories(
     ax[0][0].set_ylabel("Data")
     ax[1][0].set_ylabel("Model")
     fig.suptitle(f"Test set predicted Z(t)")
-    plt.tight_layout()
+    fig.tight_layout()
 
     # Optional save
     if saveas is not None:
@@ -406,25 +500,18 @@ def plot_predictions_dzdt(
         sharey=True,
     )
 
-    # Compute limits
-    z_enc_train = model.encoder(torch.Tensor(x_train)).detach().numpy()
-    zlim = np.zeros((n_latent + 1, 2))
-    for il in range(n_latent):
-        zlim[il][0] = z_enc_train[:, :, il].min()
-        zlim[il][1] = z_enc_train[:, :, il].max()
-    zlim[-1][0] = m_train.min()
-    zlim[-1][1] = m_train.max()
+    # Use diagnostics function to compute predictions
+    _, _, x_pred_full = diagnostics.get_latent_trajectories_dzdt(
+        n_latent, model, dsd_time, x_test, m_test, x_train, m_train
+    )
 
-    # Compute all else
-    z_encoded = model.encoder(torch.Tensor(x_test)).detach().numpy()
+    # Extract predictions for selected test IDs and time indices
+    x_pred = x_pred_full[test_ids][:, tplt, :]
+
     for i, id in enumerate(test_ids):
-        z0 = np.concatenate((z_encoded[id, 0, :], np.array([m_test[id, 0]])), axis=-1)
-        latents_pred = du.simulate(z0, dsd_time[tplt], model.dzdt, zlim)
-        x_pred = model.decoder(torch.Tensor(latents_pred[:, :-1])).detach().numpy()
-
         for j, t in enumerate(tplt):
             ax[j][i].step(r_bins_edges, x_test[id, t, :])
-            ax[j][i].step(r_bins_edges, x_pred[j, :])
+            ax[j][i].step(r_bins_edges, x_pred[i, j, :])
 
             ax[j][i].set_xscale("log")
             ax[j][i].set_xscale("log")
@@ -626,12 +713,14 @@ def plot_full_testset_performance_pred(
     tick_indices = range(0, len(dsd_time), 2)
     # ---
     ax = axes[0]
-    klm = ax.matshow(np.log10(test_kl[order].T), vmin=-5, vmax=-2)
+    # Clip small values to avoid log10(0) or log10(negative)
+    test_kl_clipped = np.clip(test_kl, LOG_CLIP_TOLERANCE, None)
+    klm = ax.matshow(np.log10(test_kl_clipped[order].T), vmin=-5, vmax=-2)
     fig.colorbar(
         klm,
         ax=ax,
         location="top",
-        label=f"log10(KL Divergence) (Mean={np.mean(np.log10(test_kl)):.2f})",
+        label=f"log10(KL Divergence) (Mean={np.mean(np.log10(test_kl_clipped)):.2f})",
         extend="both",
     )
     print(f"KL Divergence (Mean={np.mean(test_kl):.2e})")
@@ -721,7 +810,11 @@ def plot_testset_quantiles_pred(
     for i, id in enumerate(qtile_mems):
         for j, t in enumerate(tplt):
             ax[j][i].step(r_bins_edges, x_test[id, t, :])
-            ax[j][i].step(r_bins_edges, test_preds[id, t, :].detach().numpy())
+            # Handle both tensor and numpy array inputs
+            pred_vals = test_preds[id, t, :]
+            if isinstance(pred_vals, torch.Tensor):
+                pred_vals = pred_vals.detach().numpy()
+            ax[j][i].step(r_bins_edges, pred_vals)
 
             ax[j][i].set_xscale("log")
             ax[j][i].set_xscale("log")

@@ -1,8 +1,9 @@
 import torch
 from torch import nn
-from torch.nn import ELU, Identity, Linear, ReLU, Sigmoid, SiLU, Softmax
+from torch.nn import ELU, Identity, Linear, ReLU, Sigmoid, SiLU, Softmax, Softplus
 
 from src import data_utils as du
+from src.constants import DIV_TOLERANCE
 
 
 class FFNNEncoder(torch.nn.Module):
@@ -12,10 +13,11 @@ class FFNNEncoder(torch.nn.Module):
         autoencoder. Used in multiple other models.
 
         :param n_bins: Number of bins for the droplet size distributions
-        :param n_latent: Number of latent variables
+        :param n_latent: Number of latent variables (mass will be appended as n_latent+1)
         """
         super(FFNNEncoder, self).__init__()
         self.n_bins = n_bins
+        self.n_latent = n_latent
         self.layer1 = Linear(n_bins, int(n_bins / 2))
         self.activation1 = ReLU()
         self.layer2 = Linear(int(n_bins / 2), int(n_bins / 4))
@@ -36,16 +38,25 @@ class FFNNEncoder(torch.nn.Module):
         ]
 
     def forward(self, x):
-        x = self.layer1(x)
-        x = self.activation1(x)
-        x = self.layer2(x)
-        x = self.activation2(x)
-        x = self.layer3(x)
-        x = self.activation3(x)
-        x = self.layer4(x)
-        x = self.activation4(x)
+        # Input x is un-normalized DSD; normalize it before encoding
+        # Works with any number of leading dimensions: [..., bins]
+        mass = x.sum(dim=-1, keepdim=True)
+        x_norm = x / (mass + DIV_TOLERANCE)
 
-        return x
+        # Encode normalized DSD
+        z = self.layer1(x_norm)
+        z = self.activation1(z)
+        z = self.layer2(z)
+        z = self.activation2(z)
+        z = self.layer3(z)
+        z = self.activation3(z)
+        z = self.layer4(z)
+        z = self.activation4(z)
+
+        # Append mass to latent representation for consistency with NWI encoder
+        z_with_mass = torch.cat([z, mass], dim=-1)
+
+        return z_with_mass
 
     def init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -75,7 +86,7 @@ class FFNNDecoder(torch.nn.Module):
         autoencoder. Used in multiple other models.
 
         :param n_bins: Number of bins for the droplet size distributions
-        :param n_latent: Number of latent variables
+        :param n_latent: Number of latent variables (excluding mass)
         :param distribution: Flag to indicate whether output is a true
                              distribution (area under curve is 1) or
                              not normalized.
@@ -83,6 +94,7 @@ class FFNNDecoder(torch.nn.Module):
         super(FFNNDecoder, self).__init__()
 
         self.n_bins = n_bins
+        self.n_latent = n_latent
         self.layer1 = Linear(n_latent, int(n_bins / 8))
         self.layer2 = Linear(int(n_bins / 8), int(n_bins / 4))
         self.layer3 = Linear(int(n_bins / 4), int(n_bins / 2))
@@ -105,15 +117,24 @@ class FFNNDecoder(torch.nn.Module):
             self.activation4,
         ]
 
-    def forward(self, x):
-        x = self.layer1(x)
-        x = self.activation1(x)
-        x = self.layer2(x)
-        x = self.activation2(x)
-        x = self.layer3(x)
-        x = self.activation3(x)
-        x = self.layer4(x)
-        x = self.activation4(x)
+    def forward(self, z_with_mass):
+        # Extract latent variables and mass
+        # Works with any number of leading dimensions: [..., latent+1]
+        z = z_with_mass[..., :-1]
+        mass = z_with_mass[..., -1:]
+
+        # Decode to normalized DSD
+        x_norm = self.layer1(z)
+        x_norm = self.activation1(x_norm)
+        x_norm = self.layer2(x_norm)
+        x_norm = self.activation2(x_norm)
+        x_norm = self.layer3(x_norm)
+        x_norm = self.activation3(x_norm)
+        x_norm = self.layer4(x_norm)
+        x_norm = self.activation4(x_norm)
+
+        # Multiply by mass to get de-normalized DSD
+        x = x_norm * mass
 
         return x
 
@@ -159,7 +180,7 @@ class FFNNAutoEncoder(torch.nn.Module):
 
 
 class SINDyDeriv(torch.nn.Module):
-    def __init__(self, n_latent=10, poly_order=2, use_thresholds=False):
+    def __init__(self, n_latent=10, poly_order=2, use_thresholds=False, nonneg=False):
         """
         Pytorch SINDy model that is to be paired with autoencoder. Works directly
         from latent variables.
@@ -173,6 +194,8 @@ class SINDyDeriv(torch.nn.Module):
         self.library_size = du.library_size(n_latent, poly_order)
         self.n_latent = n_latent
         self.poly_order = poly_order
+        self.nonneg = nonneg
+        self.sp = ReLU() # enforce nonnegativity of derivatives if specified; avoid very small positive derivatives
 
         self.sindy_coeffs = torch.nn.Linear(
             self.library_size, self.n_latent, bias=False
@@ -183,16 +206,15 @@ class SINDyDeriv(torch.nn.Module):
 
         self.apply(self.init_weights)
 
-    def forward(self, z, M=None):
-        if M is not None:
-            latent = torch.cat([z, M], dim=-1)
-        else:
-            latent = z
-        library = du.sindy_library_tensor(latent, self.n_latent, self.poly_order)
+    def forward(self, Z):
+        # Z is the full latent state [z1, z2, ..., zn, M]
+        library = du.sindy_library_tensor(Z, self.n_latent, self.poly_order)
         if self.use_thresholds:
             self.sindy_coeffs.weight.data = self.sindy_coeffs.weight.data * self.mask
-        dldt = self.sindy_coeffs(library)
-        return dldt
+        dZdt = self.sindy_coeffs(library)
+        if self.nonneg:
+            dZdt = self.sp(dZdt)
+        return dZdt
 
     def init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -209,7 +231,7 @@ class SINDyDeriv(torch.nn.Module):
 
 
 class NNDerivatives(torch.nn.Module):
-    def __init__(self, n_latent=3, layer_size=None):
+    def __init__(self, n_latent=3, layer_size=None, nonneg=False):
         """
         Pytorch black box model to predict time derivatives directly  of droplet
         size distributions directly (while SINDy predicts a simplified equation form
@@ -222,6 +244,7 @@ class NNDerivatives(torch.nn.Module):
         """
         super(NNDerivatives, self).__init__()
         self.n_latent = n_latent
+        self.nonneg = nonneg
         if layer_size is None:
             layer_size = (n_latent, n_latent, n_latent)
         else:
@@ -234,22 +257,20 @@ class NNDerivatives(torch.nn.Module):
         self.activation1 = SiLU()
         self.activation2 = SiLU()
         self.activation3 = SiLU()
+        self.sp = Softplus()
 
-        self.layers = [self.layer1, self.layer2, self.layer3, self.layer4]
-        self.act = [
+        self.layers = nn.ModuleList([self.layer1, self.layer2, self.layer3, self.layer4])
+        self.act = nn.ModuleList([
             self.activation1,
             self.activation2,
             self.activation3,
-        ]
+        ])
 
         self.initialize_network()
 
-    def forward(self, z, M=None):
-        if M is not None:
-            x = torch.cat([z, M], dim=-1)
-        else:
-            x = z
-        x = self.layer1(x)
+    def forward(self, Z):
+        # Z is the full latent state [z1, z2, ..., zn, M]
+        x = self.layer1(Z)
         x = self.activation1(x)
         x = self.layer2(x)
         x = self.activation2(x)
@@ -257,21 +278,10 @@ class NNDerivatives(torch.nn.Module):
         x = self.activation3(x)
         x = self.layer4(x)
 
+        if self.nonneg:
+            x = self.sp(x)
+
         return x
-
-    def get_weights(self):
-        weights = []
-        biases = []
-        for i, layer in enumerate(self.layers):
-            weights.append(layer.weight)
-            biases.append(layer.bias)
-
-        return (weights, biases)
-
-    def set_weights(self, weights, biases):
-        for i, layer in enumerate(self.layers):
-            layer.weight.data = weights[i]
-            layer.bias.data = biases[i]
 
     def initialize_network(self):
         for i, module in enumerate(self.layers):
@@ -281,9 +291,13 @@ class NNDerivatives(torch.nn.Module):
                         module.weight, mode="fan_in", nonlinearity="relu"
                     )
                     nn.init.constant_(module.bias, 0.0)
-                else:  # Output layer (no activation)
+                else:  # Output layer
                     nn.init.normal_(module.weight, mean=0.0, std=0.01)
-                    nn.init.constant_(module.bias, 0.0)
+                    if self.nonneg: # Softplus activation
+                        # empirically, this -7 initialization works best for sedimentation derivatives in log-space
+                        nn.init.constant_(module.bias, -7.0) 
+                    else: # (no activation)
+                        nn.init.constant_(module.bias, 0.0)
 
 
 class Autoregressive(torch.nn.Module):
