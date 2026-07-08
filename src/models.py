@@ -3,6 +3,7 @@ from torch import nn
 from torch.nn import ELU, Identity, Linear, ReLU, Sigmoid, SiLU, Softmax, Softplus
 
 from src import data_utils as du
+from src.constants import DIV_TOLERANCE
 
 
 class FFNNEncoder(torch.nn.Module):
@@ -37,10 +38,10 @@ class FFNNEncoder(torch.nn.Module):
         ]
 
     def forward(self, x):
-        # Input x is dimensioned DSD; normalize it before encoding
+        # Input x is un-normalized DSD; normalize it before encoding
         # Works with any number of leading dimensions: [..., bins]
         mass = x.sum(dim=-1, keepdim=True)
-        x_norm = x / (mass + 1e-12)
+        x_norm = x / (mass + DIV_TOLERANCE)
 
         # Encode normalized DSD
         z = self.layer1(x_norm)
@@ -132,7 +133,7 @@ class FFNNDecoder(torch.nn.Module):
         x_norm = self.layer4(x_norm)
         x_norm = self.activation4(x_norm)
 
-        # Scale by mass to get dimensioned DSD
+        # Multiply by mass to get de-normalized DSD
         x = x_norm * mass
 
         return x
@@ -194,7 +195,7 @@ class SINDyDeriv(torch.nn.Module):
         self.n_latent = n_latent
         self.poly_order = poly_order
         self.nonneg = nonneg
-        self.sp = ReLU()
+        self.sp = ReLU() # enforce nonnegativity of derivatives if specified; avoid very small positive derivatives
 
         self.sindy_coeffs = torch.nn.Linear(
             self.library_size, self.n_latent, bias=False
@@ -293,12 +294,9 @@ class NNDerivatives(torch.nn.Module):
                 else:  # Output layer
                     nn.init.normal_(module.weight, mean=0.0, std=0.01)
                     if self.nonneg: # Softplus activation
-                        # nn.init.kaiming_normal_(
-                        #     module.weight, mode="fan_in", nonlinearity="relu"
-                        # )
-                        nn.init.constant_(module.bias, -7.0)
+                        # empirically, this -7 initialization works best for sedimentation derivatives in log-space
+                        nn.init.constant_(module.bias, -7.0) 
                     else: # (no activation)
-                        # nn.init.normal_(module.weight, mean=0.0, std=0.01)
                         nn.init.constant_(module.bias, 0.0)
 
 

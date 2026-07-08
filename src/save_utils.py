@@ -15,6 +15,7 @@ import numpy as np
 import torch
 
 from src import diagnostics, plotting
+from src.constants import LOG_TOLERANCE
 
 
 def generate_case_name(params):
@@ -275,7 +276,7 @@ def generate_plots(model, metadata, params, output_dir):
 
         # Full test set performance
         fig = plotting.plot_full_testset_performance_recon(
-            model, x_test, params.get("tol", 1e-8)
+            model, x_test, params.get("tol", LOG_TOLERANCE)
         )
         if save:
             fig.savefig(output_dir / "full_test_recon.png")
@@ -340,7 +341,7 @@ def generate_plots(model, metadata, params, output_dir):
 
         # Full test set performance
         fig = plotting.plot_full_testset_performance_recon(
-            model, x_test, params.get("tol", 1e-8)
+            model, x_test, params.get("tol", LOG_TOLERANCE)
         )
         if save:
             fig.savefig(output_dir / "full_test_recon.png")

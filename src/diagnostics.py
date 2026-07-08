@@ -6,6 +6,7 @@ import torch
 from scipy.stats import wasserstein_distance
 
 from src import data_utils as du
+from src.constants import LOG_TOLERANCE
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
@@ -103,7 +104,7 @@ def get_latent_trajectories_dzdt(
     return z_pred, z_data, x_pred
 
 
-def get_performance_metrics(x_test, m_test, z_pred, x_pred, tol=1e-8):
+def get_performance_metrics(x_test, m_test, z_pred, x_pred, tol=LOG_TOLERANCE):
     """
     Compute performance metrics for model predictions, including KL divergence, Wasserstein distance,
     normalized mean squared error, and mass difference.

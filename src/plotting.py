@@ -13,6 +13,7 @@ from scipy.stats import wasserstein_distance
 from src import data_utils as du
 from src import diagnostics
 from src import nwi
+from src.constants import LOG_CLIP_TOLERANCE
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(project_root)
@@ -173,6 +174,21 @@ def plot_flux_projections(
 def plot_latent_fluxes(
     model, x_test, flux_test
 ):
+    """Plot latent space fluxes comparing data to model predictions.
+
+    Creates scatter plots for each latent dimension comparing the true latent
+    fluxes (from flux_test) against predicted latent fluxes (computed from x_test).
+    The diagonal line indicates perfect agreement.
+
+    :param model: Trained model with encoder and dzdt methods
+    :type model: nn.Module
+    :param x_test: Test set DSD data for predicting latent fluxes
+    :type x_test: array-like
+    :param flux_test: Test set flux data for computing true latent fluxes
+    :type flux_test: array-like
+    :return: Figure object containing the scatter plots for each latent dimension
+    :rtype: matplotlib.figure.Figure
+    """
     dh = model.encoder(torch.Tensor(flux_test)).detach().numpy()
     dh_pred = model.dzdt(model.encoder(torch.Tensor(x_test))).detach().numpy()
     nh = dh.shape[-1]
@@ -698,7 +714,7 @@ def plot_full_testset_performance_pred(
     # ---
     ax = axes[0]
     # Clip small values to avoid log10(0) or log10(negative)
-    test_kl_clipped = np.clip(test_kl, 1e-10, None)
+    test_kl_clipped = np.clip(test_kl, LOG_CLIP_TOLERANCE, None)
     klm = ax.matshow(np.log10(test_kl_clipped[order].T), vmin=-5, vmax=-2)
     fig.colorbar(
         klm,

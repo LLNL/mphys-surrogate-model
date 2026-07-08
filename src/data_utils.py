@@ -9,6 +9,8 @@ from scipy.special import binom
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 
+from src.constants import DIV_TOLERANCE
+
 
 def open_box_dataset():
     """
@@ -24,7 +26,7 @@ def open_box_dataset():
     r_bins_edges = ds_all["mass_bin"]
     m_train = ds_all["dvdlnr"].sum(dim="mass_bin_idx")
     m_scale = m_train.max().item()
-    # x_train is now dimensioned DSD (scaled by m_scale)
+    # x_train is now unnormalized DSD (but scaled by m_scale)
     x_train = (
         ds_all["dvdlnr"].transpose("run", "time", "mass_bin_idx").to_numpy() / m_scale
     )
@@ -35,7 +37,7 @@ def open_box_dataset():
     # Test dataset
     ds_test = xr.open_dataset(dpath / "box64_test.nc", decode_timedelta=True)
     m_test = ds_test["dvdlnr"].sum(dim="mass_bin_idx")
-    # x_test is now dimensioned DSD (scaled by m_scale)
+    # x_test is now unnormalized DSD (but scaled by m_scale)
     x_test = (
         ds_test["dvdlnr"].transpose("run", "time", "mass_bin_idx").to_numpy() / m_scale
     )
@@ -65,14 +67,14 @@ def open_erf_dataset(path=None, sample_time=None):
     r_bins_edges = ds_all["rbin_l"]
     m_train = ds_all["dmdlnr"].sum(dim="bin").transpose("loc", "t")
     m_scale = m_train.max().item()
-    # x_train is now dimensioned DSD (scaled by m_scale)
+    # x_train is now unnormalized DSD (scaled by m_scale)
     x_train = ds_all["dmdlnr"].transpose("loc", "t", "bin").to_numpy() / m_scale
     m_train = m_train.to_numpy() / m_scale
     n_bins = x_train.shape[2]
     dsd_time = ds_all["t"].to_numpy()
     dsd_time = dsd_time - dsd_time[0]
     m_test = ds_test["dmdlnr"].sum(dim="bin").transpose("loc", "t")
-    # x_test is now dimensioned DSD (scaled by m_scale)
+    # x_test is now unnormalized DSD (scaled by m_scale)
     x_test = ds_test["dmdlnr"].transpose("loc", "t", "bin").to_numpy() / m_scale
     m_test = m_test.to_numpy() / m_scale
 
@@ -102,9 +104,9 @@ def open_sed_datasets(path=None):
     x_test = ds_test["dmdlnr"].transpose("loc", "bin").to_numpy()
     flux_test = ds_test["vt_mass_flux"].transpose("loc", "bin").to_numpy()
 
-    # Scale based on training data 
+    # Scale based on training data
     m_scale = m_train.max()
-    vt_train = flux_train / (x_train + 1e-12)
+    vt_train = flux_train / (x_train + DIV_TOLERANCE) # tolerance to avoid overflow in case DSD is very small
     vt_scale = vt_train.max()  # Scale terminal velocity to help with training stability
     flux_scale = vt_scale * m_scale
 
@@ -152,17 +154,17 @@ def split_by_index(ds: xr.Dataset, dim: str, test_size: float, random_state: int
 def prepare(ds_sub: xr.Dataset, m_scale: float):
     """
     From a dataset returns (x, m) arrays:
-    x[loc, t, bin] = dimensioned DSD (scaled by m_scale)
+    x[loc, t, bin] = unnormalized DSD (scaled by m_scale)
     m[loc, t]      = mass fraction / m_scale
 
     :param ds_sub: Dataset to prepare
     :param m_scale: Scaling factor for mass
-    :return: Dimensioned DSD and mass fraction
+    :return: unnormalized DSD and mass fraction
     """
     dmdlnr = ds_sub["dmdlnr"]
     # sum over bin → shape (t, loc); then transpose → (loc, t)
     m = dmdlnr.sum(dim="bin").transpose("loc", "t")
-    # x has shape (loc, t, bin) - dimensioned DSD scaled by m_scale
+    # x has shape (loc, t, bin) - unnormalized DSD scaled by m_scale
     x = dmdlnr.transpose("loc", "t", "bin").to_numpy() / m_scale
     return x, m.to_numpy() / m_scale
 
