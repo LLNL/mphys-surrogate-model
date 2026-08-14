@@ -10,24 +10,25 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(project_root)
 
 import torch
-
-from eval_models_testdata import get_model
+from src import model_factory
 
 if __name__ == "__main__":
-    ae_sindy = get_model("SINDy")
-    model_dir = Path(
-        "../results/Optuna/ERF Dataset/AE-SINDy_LimParams/erf_FFNN_latent3_order2_tr1000_lr0.004204813405972317_bs25_weights1.0-561.064697265625-56106.47265625_46d657b7ac094414a37843315fdeebbc"
+    model_dir = "/Users/dejong5/Documents/mphys-surrogate-model/trained_models/sedimentation/nwi_nwi_simple_nn_dzdt/20260610_214622_erf_latent3_ep250_lr1e-03_bs1000_w1.0-0.1-100000/model.pth"
+    model = model_factory.create_model(
+        "nwi",
+        "nwi_simple",
+        "nn_dzdt",
+        {"latent_dim": 3, "process": "sedimentation"},
+        64,
     )
-    model_files = list(model_dir.glob(f"*.pth"))
-    if not model_files:
-        raise FileNotFoundError(f"No model files found")
-    ae_sindy.load_state_dict(torch.load(model_files[0], weights_only=True))
+    model.load_state_dict(torch.load(model_dir, map_location=torch.device("cpu")))
 
-    ae_sindy.eval()
+    model.eval()
 
-    enc = ae_sindy.encoder
-    dec = ae_sindy.decoder
-    deriv = ae_sindy.dzdt
+    enc = model.encoder
+    wf = model.encoder.wf_mat()
+    dec = model.decoder
+    deriv = model.dzdt
 
     # example input: 64 bins
     example_x = torch.randn(64)
@@ -35,8 +36,8 @@ if __name__ == "__main__":
     example_l = torch.randn(3)
 
     traced_encoder = torch.jit.trace(enc, example_x)
-    traced_encoder.save("../data/ftorch_weights/encoder_model.pt")
+    traced_encoder.save("../data/ftorch_weights/nwi_encoder.pt")
     traced_decoder = torch.jit.trace(dec, example_l)
-    traced_decoder.save("../data/ftorch_weights/decoder_model.pt")
+    traced_decoder.save("../data/ftorch_weights/nwi_decoder.pt")
     traced_dzdt = torch.jit.trace(deriv, example_z)
-    traced_dzdt.save("../data/ftorch_weights/dzdt_model.pt")
+    traced_dzdt.save("../data/ftorch_weights/sed_dzdt.pt")
